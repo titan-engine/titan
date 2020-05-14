@@ -1,0 +1,13 @@
+<?php
+namespace {{namespace}}\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\View\View;
+
+class AdminController extends Controller {
+
+    public function index(): View {
+        return view('{{route_name}}::admin.index');
+    }
+
+}
