@@ -2,7 +2,7 @@
 
 namespace Titan\Commands;
 
-use App\User;
+use Titan\User;
 use Illuminate\Console\Command;
 use Spatie\Permission\Models\Role;
 
@@ -51,7 +51,7 @@ class SuperAdmin extends Command
             if(!$user)
                 return $this->error("Invalid user");
 
-            $user->assignRole(Role::whereName('Super Admin')->first());
+            $user->assignRole('Super Admin');
 
             $this->info("{$user->name} assigned role of super admin");
         }

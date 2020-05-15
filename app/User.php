@@ -2,4 +2,9 @@
 
 namespace App;
 
-class User extends \Titan\User {}
+use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Traits\HasRoles;
+
+class User extends \Titan\User {
+
+}
