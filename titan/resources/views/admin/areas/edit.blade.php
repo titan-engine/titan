@@ -1,4 +1,4 @@
-@extends('titan::layouts.admin')
+@extends('layouts.admin')
 
 @section('page')
     <div class="row">
@@ -10,7 +10,7 @@
 
             <div class="card shadow mb-4">
                 <div class="card-body">
-                    @include('titan::admin.areas.form')
+                    @include('admin.areas.form')
                     {!! \Form::submit('Update Area') !!}
                 </div>
             </div>

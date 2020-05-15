@@ -1,4 +1,4 @@
-@extends('titan::layouts.app')
+@extends('layouts.app')
 
 @section('content')
     <div class="container">
@@ -44,7 +44,7 @@
 
                             {!! \Form::open()->route('character.create') !!}
 
-                            @include('titan::character.choice.form')
+                            @include('character.choice.form')
                             {!! \Form::submit('Create Character') !!}
                             {!! \Form::close() !!}
                         </div>

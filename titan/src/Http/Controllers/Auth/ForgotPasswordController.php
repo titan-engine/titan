@@ -28,6 +28,6 @@ class ForgotPasswordController extends Controller
      */
     public function showLinkRequestForm()
     {
-        return view('titan::auth.passwords.email');
+        return view('auth.passwords.email');
     }
 }

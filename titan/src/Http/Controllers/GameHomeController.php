@@ -8,6 +8,6 @@ use Illuminate\Routing\Controller;
 class GameHomeController extends Controller
 {
     public function index() {
-        return view('titan::game.home');
+        return view('game.home');
     }
 }

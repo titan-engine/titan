@@ -1,4 +1,4 @@
-@extends('titan::layouts.admin')
+@extends('layouts.admin')
 
 @section('page')
     <div class="row">
@@ -9,7 +9,7 @@
             <div class="card shadow mb-4">
                 <div class="card-body">
                     {!! \Form::open()->route('admin.users.update', [$user->id])->fill($user)->put() !!}
-                    @include('titan::admin.users.form')
+                    @include('admin.users.form')
                     {!! \Form::submit('Update User') !!}
                     {!! \Form::close() !!}
                 </div>

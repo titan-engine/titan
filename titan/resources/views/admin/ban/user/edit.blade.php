@@ -1,4 +1,4 @@
-@extends('titan::admin.ban.index')
+@extends('admin.ban.index')
 @section('partial')
     <div class="card shadow mb-4">
         {!! Form::open()->route('admin.banuser.update', [$banned->bannable->id])->fill($banned)->put() !!}
@@ -6,7 +6,7 @@
             <h3>Editing Ban for {{ $banned->bannable->name }}</h3>
             <div class="form-group">
 
-                @include('titan::admin.ban.ban_edit_form')
+                @include('admin.ban.ban_edit_form')
 
             </div>
         </div>

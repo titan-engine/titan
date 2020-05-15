@@ -49,7 +49,7 @@ class ExtensionController extends Controller
 
         [$currentFilter, $filters] = $this->handleFilters();
 
-        return view('titan::admin.extensions.index', compact('extensions', 'filters', 'currentFilter'));
+        return view('admin.extensions.index', compact('extensions', 'filters', 'currentFilter'));
     }
 
     public function showMarketplacePage($slug): View
@@ -60,7 +60,7 @@ class ExtensionController extends Controller
             abort(404, 'No extension was found');
         }
 
-        return view('titan::admin.extensions.manage', compact('extension'));
+        return view('admin.extensions.manage', compact('extension'));
     }
 
     public function manage($slug): View
@@ -78,7 +78,7 @@ class ExtensionController extends Controller
         if($call !== false)
             return $call;
 
-        return view('titan::admin.extensions.manage', compact('extension'));
+        return view('admin.extensions.manage', compact('extension'));
     }
 
     private function handleFilters()

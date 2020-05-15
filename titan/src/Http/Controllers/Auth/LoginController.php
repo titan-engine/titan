@@ -43,7 +43,7 @@ class LoginController extends Controller
 
     public function showLoginForm()
     {
-        return view('titan::auth.login');
+        return view('auth.login');
     }
 
     public function loggedOut(Request $request)

@@ -12,7 +12,7 @@
 */
 Route::group([
     'prefix' => 'admin/{{package_name}}',
-    'middleware' => ['auth', 'permission:admin']
+    'middleware' => ['auth', 'permission:admin', 'update_last_move', 'choose_admin_theme']
 ], function () {
     Route::get('/', 'AdminController@index')
         ->name('admin.{{route_name}}');

@@ -29,7 +29,7 @@ class BanController extends Controller
         $users = \App\User::all();
         $characters = Character::all();
 
-        return view('titan::admin.ban.list', compact('users', 'characters'));
+        return view('admin.ban.list', compact('users', 'characters'));
     }
 
     /**

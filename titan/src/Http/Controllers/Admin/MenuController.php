@@ -17,12 +17,12 @@ class MenuController extends Controller
     public function index(): View
     {
         $menus = Menu::all();
-        return view('titan::admin.menu.index', compact('menus'));
+        return view('admin.menu.index', compact('menus'));
     }
 
     public function create(): View
     {
-        return view('titan::admin.menu.create');
+        return view('admin.menu.create');
 
     }
 
@@ -42,7 +42,7 @@ class MenuController extends Controller
     {
         $menu = Menu::with('items')->find($menu);
 
-        return view('titan::admin.menu.edit', compact('menu'));
+        return view('admin.menu.edit', compact('menu'));
     }
 
     public function sort(Menu $menu, Request $request): void

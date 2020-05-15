@@ -5,7 +5,7 @@
 
         <ol>
             @foreach($item->child as $child)
-                @include('titan::partials.nav-item', ['item'=>$child])
+                @include('partials.nav-item', ['item'=>$child])
             @endforeach
         </ol>
     </li>

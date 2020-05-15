@@ -16,17 +16,17 @@ class UserController extends Controller
 {
     public function index(): View
     {
-        return view('titan::admin.users.index');
+        return view('admin.users.index');
     }
 
     public function edit(User $user)
     {
-        return view('titan::admin.users.edit', compact('user'));
+        return view('admin.users.edit', compact('user'));
     }
 
     public function create(): View
     {
-        return view('titan::admin.users.create');
+        return view('admin.users.create');
     }
 
     public function list()
@@ -84,7 +84,7 @@ class UserController extends Controller
 
     public function show(): View
     {
-        return view('titan::admin.users.show');
+        return view('admin.users.show');
     }
 
     public function delete(): View

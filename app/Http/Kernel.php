@@ -3,6 +3,8 @@
 namespace App\Http;
 
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
+use Titan\Http\Middleware\ChooseAdminTheme;
+use Titan\Http\Middleware\ChooseGameTheme;
 use Titan\Http\Middleware\CharacterAlive;
 use Titan\Http\Middleware\CharacterLoggedIn;
 use Titan\Http\Middleware\UpdateLastMove;
@@ -75,6 +77,8 @@ class Kernel extends HttpKernel
         'update_last_move' => UpdateLastMove::class,
         'character_logged_in'   =>  CharacterLoggedIn::class,
         'character_alive'   => CharacterAlive::class,
+        'choose_game_theme' =>  ChooseGameTheme::class,
+        'choose_admin_theme'    => ChooseAdminTheme::class
 
     ];
 }

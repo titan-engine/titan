@@ -2,7 +2,7 @@
 Route::group([
     'namespace' => 'Titan\Http\Controllers',
     'middleware' => [
-        'web'
+        'web', 'choose_game_theme'
     ]
 ], function () {
 

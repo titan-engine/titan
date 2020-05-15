@@ -1,4 +1,4 @@
-@extends('titan::layouts.admin')
+@extends('layouts.admin')
 
 @section('page')
     <h1 class="h3 mb-4 text-gray-800">Edit Menu <a href="{{ route('admin.menu.destroy', $menu) }}"
@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.menu.update', [$menu])->fill($menu)->put() !!}
-            @include('titan::admin.menu.form')
+            @include('admin.menu.form')
             {!! \Form::submit('Update Menu') !!}
             {!! \Form::close() !!}
         </div>
@@ -29,7 +29,7 @@
                     <ol class="list-unstyled sortable">
                         @foreach($menu->items as $menuItem)
                             @if($menuItem->parent_id === null)
-                                @include('titan::partials.admin.nav-item', ['item'=>$menuItem])
+                                @include('partials.admin.nav-item', ['item'=>$menuItem])
                             @endif
                         @endforeach
                     </ol>

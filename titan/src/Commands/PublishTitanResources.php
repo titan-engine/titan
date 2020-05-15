@@ -38,8 +38,18 @@ class PublishTitanResources extends Command
     public function handle()
     {
         \Artisan::call('vendor:publish', [
-            '--force'   =>  true,
-            '--tag'    =>  'titan'
+            '--force' => true,
+            '--tag' => 'titan'
         ]);
+
+
+        if (\File::copyDirectory(dirname(dirname(__DIR__)) . '/themes', storage_path('themes'))) {
+            \Artisan::call('theme:install', [
+                'package' => 'Default'
+            ]);
+            \Artisan::call('theme:install', [
+                'package' => 'Admin'
+            ]);
+        }
     }
 }
