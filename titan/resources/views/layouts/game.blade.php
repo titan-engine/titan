@@ -88,7 +88,7 @@
     </nav>
 
     <main class="py-4">
-        @include('titan::flash::message')
+        @include('flash::message')
         @yield('content')
     </main>
 </div>
