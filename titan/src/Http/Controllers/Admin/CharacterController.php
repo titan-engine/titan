@@ -22,7 +22,7 @@ class CharacterController extends Controller
      */
     public function index(): View
     {
-        return view('titan::titan::admin.characters.index');
+        return view('titan::admin.characters.index');
     }
 
     /**
@@ -35,7 +35,7 @@ class CharacterController extends Controller
         $areas = Area::all();
         $stats = Stat::all();
 
-        return view('titan::titan::admin.characters.create', compact('areas', 'stats'));
+        return view('titan::admin.characters.create', compact('areas', 'stats'));
     }
 
     /**
