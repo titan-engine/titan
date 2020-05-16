@@ -26,6 +26,8 @@ before_install:
   - composer install --prefer-source --no-interaction --dev
   - php artisan key:generate
   - php artisan migrate
+  - php artisan ui:auth
+  - php artisan ui:controllers
   - php artisan titan:resources
 
 install:
