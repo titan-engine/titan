@@ -280,7 +280,7 @@
 
             <!-- Begin Page Content -->
             <div class="container-fluid">
-                @include('titan::flash::message')
+                @include('flash::message')
                 @yield('page')
 
             </div>
