@@ -37,17 +37,10 @@ class LoginTest extends TestCase
 
     public function testLoginRedirectsToGameWhenLoggedInAndHasCharacter()
     {
-        $user = factory(User::class)->create();
 
-        $character = new Character();
-        $character->user_id = $user->id;
-        $character->display_name = 'Demo';
-        $character->save();
-
-        $character->seedStats();
-
-        $user->last_character_played = $character->id;
-        $user->save();
+        [$user, $character] = $this->seedUser([
+            'role'  =>  'Super Admin'
+        ]);
 
         $res = $this->actingAs($user)
             ->withSession([

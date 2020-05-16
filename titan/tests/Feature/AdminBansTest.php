@@ -7,9 +7,12 @@ use Titan\Tests\TestCase;
 class AdminBansTest extends TestCase {
     use RefreshDatabase;
 
-    public function testPageLoads() {
-        $this->get('/')
-            ->assertStatus(200);
+    public function testPageRedirectsToLoginWhenNotLoggedIn()
+    {
+        $this->followRedirects = false;
 
+        $this->get(route('admin.banuser.index'))
+            ->assertRedirect('/login')
+            ->assertLocation(route('login'));
     }
 }

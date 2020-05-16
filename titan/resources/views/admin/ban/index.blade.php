@@ -1,4 +1,4 @@
-@extends('layouts.admin')
+@extends('titan::layouts.admin')
 
 @section('page')
     <ul class="nav nav-tabs">

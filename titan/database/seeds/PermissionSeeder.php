@@ -12,6 +12,7 @@ class PermissionSeeder extends Seeder
     public function run()
     {
         $stats = [
+            'admin',
             'crons',
             'areas',
             'menus',

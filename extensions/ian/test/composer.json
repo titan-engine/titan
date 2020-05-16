@@ -1,0 +1,19 @@
+{
+    "name": "ian/test",
+    "description": "kJDSGFh",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ian",
+            "email": "hi@ian.pe"
+        }
+    ],
+    "require": {},
+    "extra": {
+        "titan": {
+            "name": "Test",
+            "namespace": "Extensions\\Ian\\Test"
+        }
+    }
+}

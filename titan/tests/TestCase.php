@@ -3,6 +3,7 @@
 namespace Titan\Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Spatie\Permission\Models\Role;
 use Titan\Character;
 use Titan\User;
 
@@ -22,9 +23,13 @@ abstract class TestCase extends BaseTestCase
         $this->artisan('db:seed', ['--class'=>'StatSeeder']);
         $this->artisan('db:seed', ['--class'=>'PermissionSeeder']);
 
+        $role = new Role();
+        $role->name = 'Super Admin';
+        $role->save();
+
     }
 
-    protected function seedUser() {
+    protected function seedUser($config) {
         $user = factory(User::class)->create();
 
         $character = new Character();
@@ -36,6 +41,9 @@ abstract class TestCase extends BaseTestCase
 
         $user->last_character_played = $character->id;
         $user->save();
+
+        if(isset($config['role']))
+            $user->assignRole($config['role']);
 
         return [$user, $character];
     }

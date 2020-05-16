@@ -7,9 +7,13 @@ use Titan\Tests\TestCase;
 class AdminMenuTest extends TestCase {
     use RefreshDatabase;
 
-    public function testPageLoads() {
-        $this->get('/')
-            ->assertStatus(200);
 
+    public function testPageRedirectsToLoginWhenNotLoggedIn()
+    {
+        $this->followRedirects = false;
+
+        $this->get(route('admin.menu.index'))
+            ->assertRedirect('/login')
+            ->assertLocation(route('login'));
     }
 }

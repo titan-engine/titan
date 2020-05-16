@@ -1,4 +1,4 @@
-@extends('admin.ban.index')
+@extends('titan::admin.ban.index')
 @section('partial')
     <div class="card shadow mb-4">
         {!! Form::open()->route('admin.banchar.update', [$banned->bannable->id])->fill($banned)->put() !!}
