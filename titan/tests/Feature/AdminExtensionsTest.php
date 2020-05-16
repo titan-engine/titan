@@ -7,9 +7,12 @@ use Titan\Tests\TestCase;
 class AdminExtensionsTest extends TestCase {
     use RefreshDatabase;
 
-    public function testPageLoads() {
-        $this->get('/')
-            ->assertStatus(200);
+    public function testPageRedirectsToLoginWhenNotLoggedIn()
+    {
+        $this->followRedirects = false;
 
+        $this->get(route('admin.extensions.index'))
+            ->assertRedirect('/login')
+            ->assertLocation(route('login'));
     }
 }
