@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('titan::layouts.app')
 
 @php
     $enabled_socials = collect(config('services'))->only(['facebook', 'twitter', 'google', 'github'])

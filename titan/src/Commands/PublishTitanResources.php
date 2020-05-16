@@ -41,15 +41,5 @@ class PublishTitanResources extends Command
             '--force' => true,
             '--tag' => 'titan'
         ]);
-
-
-        if (\File::copyDirectory(dirname(dirname(__DIR__)) . '/themes', storage_path('themes'))) {
-            \Artisan::call('theme:install', [
-                'package' => 'Default'
-            ]);
-            \Artisan::call('theme:install', [
-                'package' => 'Admin'
-            ]);
-        }
     }
 }

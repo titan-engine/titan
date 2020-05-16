@@ -28,7 +28,7 @@ class CharacterController extends Controller
             }
         }
 
-        return view('character.choice.index', compact('characters'));
+        return view('titan::character.choice.index', compact('characters'));
     }
 
     public function create(CreateCharacterRequest $request) {

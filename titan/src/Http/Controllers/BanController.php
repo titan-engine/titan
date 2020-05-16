@@ -33,7 +33,7 @@ class BanController extends \App\Http\Controllers\Controller
         if($ban)
         {
             flash()->error('You are Banned!!');
-            return view('game.ban.index', compact('ban'));
+            return view('titan::game.ban.index', compact('ban'));
         }
         else
         {

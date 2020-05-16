@@ -22,7 +22,7 @@ class ItemCategoryController extends Controller
      */
     public function index(): View
     {
-        return view('admin.item-categories.index');
+        return view('titan::admin.item-categories.index');
     }
 
     /**
@@ -33,7 +33,7 @@ class ItemCategoryController extends Controller
     public function create(): View
     {
         $item_categories = ItemCategory::all();
-        return view('admin.item-categories.create', compact('item_categories'));
+        return view('titan::admin.item-categories.create', compact('item_categories'));
     }
 
     /**
@@ -87,7 +87,7 @@ class ItemCategoryController extends Controller
 
         $item_categories = ItemCategory::all();
 
-        return view('admin.item-categories.edit', compact('item_category', 'item_categories'));
+        return view('titan::admin.item-categories.edit', compact('item_category', 'item_categories'));
     }
 
     /**

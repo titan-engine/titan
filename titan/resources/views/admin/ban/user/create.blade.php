@@ -1,11 +1,11 @@
-@extends('admin.ban.index')
+@extends('titan::admin.ban.index')
 @section('partial')
     <div class="card shadow mb-4">
         {!! Form::open()->route('admin.banuser.store')->post() !!}
         <div class="card-body">
             <div class="form-group">
 
-                @include('admin.ban.ban_create_form')
+                @include('titan::admin.ban.ban_create_form')
 
             </div>
         </div>

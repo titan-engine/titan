@@ -34,7 +34,7 @@ class HomeController extends Controller
         $stats['players_online'] = User::where('last_move', '>', (new Carbon())->subHour())->count();
         $stats['players_registered_today'] = User::where('created_at', '>', (new Carbon())->startOfDay())->count();
 
-        return view('admin.home', compact('stats'));
+        return view('titan::admin.home', compact('stats'));
     }
 
     public function needsEngineUpdate(): bool

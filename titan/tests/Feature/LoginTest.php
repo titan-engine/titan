@@ -39,6 +39,7 @@ class LoginTest extends TestCase
     {
         $user = factory(User::class)->create();
 
+
         $character = new Character();
         $character->user_id = $user->id;
         $character->display_name = 'Demo';

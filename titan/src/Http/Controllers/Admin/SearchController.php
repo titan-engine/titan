@@ -20,7 +20,7 @@ class SearchController extends Controller
         $results['members'] = $this->getMembers();
         $results['settings'] = $this->getSettings();
 
-        return view('admin.search.index', compact('results', 'search_term'));
+        return view('titan::admin.search.index', compact('results', 'search_term'));
     }
 
     private function getMembers(): Collection {

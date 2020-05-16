@@ -1,10 +1,10 @@
-@extends('layouts.app')
+@extends('titan::layouts.app')
 
 @section('content')
 <div class="container">
     <div class="row justify-content-center">
         <div class="col-md-4">
-            @include('partials.nav', ['nav'=>'General'])
+            @include('titan::partials.nav', ['nav'=>'General'])
         </div>
         <div class="col-md-8">
             <div class="card">

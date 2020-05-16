@@ -1,4 +1,4 @@
-@extends('layouts.admin')
+@extends('titan::layouts.admin')
 
 @section('page')
     <div class="row">
@@ -10,7 +10,7 @@
 
             <div class="card shadow mb-4">
                 <div class="card-body">
-                    @include('admin.item-categories.form')
+                    @include('titan::admin.item-categories.form')
                 </div>
             </div>
             <div class="card shadow mb-4">

@@ -20,7 +20,7 @@ class AreaController extends Controller
      */
     public function index(): View
     {
-        return view('admin.areas.index');
+        return view('titan::admin.areas.index');
     }
 
     /**
@@ -30,7 +30,7 @@ class AreaController extends Controller
      */
     public function create(): View
     {
-        return view('admin.areas.create');
+        return view('titan::admin.areas.create');
     }
 
     /**
@@ -58,7 +58,7 @@ class AreaController extends Controller
      */
     public function show(Area $area)
     {
-        return view('admin.areas.edit', compact('area'));
+        return view('titan::admin.areas.edit', compact('area'));
     }
 
     /**
@@ -69,7 +69,7 @@ class AreaController extends Controller
      */
     public function edit(Area $area)
     {
-        return view('admin.areas.edit', compact('area'));
+        return view('titan::admin.areas.edit', compact('area'));
     }
 
     /**

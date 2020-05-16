@@ -22,7 +22,7 @@ class StatController extends Controller
      */
     public function index(): View
     {
-        return view('admin.stats.index');
+        return view('titan::admin.stats.index');
     }
 
     /**
@@ -33,7 +33,7 @@ class StatController extends Controller
     public function create(): View
     {
         $types = Stat::AVAILABLE_TYPES;
-        return view('admin.stats.create', compact('types'));
+        return view('titan::admin.stats.create', compact('types'));
     }
 
     /**
@@ -63,7 +63,7 @@ class StatController extends Controller
     {
         $types = Stat::AVAILABLE_TYPES;
 
-        return view('admin.stats.show', compact('stat', 'types'));
+        return view('titan::admin.stats.show', compact('stat', 'types'));
     }
 
     /**
@@ -75,7 +75,7 @@ class StatController extends Controller
     public function edit(Stat $stat): View
     {
         $types = Stat::AVAILABLE_TYPES;
-        return view('admin.stats.edit', compact('stat', 'types'));
+        return view('titan::admin.stats.edit', compact('stat', 'types'));
     }
 
     /**

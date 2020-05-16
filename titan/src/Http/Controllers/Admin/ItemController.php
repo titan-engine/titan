@@ -31,7 +31,7 @@ class ItemController extends Controller
      */
     public function index(): View
     {
-        return view('admin.items.index');
+        return view('titan::admin.items.index');
     }
 
     /**
@@ -42,7 +42,7 @@ class ItemController extends Controller
     public function create(): View
     {
         $item_categories = ItemCategory::all();
-        return view('admin.items.create', compact('item_categories'));
+        return view('titan::admin.items.create', compact('item_categories'));
     }
 
     /**
@@ -106,7 +106,7 @@ class ItemController extends Controller
         $item->equippable = (string) $item->equippable;
         $item->stackable = (string) $item->stackable;
 
-        return view('admin.items.edit', compact('item', 'item_categories'));
+        return view('titan::admin.items.edit', compact('item', 'item_categories'));
     }
 
     /**

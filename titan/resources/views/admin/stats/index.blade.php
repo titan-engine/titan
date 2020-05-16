@@ -1,4 +1,4 @@
-@extends('layouts.admin')
+@extends('titan::layouts.admin')
 @section('page')
     <h1 class="h3 mb-4 text-gray-800">Current Stats
         <span class="float-right"><a href="{{ route('admin.stats.create') }}" class="btn btn-primary">Create new</a> </span></h1>
