@@ -3,6 +3,15 @@ language: php
 php:
   - 7.2
   - 7.3
+  - 7.4
+
+services:
+  - mysql
+
+cache:
+  directories:
+    - node_modules
+    - vendor
 
 env:
   matrix:
@@ -11,6 +20,13 @@ env:
 before_install:
   - sudo apt-get update
   - travis_retry composer self-update
+  - cp .env.travis .env
+  - sudo mysql -e 'create database homestead;'
+  - composer self-update
+  - composer install --prefer-source --no-interaction --dev
+  - php artisan key:generate
+  - php artisan migrate
+  - php artisan titan:resources
 
 install:
   - travis_retry composer update ${COMPOSER_OPTIONS} --prefer-source
