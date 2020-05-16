@@ -89,7 +89,7 @@
         <div class="container">
             <div class="row">
                 <div class="col">
-                    @include('titan::flash::message')
+                    @include('flash::message')
                 </div>
             </div>
         </div>
