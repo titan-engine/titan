@@ -44,6 +44,6 @@ class ConfirmPasswordController extends Controller
      */
     public function showConfirmForm()
     {
-        return view('auth.passwords.confirm');
+        return view('titan::auth.passwords.confirm');
     }
 }

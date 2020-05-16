@@ -8,11 +8,11 @@ use Illuminate\Routing\Controller;
 class MenuItemController extends Controller
 {
     public function index() {
-        return view('admin.menu.item.index');
+        return view('titan::admin.menu.item.index');
     }
 
     public function create() {
-        return view('admin.menu.item.create');
+        return view('titan::admin.menu.item.create');
 
     }
 
@@ -21,7 +21,7 @@ class MenuItemController extends Controller
     }
 
     public function edit() {
-        return view('admin.menu.item.edit');
+        return view('titan::admin.menu.item.edit');
 
     }
 

@@ -6,7 +6,7 @@
             <h3>Editing Ban for {{ $banned->bannable->name }}</h3>
             <div class="form-group">
 
-                @include('admin.ban.ban_edit_form')
+                @include('titan::admin.ban.ban_edit_form')
 
             </div>
         </div>

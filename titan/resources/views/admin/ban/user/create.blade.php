@@ -5,7 +5,7 @@
         <div class="card-body">
             <div class="form-group">
 
-                @include('admin.ban.ban_create_form')
+                @include('titan::admin.ban.ban_create_form')
 
             </div>
         </div>

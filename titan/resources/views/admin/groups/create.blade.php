@@ -7,12 +7,12 @@
     {!! \Form::open()->route('admin.groups.store') !!}
     <div class="card shadow mb-4">
         <div class="card-body">
-            @include('admin.groups.form')
+            @include('titan::admin.groups.form')
         </div>
     </div>
     <div class="card shadow mb-4">
         <div class="card-body">
-            @include('admin.groups.form-permission')
+            @include('titan::admin.groups.form-permission')
         </div>
     </div>
     <div class="card shadow mb-4">

@@ -22,7 +22,7 @@ class CharacterController extends Controller
      */
     public function index(): View
     {
-        return view('admin.characters.index');
+        return view('titan::titan::admin.characters.index');
     }
 
     /**
@@ -35,7 +35,7 @@ class CharacterController extends Controller
         $areas = Area::all();
         $stats = Stat::all();
 
-        return view('admin.characters.create', compact('areas', 'stats'));
+        return view('titan::titan::admin.characters.create', compact('areas', 'stats'));
     }
 
     /**
@@ -87,7 +87,7 @@ class CharacterController extends Controller
     public function show($id): View
     {
 
-        return view('admin.characters.show');
+        return view('titan::admin.characters.show');
     }
 
     /**
@@ -100,7 +100,7 @@ class CharacterController extends Controller
     {
         $areas = Area::all();
         $stats = Stat::all();
-        return view('admin.characters.edit', compact('character', 'areas', 'stats'));
+        return view('titan::admin.characters.edit', compact('character', 'areas', 'stats'));
     }
 
     /**

@@ -16,13 +16,13 @@ class GroupController extends Controller
     public function index(): View
     {
         $groups = Role::where('name', '!=', 'Super Admin')->get();
-        return view('admin.groups.index', compact('groups'));
+        return view('titan::admin.groups.index', compact('groups'));
     }
 
     public function create(): View
     {
         $permissions = Permission::all();
-        return view('admin.groups.create', compact('permissions'));
+        return view('titan::admin.groups.create', compact('permissions'));
     }
 
     public function store(GroupRequest $request): RedirectResponse
@@ -41,7 +41,7 @@ class GroupController extends Controller
 
     public function edit(Role $group): View {
         $permissions = Permission::all();
-        return view('admin.groups.edit', compact('group', 'permissions'));
+        return view('titan::admin.groups.edit', compact('group', 'permissions'));
     }
 
     public function update(GroupRequest $request, Role $group): RedirectResponse {

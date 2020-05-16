@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.users.store') !!}
-            @include('admin.users.form')
+            @include('titan::admin.users.form')
             {!! \Form::submit('Create User') !!}
             {!! \Form::close() !!}
         </div>

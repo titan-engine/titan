@@ -10,7 +10,7 @@
 
             <div class="card shadow mb-4">
                 <div class="card-body">
-                    @include('admin.stats.form')
+                    @include('titan::admin.stats.form')
                     {!! \Form::submit('Update Stat') !!}
                 </div>
             </div>

@@ -15,16 +15,16 @@ class CronjobController extends Controller
 {
     public function index(): View {
         $jobs = Cronjobs::all();
-        return view('admin.cronjobs.index', compact('jobs'));
+        return view('titan::admin.cronjobs.index', compact('jobs'));
     }
 
     public function create(): View {
-        return view('admin.cronjobs.create');
+        return view('titan::admin.cronjobs.create');
     }
 
     public function edit(Cronjobs $cronjob): View {
 
-        return view('admin.cronjobs.edit', compact('cronjob'));
+        return view('titan::admin.cronjobs.edit', compact('cronjob'));
     }
 
     public function update(CronCreateRequest $request, Cronjobs $cronjob): RedirectResponse {

@@ -10,12 +10,12 @@
 
             <div class="card shadow mb-4">
                 <div class="card-body">
-                    @include('admin.characters.form')
+                    @include('titan::admin.characters.form')
                 </div>
             </div>
             <div class="card shadow mb-4">
                 <div class="card-body">
-                    @include('admin.characters.form_stats')
+                    @include('titan::admin.characters.form_stats')
                 </div>
             </div>
             <div class="card shadow">

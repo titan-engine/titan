@@ -7,7 +7,7 @@
 @foreach($menu->items as $menuItem)
     @if($menuItem->parent_id === null)
         <ul>
-            @include('partials.nav-item', ['item'=>$menuItem])
+            @include('titan::partials.nav-item', ['item'=>$menuItem])
         </ul>
     @endif
 @endforeach

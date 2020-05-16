@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.cronjobs.update', [$cronjob->id])->fill($cronjob)->put() !!}
-            @include('admin.cronjobs.form')
+            @include('titan::admin.cronjobs.form')
             {!! \Form::submit('Update Cronjob') !!}
             {!! \Form::close() !!}
         </div>

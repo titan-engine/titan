@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.groups.store') !!}
-            @include('admin.groups.form')
+            @include('titan::admin.groups.form')
             {!! \Form::submit('Create Group') !!}
             {!! \Form::close() !!}
         </div>

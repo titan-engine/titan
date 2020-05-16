@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin..store') !!}
-            @include('admin..form')
+            @include('titan::admin..form')
             {!! \Form::submit('Update ') !!}
             {!! \Form::close() !!}
         </div>

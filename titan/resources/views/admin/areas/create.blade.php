@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.areas.store') !!}
-            @include('admin.areas.form')
+            @include('titan::admin.areas.form')
             {!! \Form::submit('Create Area') !!}
             {!! \Form::close() !!}
         </div>

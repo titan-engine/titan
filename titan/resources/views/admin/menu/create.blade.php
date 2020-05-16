@@ -7,7 +7,7 @@
     <div class="card shadow mb-4">
         <div class="card-body">
             {!! \Form::open()->route('admin.menu.store') !!}
-            @include('admin.menu.form')
+            @include('titan::admin.menu.form')
             {!! \Form::submit('Create Menu') !!}
             {!! \Form::close() !!}
         </div>
