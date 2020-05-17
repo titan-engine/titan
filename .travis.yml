@@ -31,7 +31,7 @@ before_script:
   - composer install --prefer-source --no-interaction --dev
   - php artisan key:generate
   - php artisan migrate
-  - php artisan titan:resurces
+  - php artisan titan:resources
 
 script:
   - vendor/bin/phpunit
