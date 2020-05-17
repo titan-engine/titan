@@ -41,5 +41,18 @@ class PublishTitanResources extends Command
             '--force' => true,
             '--tag' => 'titan'
         ]);
+
+        $this->info('Resources Published');
+
+        if (\File::copyDirectory(base_path('themes'), storage_path('themes'))) {
+            \Artisan::call('theme:install', [
+                'package' => 'Default'
+            ]);
+            \Artisan::call('theme:install', [
+                'package' => 'Admin'
+            ]);
+
+            $this->info('Themes installed');
+        }
     }
 }
