@@ -28,7 +28,7 @@ class LoginTest extends TestCase
 
     public function testLoginRedirectsToCharacterChoiceWhenLoggedIn()
     {
-        $user = factory(User::class)->make();
+        [$user, $character] = $this->seedUser();
 
         $res = $this->actingAs($user)
             ->get('login')
@@ -53,7 +53,7 @@ class LoginTest extends TestCase
 
     public function testLoginWorks()
     {
-        $user = factory(User::class)->create([
+        $user = factory(\App\User::class)->create([
             'email' => 'demo@demo.com',
             'password' => Hash::make('password')
         ]);

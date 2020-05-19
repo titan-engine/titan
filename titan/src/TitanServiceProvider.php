@@ -10,6 +10,7 @@ use Titan\Commands\InstallTitan;
 use Titan\Commands\PublishTitanResources;
 use Titan\Commands\SuperAdmin;
 use Titan\Commands\UpdateTitan;
+use Titan\Commands\VerifyTitan;
 use Titan\Models\Settings;
 use Titan\Observers\StatObserver;
 use Titan\Providers\BanUserServiceProvider;
@@ -28,7 +29,7 @@ class TitanServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom(__DIR__ . '/routes.php');
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations');
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'titan');
 

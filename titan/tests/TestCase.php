@@ -2,10 +2,10 @@
 
 namespace Titan\Tests;
 
+use App\User;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Spatie\Permission\Models\Role;
 use Titan\Character;
-use Titan\User;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -29,7 +29,7 @@ abstract class TestCase extends BaseTestCase
 
     }
 
-    protected function seedUser($config) {
+    protected function seedUser(array $config = null): array {
         $user = factory(User::class)->create();
 
         $character = new Character();
