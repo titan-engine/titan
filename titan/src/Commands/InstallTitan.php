@@ -209,7 +209,7 @@ class InstallTitan extends Command
 
     private function installCrons(): void {
         $cron = new Cronjobs();
-        $cron->command = 'titan:extension:flush';
+        $cron->command = 'titan:flush';
         $cron->cron = "0 0 * * *";
         $cron->enabled = true;
         $cron->save();
