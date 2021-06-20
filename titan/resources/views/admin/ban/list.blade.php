@@ -1,4 +1,4 @@
-@extends('titan::admin.ban.index')
+@extends('admin.ban.index')
 
 @section('partial')
 

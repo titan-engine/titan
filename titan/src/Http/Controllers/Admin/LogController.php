@@ -11,5 +11,5 @@ use Rap2hpoutre\LaravelLogViewer\LogViewerController;
 
 class LogController extends LogViewerController
 {
-    protected $view_log = 'admin.logs.index';
+    protected $view_log = 'titan::admin.logs.index';
 }
