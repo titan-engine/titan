@@ -60,6 +60,7 @@ class TitanServiceProvider extends ServiceProvider
         Stat::observe(StatObserver::class);
 
         $this->app->register(ExtensionServiceProvider::class);
+        $this->app->register(BanUserServiceProvider::class);
     }
 
     /**
@@ -85,8 +86,6 @@ class TitanServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__ . '/../config/game.php', 'game'
         );
-
-        $this->app->register(BanUserServiceProvider::class);
 
         /**
          * Weird hack for loading factories from titan/database/factories
