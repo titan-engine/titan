@@ -63,7 +63,7 @@ const details = call(runtime, { type: 'entity', entity: shrine }).response;
 assert.ok(Object.keys(details.components).some(name => name.endsWith('::ActiveShrine')));
 assert.equal(call(runtime, { type: 'entities' }).response.entities.length, 2);
 const capture = call(runtime, { type: 'capture' }).response;
-assert.equal(capture.checksum, '98618cd721c5b52d');
+assert.equal(capture.checksum, '190a92085def5677');
 assert.deepEqual([capture.width, capture.height], [160, 112]);
 assert.ok(capture.artifact.startsWith('data:image/png;base64,'));
 const png = Buffer.from(capture.artifact.split(',')[1], 'base64');

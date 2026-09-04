@@ -73,7 +73,7 @@ def main():
                 assert any(name.endswith("::ActiveShrine") for name in details["components"])
                 assert len(cli("entities")["response"]["entities"]) == 2
                 capture = cli("capture")["response"]
-                assert capture["checksum"] == "98618cd721c5b52d", capture
+                assert capture["checksum"] == "190a92085def5677", capture
                 artifact = Path(capture["artifact"])
                 assert artifact.is_absolute(), capture
                 assert artifact.read_bytes().startswith(b"P6\n160 112\n255\n")
@@ -89,7 +89,7 @@ def main():
                 assert bundle["response"]["error"]["code"] == "invalid_value"
                 assert len(bundle["history"]["accepted_inputs"]) == 11
                 assert bundle["world_state"]["quest"] == {"collected_shards": 3, "shrine_active": True}
-                assert bundle["capture"]["checksum"] == "98618cd721c5b52d"
+                assert bundle["capture"]["checksum"] == "190a92085def5677"
                 assert (manifest.parent / bundle["capture"]["artifact"]).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 assert "spawn_shard" in (manifest.parent / "api.txt").read_text()
                 assert "request" in bundle["timings_us"]

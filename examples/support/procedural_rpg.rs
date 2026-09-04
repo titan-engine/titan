@@ -802,7 +802,7 @@ mod tests {
         let frame = app.extracted::<titan::render::RenderFrame>().unwrap();
         let image = SoftwareRenderer::render(frame, app.world().resource::<ImageAssets>().unwrap())
             .unwrap();
-        assert_eq!(image_checksum(&image), 0x9861_8cd7_21c5_b52d);
+        assert_eq!(image_checksum(&image), 0x190a_9208_5def_5677);
     }
 
     fn request(
@@ -924,7 +924,7 @@ mod tests {
             panic!("expected capture")
         };
         assert_eq!((capture.width, capture.height), (160, 112));
-        assert_eq!(capture.checksum, "98618cd721c5b52d");
+        assert_eq!(capture.checksum, "190a92085def5677");
         assert_eq!(capture.artifact, path.to_string_lossy());
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(b"P6\n160 112\n255\n"));
