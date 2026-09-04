@@ -298,6 +298,7 @@ pub enum ErrorCode {
     ProtocolMismatch,
     Timeout,
     Busy,
+    Unsupported,
     Internal,
 }
 

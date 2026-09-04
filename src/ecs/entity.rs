@@ -15,6 +15,14 @@ impl Entity {
         Self { index, generation }
     }
 
+    /// Reconstructs an entity handle from structured external data.
+    ///
+    /// This does not prove that the entity is alive in any particular world;
+    /// use [`World::is_alive`](super::World::is_alive) before accessing it.
+    pub const fn from_parts(index: u32, generation: u32) -> Self {
+        Self::new(index, generation)
+    }
+
     /// Returns the entity's densely allocated index.
     pub const fn index(self) -> u32 {
         self.index

@@ -5,6 +5,8 @@ use super::world::Component;
 
 pub(crate) trait ErasedStorage: Send + Sync {
     fn remove_entity(&mut self, entity: Entity);
+    fn contains(&self, entity: Entity) -> bool;
+    fn type_name(&self) -> &'static str;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -102,6 +104,14 @@ impl<T> ComponentStorage<T> {
 impl<T: Component> ErasedStorage for ComponentStorage<T> {
     fn remove_entity(&mut self, entity: Entity) {
         self.remove(entity);
+    }
+
+    fn contains(&self, entity: Entity) -> bool {
+        self.get(entity).is_some()
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
     }
 
     fn as_any(&self) -> &dyn Any {

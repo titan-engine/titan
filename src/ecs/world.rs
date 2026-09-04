@@ -212,6 +212,30 @@ impl World {
         self.live_entity_count
     }
 
+    /// Iterates over live entities in ascending allocator-index order.
+    pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.entities
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.alive)
+            .map(|(index, slot)| Entity::new(index as u32, slot.generation))
+    }
+
+    /// Returns sorted Rust type names for components attached to an entity.
+    pub fn component_type_names(&self, entity: Entity) -> Vec<&'static str> {
+        if !self.is_alive(entity) {
+            return Vec::new();
+        }
+        let mut names: Vec<_> = self
+            .components
+            .values()
+            .filter(|storage| storage.contains(entity))
+            .map(|storage| storage.type_name())
+            .collect();
+        names.sort_unstable();
+        names
+    }
+
     /// Inserts or replaces a unique world resource.
     pub fn insert_resource<T: Send + Sync + 'static>(&mut self, resource: T) -> Option<T> {
         self.resources
