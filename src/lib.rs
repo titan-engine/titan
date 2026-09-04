@@ -1,14 +1,12 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Titan is a Rust-first game engine designed for agent-assisted development.
+//!
+//! The engine is at an early, experimental stage. Its first foundation is a
+//! small custom ECS with explicit, deterministic behavior.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod app;
+pub mod ecs;
+pub mod time;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use app::{App, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
+pub use ecs::{Component, Entity, InsertError, World};
+pub use time::FixedTime;
