@@ -21,7 +21,9 @@ Titan currently has:
   game commands, logical input injection, and software capture hooks;
 - a CLI with human-readable and JSON output for checking, testing, and running
   examples; and
-- native and WebAssembly CI checks.
+- authenticated native loopback transport, project-local discovery, and CLI
+  attachment to the paused headless RPG; and
+- native and WebAssembly CI checks, including a separate-process control loop.
 
 ## Next vertical objective
 
@@ -61,8 +63,9 @@ activate the shrine, and retrieve a capture result using protocol requests only.
 
 ## Phase 2: native discovery, transport, and CLI attachment
 
-Current task: connect the native adapter, discovery, and CLI to a long-running
-headless RPG, then run the same control loop across processes.
+Completed for macOS and Linux. `python3 scripts/test-control-loop.py` drives
+the headless RPG through separate CLI processes and verifies replay, inspection,
+command invocation, exact capture, structured failures, and clean shutdown.
 
 - Put transport requests into a bounded queue; transport code must never access
   the ECS world directly.
@@ -82,6 +85,9 @@ Completion signal: one terminal launches the headless RPG and another can
 discover it and complete the vertical control loop using the `titan` CLI.
 
 ## Phase 3: browser inspection bridge
+
+Current task: reuse the same RPG and inspection handler in a browser WASM
+bridge with explicit control opt-in and a minimal capability-driven inspector.
 
 - Expose the same typed protocol handler through a WASM/in-page message bridge.
 - Build a minimal browser inspector that discovers capabilities rather than
