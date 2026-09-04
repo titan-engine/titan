@@ -1,6 +1,9 @@
 //! Transport-neutral inspection of a Titan [`App`](crate::App).
 
 use std::collections::BTreeMap;
+use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 use serde::de::DeserializeOwned;
 use titan_protocol::{
@@ -33,6 +36,31 @@ impl InspectionConfig {
     }
 }
 
+/// Per-request limits for controlled stepping.
+///
+/// Frame limits apply on all targets. The cooperative wall-clock limit is
+/// enforced only on native targets; browser hosts must bound execution with
+/// frame limits or their own host clock. A running system cannot be interrupted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StepBudget {
+    pub max_frames: u64,
+    /// `None` disables the native wall-clock limit. Zero permits no execution.
+    pub max_duration: Option<Duration>,
+}
+
+impl StepBudget {
+    pub const DEFAULT: Self = Self {
+        max_frames: 10_000,
+        max_duration: Some(Duration::from_secs(5)),
+    };
+}
+
+impl Default for StepBudget {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 type CommandHandler =
     Box<dyn FnMut(&mut App, serde_json::Value) -> Result<(), ProtocolError> + Send>;
 type InputHandler = Box<
@@ -53,6 +81,7 @@ struct RegisteredCommand {
 pub struct Inspector {
     config: InspectionConfig,
     state_revision: u64,
+    step_budget: StepBudget,
     commands: BTreeMap<String, RegisteredCommand>,
     input_handler: Option<InputHandler>,
     capture_handler: Option<CaptureHandler>,
@@ -63,10 +92,21 @@ impl Inspector {
         Self {
             config,
             state_revision: 0,
+            step_budget: StepBudget::DEFAULT,
             commands: BTreeMap::new(),
             input_handler: None,
             capture_handler: None,
         }
+    }
+
+    /// Configures limits for subsequent controlled step requests.
+    ///
+    /// Oversized frame requests fail before startup or world mutation. Native
+    /// timeouts are checked around startup and between complete ticks, so they
+    /// may leave completed work visible without advancing the success revision.
+    pub fn set_step_budget(&mut self, budget: StepBudget) -> &mut Self {
+        self.step_budget = budget;
+        self
     }
 
     /// Registers a game command with typed JSON-object arguments.
@@ -177,6 +217,71 @@ impl Inspector {
         }
     }
 
+    fn advance_with_budget(&self, app: &mut App, frames: u64) -> Result<(), ProtocolError> {
+        if frames > self.step_budget.max_frames {
+            let mut error =
+                ProtocolError::new(ErrorCode::InvalidValue, "step frame budget exceeded");
+            error
+                .details
+                .insert("requested_frames".into(), frames.into());
+            error
+                .details
+                .insert("max_frames".into(), self.step_budget.max_frames.into());
+            return Err(error);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let started = Instant::now();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.check_step_time(started, frames, 0)?;
+        // Preserve checked stepping's startup and outstanding-error handling,
+        // including for a zero-frame request.
+        app.try_advance_fixed(0).map_err(deferred_failure)?;
+        for completed in 0..frames {
+            #[cfg(not(target_arch = "wasm32"))]
+            self.check_step_time(started, frames, completed)?;
+            #[cfg(target_arch = "wasm32")]
+            let _ = completed;
+            app.try_advance_fixed(1).map_err(deferred_failure)?;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.check_step_time(started, frames, frames)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn check_step_time(
+        &self,
+        started: Instant,
+        requested_frames: u64,
+        completed_frames: u64,
+    ) -> Result<(), ProtocolError> {
+        let Some(limit) = self.step_budget.max_duration else {
+            return Ok(());
+        };
+        let elapsed = started.elapsed();
+        if elapsed < limit {
+            return Ok(());
+        }
+        let mut error = ProtocolError::new(ErrorCode::Timeout, "step wall-clock budget exceeded");
+        error
+            .details
+            .insert("requested_frames".into(), requested_frames.into());
+        error
+            .details
+            .insert("completed_frames".into(), completed_frames.into());
+        error.details.insert(
+            "max_duration_us".into(),
+            u64::try_from(limit.as_micros()).unwrap_or(u64::MAX).into(),
+        );
+        error.details.insert(
+            "elapsed_us".into(),
+            u64::try_from(elapsed.as_micros())
+                .unwrap_or(u64::MAX)
+                .into(),
+        );
+        Err(error)
+    }
+
     fn execute(&mut self, app: &mut App, request: &Request) -> Result<Response, ProtocolError> {
         match request {
             Request::Capabilities => Ok(Response::Capabilities(self.capabilities())),
@@ -261,7 +366,7 @@ impl Inspector {
                         "the runtime clock is not controlled by the inspector",
                     ));
                 }
-                app.try_advance_fixed(*frames).map_err(deferred_failure)?;
+                self.advance_with_budget(app, *frames)?;
                 self.state_revision = self.state_revision.wrapping_add(1);
                 Ok(Response::Stepped {
                     frames: *frames,
@@ -485,6 +590,123 @@ mod tests {
             }
         ));
         assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 10);
+    }
+
+    #[test]
+    fn oversized_steps_reject_before_startup_or_deferred_mutations() {
+        let (mut app, mut inspector) = inspected_app();
+        app.add_systems(crate::Startup, |_: &mut crate::World| panic!("startup ran"));
+        let reserved = app.world_mut().commands().spawn();
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("too-many", Request::Step { frames: 10_001 }),
+        );
+        assert_eq!(response.observed_frame, 0);
+        assert_eq!(response.state_revision, 0);
+        assert!(!app.world().is_alive(reserved));
+        let ResponseOutcome::Failure { error } = response.outcome else {
+            panic!("expected failure")
+        };
+        assert_eq!(error.code, ErrorCode::InvalidValue);
+        assert_eq!(error.details["requested_frames"], 10_001);
+        assert_eq!(error.details["max_frames"], 10_000);
+    }
+
+    #[test]
+    fn configured_frame_budget_accepts_boundary_and_zero_steps() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector.set_step_budget(super::StepBudget {
+            max_frames: 2,
+            max_duration: None,
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("boundary", Request::Step { frames: 2 }),
+        );
+        assert_eq!(response.observed_frame, 2);
+        assert_eq!(response.state_revision, 1);
+        assert!(matches!(response.outcome, ResponseOutcome::Success { .. }));
+        let rejected = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("too-many", Request::Step { frames: 3 }),
+        );
+        assert_eq!(rejected.observed_frame, 2);
+        assert_eq!(rejected.state_revision, 1);
+        assert!(matches!(rejected.outcome, ResponseOutcome::Failure { .. }));
+        let zero = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("zero", Request::Step { frames: 0 }),
+        );
+        assert_eq!(zero.observed_frame, 2);
+        assert_eq!(zero.state_revision, 2);
+        assert!(matches!(zero.outcome, ResponseOutcome::Success { .. }));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn zero_wall_clock_budget_rejects_without_running_startup() {
+        let (mut app, mut inspector) = inspected_app();
+        app.add_systems(crate::Startup, |_: &mut crate::World| panic!("startup ran"));
+        inspector.set_step_budget(super::StepBudget {
+            max_frames: 10,
+            max_duration: Some(std::time::Duration::ZERO),
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("timeout", Request::Step { frames: 1 }),
+        );
+        assert_eq!(response.observed_frame, 0);
+        assert_eq!(response.state_revision, 0);
+        let ResponseOutcome::Failure { error } = response.outcome else {
+            panic!("expected timeout")
+        };
+        assert_eq!(error.code, ErrorCode::Timeout);
+        assert_eq!(error.details["completed_frames"], 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn wall_clock_timeout_preserves_completed_tick_and_success_revision() {
+        for frames in [1, 3] {
+            let (mut app, mut inspector) = inspected_app();
+            let first = inspector.handle(
+                &mut app,
+                &RequestEnvelope::new("first", Request::Step { frames: 1 }),
+            );
+            assert_eq!(first.state_revision, 1);
+            app.add_systems(FixedUpdate, || {
+                std::thread::sleep(std::time::Duration::from_millis(40))
+            });
+            inspector.set_step_budget(super::StepBudget {
+                max_frames: 10,
+                max_duration: Some(std::time::Duration::from_millis(20)),
+            });
+            let response = inspector.handle(
+                &mut app,
+                &RequestEnvelope::new("timeout", Request::Step { frames }),
+            );
+            assert_eq!(response.observed_frame, 2);
+            assert_eq!(response.state_revision, 1);
+            assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 2);
+            let ResponseOutcome::Failure { error } = response.outcome else {
+                panic!("expected timeout")
+            };
+            assert_eq!(error.code, ErrorCode::Timeout);
+            assert_eq!(error.details["requested_frames"], frames);
+            assert_eq!(error.details["completed_frames"], 1);
+            // A timeout is a request failure, not a stored system error.
+            inspector.set_step_budget(super::StepBudget {
+                max_frames: 10,
+                max_duration: None,
+            });
+            let next = inspector.handle(
+                &mut app,
+                &RequestEnvelope::new("next", Request::Step { frames: 1 }),
+            );
+            assert_eq!(next.observed_frame, 3);
+            assert_eq!(next.state_revision, 2);
+            assert!(matches!(next.outcome, ResponseOutcome::Success { .. }));
+        }
     }
 
     #[test]

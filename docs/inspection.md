@@ -36,6 +36,41 @@ from current world state so changes since the last fixed tick are visible.
 Capabilities advertise registered adapters. Unsupported adapters and unknown
 command names return structured protocol errors.
 
+## Controlled step budgets
+
+Each `Step` request is limited to 10,000 frames and, on native targets, five
+seconds of cooperative execution time. Configure an inspector independently of
+transport and CLI limits:
+
+```rust
+use std::time::Duration;
+use titan::inspection::{InspectionConfig, Inspector, StepBudget};
+
+let mut inspector = Inspector::new(InspectionConfig::controlled("game", "project"));
+inspector.set_step_budget(StepBudget {
+    max_frames: 1_000,
+    max_duration: Some(Duration::from_secs(2)),
+});
+```
+
+Requests above `max_frames` return `invalid_value` with `requested_frames` and
+`max_frames` details before startup, deferred writes, or fixed ticks run. A zero
+frame request still performs normal checked startup when time permits.
+
+Native time checks run before execution, after startup, and between completed
+ticks, including after the final tick. A timeout returns `timeout` with requested
+and completed frame counts plus elapsed and allowed microseconds. Completed work
+remains visible in `observed_frame`; the successful-operation revision does not
+advance. Application failures retain their existing structured errors. Timeouts
+cannot interrupt an individual system, startup schedule, or tick; hosts needing
+hard interruption must isolate execution in a bounded process.
+
+Set `max_duration: None` to disable the native time limit; zero duration rejects
+execution immediately. WebAssembly enforces the frame cap but does not use the
+native clock limit; browser hosts can additionally enforce their own clock policy.
+A CLI transport timeout stops waiting for a response and does not cancel the
+runtime request. Inspect state before retrying a timed-out mutation.
+
 ## Failures and revisions
 
 Successful step, command, and input requests advance the inspector's revision.
