@@ -14,3 +14,4 @@ work without depending on a graphical editor.
 - [First milestone](docs/first-milestone.md)
 - [Open design questions](docs/open-questions.md)
 - [CLI workflow](docs/cli.md)
+- [Implementation plan](docs/implementation-plan.md)
