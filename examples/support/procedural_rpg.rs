@@ -71,7 +71,10 @@ pub struct QuestState {
 
 #[derive(Clone, Copy)]
 struct Art {
-    grass: [ImageId; 2],
+    meadow: ImageId,
+    tree: ImageId,
+    flowers: ImageId,
+    rock: ImageId,
     player: ImageId,
     shard: ImageId,
     shrine_inactive: ImageId,
@@ -344,114 +347,263 @@ fn render_frame(world: &World) -> RenderFrame {
     let mut frame = RenderFrame::new(
         (MAP_WIDTH * TILE_SIZE) as u32,
         (MAP_HEIGHT * TILE_SIZE) as u32,
-        Color::rgb(12, 20, 18),
+        Color::rgb(103, 150, 87),
     );
+    frame.push(SpriteDraw::new(art.meadow, 0, 0));
 
-    for y in 0..MAP_HEIGHT {
-        for x in 0..MAP_WIDTH {
-            let variation = terrain_variation(0x0054_4954_414e, x, y) as usize;
-            frame.push(SpriteDraw::new(
-                art.grass[variation],
-                x * TILE_SIZE,
-                y * TILE_SIZE,
-            ));
-        }
+    // Scenery is presentation only. Large silhouettes frame the border; the
+    // reference walk stays open, and all gameplay sprites draw above scenery.
+    for (x, y) in [
+        (-6, -3),
+        (16, -5),
+        (39, -5),
+        (64, -4),
+        (92, -6),
+        (118, -5),
+        (143, -2),
+        (-7, 30),
+        (150, 31),
+        (-7, 73),
+        (150, 70),
+        (9, 93),
+        (38, 94),
+        (72, 93),
+        (107, 92),
+        (139, 92),
+    ] {
+        frame.push(SpriteDraw::new(art.tree, x, y));
+    }
+    for (x, y) in [
+        (15, 44),
+        (52, 22),
+        (102, 26),
+        (124, 50),
+        (42, 70),
+        (93, 83),
+        (136, 91),
+    ] {
+        frame.push(SpriteDraw::new(art.flowers, x, y));
+    }
+    for (x, y) in [(21, 77), (61, 63), (112, 70), (133, 23)] {
+        frame.push(SpriteDraw::new(art.rock, x, y));
     }
 
     for (entity, position) in world.iter::<Position>() {
-        let image = if world.get::<Player>(entity).is_some() {
-            art.player
+        let (image, offset_x, offset_y, layer) = if world.get::<Player>(entity).is_some() {
+            (art.player, 0, -3, 3)
         } else if world.get::<Shard>(entity).is_some() {
-            art.shard
+            (art.shard, 0, -2, 2)
         } else if world.get::<Shrine>(entity).is_some() {
-            if shrine_active {
-                art.shrine_active
-            } else {
-                art.shrine_inactive
-            }
+            // The monument rises behind its interaction tile, keeping both the
+            // lit rune and the player visible when the quest completes.
+            (
+                if shrine_active {
+                    art.shrine_active
+                } else {
+                    art.shrine_inactive
+                },
+                -3,
+                -12,
+                1,
+            )
         } else {
             continue;
         };
         frame.push(
-            SpriteDraw::new(image, position.x * TILE_SIZE, position.y * TILE_SIZE).with_layer(1),
+            SpriteDraw::new(
+                image,
+                position.x * TILE_SIZE + offset_x,
+                position.y * TILE_SIZE + offset_y,
+            )
+            .with_layer(layer),
         );
     }
-
     frame
 }
 
 fn generate_art(assets: &mut ImageAssets) -> Art {
-    let grass = [
-        assets.insert(
-            Image::from_fn(8, 8, |x, y| {
-                if terrain_variation(11, x as i32, y as i32) == 0 {
-                    Color::rgb(49, 111, 62)
+    let meadow = assets.insert(
+        Image::from_fn(
+            (MAP_WIDTH * TILE_SIZE) as u32,
+            (MAP_HEIGHT * TILE_SIZE) as u32,
+            |x, y| {
+                let (x, y) = (x as i32, y as i32);
+                let path = meadow_path(x, y);
+                let noise = (x * 73 + y * 151 + (x * y * 19)).rem_euclid(101);
+                if path {
+                    if !meadow_path(x - 1, y) || !meadow_path(x, y - 1) {
+                        Color::rgb(151, 151, 91)
+                    } else if !meadow_path(x + 1, y) || !meadow_path(x, y + 1) {
+                        Color::rgb(178, 161, 108)
+                    } else if noise < 3 {
+                        Color::rgb(215, 197, 143)
+                    } else {
+                        Color::rgb(194, 175, 120)
+                    }
+                } else if noise < 7 && x % 2 == 0 {
+                    Color::rgb(117, 167, 93)
+                } else if noise > 97 && y % 3 == 0 {
+                    Color::rgb(88, 134, 76)
                 } else {
-                    Color::rgb(43, 98, 55)
+                    Color::rgb(103, 150, 87)
                 }
-            })
-            .unwrap(),
-        ),
-        assets.insert(
-            Image::from_fn(8, 8, |x, y| {
-                if (x + y * 3) % 7 == 0 {
-                    Color::rgb(62, 127, 68)
-                } else {
-                    Color::rgb(47, 105, 58)
-                }
-            })
-            .unwrap(),
-        ),
-    ];
-    let player = assets.insert(
-        Image::from_fn(8, 8, |x, y| match (x, y) {
-            (2..=5, 1) => Color::rgb(63, 38, 52),
-            (2 | 5, 3) => Color::rgb(238, 208, 159),
-            (1..=6, 2..=3) => Color::rgb(91, 51, 63),
-            (2..=5, 4..=5) => Color::rgb(53, 91, 154),
-            (2 | 5, 6..=7) => Color::rgb(31, 42, 58),
-            _ => Color::TRANSPARENT,
-        })
+            },
+        )
         .unwrap(),
     );
-    let shard = assets.insert(
-        Image::from_fn(8, 8, |x, y| {
-            let distance = x.abs_diff(3) + y.abs_diff(3);
-            match distance {
-                0..=1 => Color::rgb(238, 255, 255),
-                2..=3 => Color::rgb(91, 221, 226),
-                4 if x > 1 && y > 1 => Color::rgb(35, 130, 164),
-                _ => Color::TRANSPARENT,
-            }
-        })
-        .unwrap(),
+    let tree = pixel_art(
+        assets,
+        &[
+            "......dddddd......",
+            "....ddlllllldd....",
+            "...dllhhhhhllld...",
+            "..dllhhhllllllld..",
+            ".dllhhhlllllllldd.",
+            ".dllhhlllllhhllld.",
+            "dlllhlllllhhhlllld",
+            "dlllhllllllhllllld",
+            "dlllllllllllllllld",
+            ".dlllsllllllsllld.",
+            ".dllsssllllsssld..",
+            "..dllsssssssslld..",
+            "...ddllsssllldd...",
+            ".....dddddddd.....",
+            ".......dbd........",
+            ".......dbd........",
+            ".......dbd........",
+            "....ssssssssss....",
+        ],
+        &[
+            ('d', Color::rgb(38, 62, 59)),
+            ('l', Color::rgb(57, 123, 80)),
+            ('h', Color::rgb(142, 188, 101)),
+            ('s', Color::rgb(70, 110, 73)),
+            ('b', Color::rgb(151, 133, 93)),
+        ],
     );
-    let shrine = |active| {
-        Image::from_fn(8, 8, |x, y| match (x, y) {
-            (2..=5, 0..=1) if active => Color::rgb(255, 224, 100),
-            (1..=6, 2) => Color::rgb(94, 76, 89),
-            (2..=5, 3..=6) if active => Color::rgb(103, 224, 190),
-            (2..=5, 3..=6) => Color::rgb(48, 62, 70),
-            (1..=6, 7) => Color::rgb(67, 54, 63),
-            _ => Color::TRANSPARENT,
-        })
-        .unwrap()
+    let flowers = pixel_art(
+        assets,
+        &[".y....", "yyy...", ".hl.y.", ".l.yyy", "....l."],
+        &[
+            ('y', Color::rgb(239, 207, 124)),
+            ('h', Color::rgb(255, 242, 177)),
+            ('l', Color::rgb(57, 123, 80)),
+        ],
+    );
+    let rock = pixel_art(
+        assets,
+        &["..hh..", ".hsss.", ".sssd.", "dddddd"],
+        &[
+            ('h', Color::rgb(181, 186, 145)),
+            ('s', Color::rgb(121, 139, 122)),
+            ('d', Color::rgb(70, 110, 73)),
+        ],
+    );
+    let player = pixel_art(
+        assets,
+        &[
+            "..dddd..", "..dhhhd.", "..dfffd.", "..ffdf..", ".ddccdd.", ".dchccd.", "dcchcccd",
+            ".dcccdd.", "..dddd..", "..d..d..",
+        ],
+        &[
+            ('d', Color::rgb(62, 48, 47)),
+            ('h', Color::rgb(181, 154, 110)),
+            ('f', Color::rgb(237, 207, 145)),
+            ('c', Color::rgb(201, 101, 72)),
+        ],
+    );
+    let shard = pixel_art(
+        assets,
+        &[
+            "...h....", "..dhds..", ".dhggdss", ".dhggds.", "..dgd...", "...d....", "........",
+            "..ssss..",
+        ],
+        &[
+            ('d', Color::rgb(42, 115, 120)),
+            ('h', Color::rgb(232, 255, 255)),
+            ('g', Color::rgb(87, 219, 220)),
+            ('s', Color::rgb(70, 110, 73)),
+        ],
+    );
+    let shrine = |assets: &mut ImageAssets, active| {
+        pixel_art(
+            assets,
+            &[
+                "......hh......",
+                ".....dggd.....",
+                "......dd......",
+                "..............",
+                "..dddddddddd..",
+                "..dhhhhhhmhd..",
+                "...dssssmmd...",
+                "...dsddddsd...",
+                "...dsdggdsd...",
+                "...dsdggdsd...",
+                "...dsddddsd...",
+                "...dmsssssd...",
+                "..dmmssssssd..",
+                ".dhhhhhhhhhhd.",
+                ".dddddddddddd.",
+                "..ssssssssss..",
+            ],
+            &[
+                ('d', Color::rgb(55, 76, 65)),
+                (
+                    'h',
+                    if active {
+                        Color::rgb(229, 214, 143)
+                    } else {
+                        Color::rgb(181, 186, 145)
+                    },
+                ),
+                ('s', Color::rgb(121, 139, 122)),
+                ('m', Color::rgb(57, 123, 80)),
+                (
+                    'g',
+                    if active {
+                        Color::rgb(87, 219, 220)
+                    } else {
+                        Color::rgb(75, 106, 99)
+                    },
+                ),
+            ],
+        )
     };
     Art {
-        grass,
+        meadow,
+        tree,
+        flowers,
+        rock,
         player,
         shard,
-        shrine_inactive: assets.insert(shrine(false)),
-        shrine_active: assets.insert(shrine(true)),
+        shrine_inactive: shrine(assets, false),
+        shrine_active: shrine(assets, true),
     }
 }
 
-fn terrain_variation(seed: u64, x: i32, y: i32) -> u32 {
-    let mut value = seed ^ (x as u64).wrapping_mul(0x9e37_79b9) ^ (y as u64).rotate_left(17);
-    value ^= value >> 30;
-    value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    value ^= value >> 27;
-    (value ^ (value >> 31)) as u32 & 1
+// A continuous, softly stepped trail follows the actual eleven-tick shard route.
+// It is visual guidance only: movement remains legal across the entire map.
+fn meadow_path(x: i32, y: i32) -> bool {
+    ((12..=40).contains(&x) && (15..=25).contains(&y))
+        || ((31..=41).contains(&x) && (20..=48).contains(&y))
+        || ((36..=90).contains(&x) && (39..=49).contains(&y))
+        || ((76..=92).contains(&x) && (28..=49).contains(&y))
+        || ((78..=90).contains(&x) && (26..=51).contains(&y))
+}
+
+fn pixel_art(assets: &mut ImageAssets, rows: &[&str], palette: &[(char, Color)]) -> ImageId {
+    let width = rows[0].len();
+    assert!(rows.iter().all(|row| row.len() == width));
+    assets.insert(
+        Image::from_fn(width as u32, rows.len() as u32, |x, y| {
+            let pixel = rows[y as usize].as_bytes()[x as usize] as char;
+            palette
+                .iter()
+                .find_map(|(key, color)| (*key == pixel).then_some(*color))
+                .unwrap_or(Color::TRANSPARENT)
+        })
+        .unwrap(),
+    )
 }
 
 pub fn recorded_walk() -> InputRecording<Action> {
