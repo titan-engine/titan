@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 
-use crate::{FixedTime, World};
+use crate::{DeferredCommandError, FixedTime, World};
 
 /// Identifies an independently runnable collection of systems.
 pub trait ScheduleLabel: Send + Sync + 'static {}
@@ -46,6 +46,7 @@ pub struct App {
     world: World,
     schedules: HashMap<TypeId, Schedule>,
     startup_complete: bool,
+    deferred_errors: Vec<DeferredCommandError>,
 }
 
 impl Default for App {
@@ -56,6 +57,7 @@ impl Default for App {
             world,
             schedules: HashMap::new(),
             startup_complete: false,
+            deferred_errors: Vec::new(),
         }
     }
 }
@@ -102,6 +104,11 @@ impl App {
         self
     }
 
+    /// Takes failures produced by deferred commands during prior schedules.
+    pub fn take_deferred_errors(&mut self) -> Vec<DeferredCommandError> {
+        std::mem::take(&mut self.deferred_errors)
+    }
+
     /// Runs one customizable schedule.
     ///
     /// Running `Startup` explicitly still obeys its run-once guarantee.
@@ -142,6 +149,7 @@ impl App {
         if let Some(schedule) = self.schedules.get_mut(&label) {
             schedule.run(&mut self.world);
         }
+        self.deferred_errors.extend(self.world.apply_deferred());
     }
 }
 
@@ -227,5 +235,20 @@ mod tests {
         app.add_plugin(MovementPlugin).advance_fixed(2);
 
         assert_eq!(app.world().resource::<Counts>().unwrap().custom, 2);
+    }
+
+    #[test]
+    fn structural_commands_apply_at_schedule_boundaries() {
+        let mut app = App::new();
+        app.add_systems(FixedUpdate, |world| {
+            let mut commands = world.commands();
+            commands.spawn_with(Position(10));
+        });
+
+        app.advance_fixed(1);
+
+        assert_eq!(app.world().entity_count(), 1);
+        assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 10);
+        assert!(app.take_deferred_errors().is_empty());
     }
 }

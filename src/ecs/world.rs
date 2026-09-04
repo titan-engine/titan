@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
+use super::command::{Commands, DeferredCommand, DeferredCommandError};
 use super::entity::Entity;
 use super::storage::{ComponentStorage, ErasedStorage};
 
@@ -39,6 +40,7 @@ pub trait Component: Send + Sync + 'static {
 struct EntitySlot {
     generation: u32,
     alive: bool,
+    reserved: bool,
 }
 
 /// The error returned when a component is inserted using a stale entity handle.
@@ -75,6 +77,7 @@ pub struct World {
     live_entity_count: usize,
     components: HashMap<TypeId, Box<dyn ErasedStorage>>,
     resources: HashMap<TypeId, Box<dyn std::any::Any + Send + Sync>>,
+    deferred: Vec<Box<dyn DeferredCommand>>,
 }
 
 impl World {
@@ -85,21 +88,66 @@ impl World {
 
     /// Allocates a new entity without components.
     pub fn spawn(&mut self) -> Entity {
+        self.allocate_entity(false)
+    }
+
+    /// Returns a command writer that queues structural changes.
+    pub fn commands(&mut self) -> Commands<'_> {
+        Commands { world: self }
+    }
+
+    /// Applies all queued structural changes in insertion order.
+    ///
+    /// Commands queued while this batch is being applied are deferred until the
+    /// next call. All commands are attempted, and failures are returned in
+    /// their deterministic application order.
+    pub fn apply_deferred(&mut self) -> Vec<DeferredCommandError> {
+        let commands = std::mem::take(&mut self.deferred);
+        commands
+            .into_iter()
+            .filter_map(|command| command.apply(self).err())
+            .collect()
+    }
+
+    pub(crate) fn reserve_entity(&mut self) -> Entity {
+        self.allocate_entity(true)
+    }
+
+    fn allocate_entity(&mut self, reserved: bool) -> Entity {
         if let Some(index) = self.free_entities.pop() {
             let slot = &mut self.entities[index as usize];
-            debug_assert!(!slot.alive);
-            slot.alive = true;
-            self.live_entity_count += 1;
+            debug_assert!(!slot.alive && !slot.reserved);
+            slot.alive = !reserved;
+            slot.reserved = reserved;
+            self.live_entity_count += usize::from(!reserved);
             return Entity::new(index, slot.generation);
         }
 
         let index = u32::try_from(self.entities.len()).expect("entity capacity exceeded");
         self.entities.push(EntitySlot {
             generation: 0,
-            alive: true,
+            alive: !reserved,
+            reserved,
         });
-        self.live_entity_count += 1;
+        self.live_entity_count += usize::from(!reserved);
         Entity::new(index, 0)
+    }
+
+    pub(crate) fn activate_reserved(&mut self, entity: Entity) -> bool {
+        let Some(slot) = self.entities.get_mut(entity.index() as usize) else {
+            return false;
+        };
+        if slot.generation != entity.generation() || !slot.reserved || slot.alive {
+            return false;
+        }
+        slot.reserved = false;
+        slot.alive = true;
+        self.live_entity_count += 1;
+        true
+    }
+
+    pub(crate) fn push_command(&mut self, command: impl DeferredCommand + 'static) {
+        self.deferred.push(Box::new(command));
     }
 
     /// Despawns an entity and removes all of its components.
@@ -116,6 +164,7 @@ impl World {
 
         let slot = &mut self.entities[entity.index() as usize];
         slot.alive = false;
+        slot.reserved = false;
         self.live_entity_count -= 1;
 
         if let Some(next_generation) = slot.generation.checked_add(1) {
@@ -318,5 +367,39 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![10, 11, 12]
         );
+    }
+
+    #[test]
+    fn deferred_commands_are_invisible_until_applied() {
+        let mut world = World::new();
+        let entity = {
+            let mut commands = world.commands();
+            commands.spawn_with(Health(100))
+        };
+
+        assert!(!world.is_alive(entity));
+        assert_eq!(world.get::<Health>(entity), None);
+        assert!(world.apply_deferred().is_empty());
+        assert!(world.is_alive(entity));
+        assert_eq!(world.get::<Health>(entity), Some(&Health(100)));
+    }
+
+    #[test]
+    fn deferred_failures_are_structured_and_do_not_stop_later_commands() {
+        let mut world = World::new();
+        let stale = world.spawn();
+        world.despawn(stale);
+        let valid = {
+            let mut commands = world.commands();
+            commands.insert(stale, Health(1));
+            commands.spawn_with(Health(2))
+        };
+
+        let errors = world.apply_deferred();
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].entity(), stale);
+        assert_eq!(errors[0].operation(), crate::ecs::DeferredOperation::Insert);
+        assert_eq!(world.get::<Health>(valid), Some(&Health(2)));
     }
 }

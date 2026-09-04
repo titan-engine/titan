@@ -10,6 +10,9 @@ pub mod ecs;
 pub mod time;
 
 pub use app::{App, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
-pub use ecs::{Component, ComponentMetadata, Entity, InsertError, World};
+pub use ecs::{
+    Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation, Entity,
+    InsertError, World,
+};
 pub use time::FixedTime;
 pub use titan_macros::Component;
