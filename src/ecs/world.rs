@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
+use super::bundle::Bundle;
 use super::command::{Commands, DeferredCommand, DeferredCommandError};
 use super::entity::Entity;
 use super::storage::{ComponentStorage, ErasedStorage};
@@ -105,6 +106,30 @@ impl World {
     /// Allocates a new entity without components.
     pub fn spawn(&mut self) -> Entity {
         self.allocator.allocate_entity(false)
+    }
+
+    /// Allocates an entity and inserts its initial components in tuple order.
+    pub fn spawn_with<B: Bundle>(&mut self, bundle: B) -> Entity {
+        let entity = self.spawn();
+        self.insert_bundle(entity, bundle)
+            .expect("a newly spawned entity must be alive");
+        entity
+    }
+
+    /// Inserts or replaces all components in a bundle.
+    ///
+    /// Stale or reserved handles are rejected before any components are
+    /// inserted, including for an empty bundle. Repeated component types are
+    /// applied in tuple order; the final value wins. Replaced values are dropped.
+    pub fn insert_bundle<B: Bundle>(
+        &mut self,
+        entity: Entity,
+        bundle: B,
+    ) -> Result<(), InsertError> {
+        if !self.is_alive(entity) {
+            return Err(InsertError { entity });
+        }
+        bundle.insert_into(self, entity)
     }
 
     /// Returns a command writer that queues structural changes.

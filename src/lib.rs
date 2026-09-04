@@ -15,8 +15,8 @@ pub mod time;
 
 pub use app::{App, AppError, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
 pub use ecs::{
-    Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation, Entity,
-    FindNameError, InsertError, Name, QueryAccessError, World,
+    Bundle, Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation,
+    Entity, FindNameError, InsertError, Name, QueryAccessError, World,
 };
 pub use time::FixedTime;
 pub use titan_macros::Component;

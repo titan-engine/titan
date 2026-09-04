@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Component, Entity, World};
+use super::{Bundle, Component, Entity, World};
 
 /// The kind of structural operation that failed during deferred application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +82,19 @@ impl<T: Component> DeferredCommand for Insert<T> {
     }
 }
 
+struct InsertBundle<B> {
+    entity: Entity,
+    bundle: B,
+}
+
+impl<B: Bundle> DeferredCommand for InsertBundle<B> {
+    fn apply(self: Box<Self>, world: &mut World) -> Result<(), DeferredCommandError> {
+        world
+            .insert_bundle(self.entity, self.bundle)
+            .map_err(|_| DeferredCommandError::new(self.entity, DeferredOperation::Insert))
+    }
+}
+
 struct Despawn {
     entity: Entity,
 }
@@ -113,16 +126,26 @@ impl Commands<'_> {
         entity
     }
 
-    /// Reserves an entity and queues one initial component.
-    pub fn spawn_with<T: Component>(&mut self, component: T) -> Entity {
+    /// Reserves an entity and queues its initial component bundle.
+    pub fn spawn_with<B: Bundle>(&mut self, bundle: B) -> Entity {
         let entity = self.spawn();
-        self.insert(entity, component);
+        self.insert_bundle(entity, bundle);
         entity
     }
 
     /// Queues insertion or replacement of a component.
     pub fn insert<T: Component>(&mut self, entity: Entity, component: T) -> &mut Self {
         self.deferred.push(Box::new(Insert { entity, component }));
+        self
+    }
+
+    /// Queues a bundle as one insertion operation.
+    ///
+    /// Components are inserted in tuple order at the synchronization point.
+    /// An invalid entity produces one error without inserting any components.
+    pub fn insert_bundle<B: Bundle>(&mut self, entity: Entity, bundle: B) -> &mut Self {
+        self.deferred
+            .push(Box::new(InsertBundle { entity, bundle }));
         self
     }
 

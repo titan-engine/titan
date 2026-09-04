@@ -45,6 +45,45 @@ the failed tick and reports its observed frame; the Inspector returns structured
 Deferred failures remain available through `take_deferred_errors`, while
 `take_system_errors` drains only typed-system failures.
 
+## Bundles
+
+Use `World::spawn_with` or `Commands::spawn_with` to create an entity with a
+component bundle. A bundle is a component, the empty tuple `()`, or a tuple of
+up to twelve bundles; nested tuples let helper functions compose entity parts.
+
+```rust
+use titan::{Bundle, Commands, Component, World};
+
+#[derive(Component)]
+struct Position(i32);
+#[derive(Component)]
+struct Health(u32);
+
+fn character() -> impl Bundle {
+    (Position(0), Health(100))
+}
+
+let mut world = World::new();
+let entity = world.spawn_with(character());
+world.insert_bundle(entity, (Position(10), Health(80))).unwrap();
+
+fn reinforcements(mut commands: Commands) {
+    let entity = commands.spawn_with(character());
+    commands.insert_bundle(entity, (Position(20),));
+}
+```
+
+`insert_bundle` replaces components in left-to-right tuple order, discarding
+replaced values. If a type repeats, the final value wins. Other components on
+the entity remain unchanged. Immediate insertion checks entity liveness before
+writing any components, including for an empty bundle. A deferred bundle is one
+insertion command: an invalid handle produces one `DeferredOperation::Insert`
+error and no component writes; later commands still run. Reserved entities and
+their bundles become visible only when commands are applied.
+
+`Bundle` is sealed. Reusable constructors should return tuples or `impl Bundle`;
+a custom bundle derive is not required.
+
 ## Migration
 
 Exclusive functions continue working. Exclusive closures now require an explicit
@@ -61,4 +100,9 @@ app.add_systems(FixedUpdate, |world: &mut World| {
 
 `try_advance_fixed` and `apply_deferred` now return `Vec<AppError>` on failure;
 match `AppError::Deferred` for the previous deferred-command error payload.
-Bundles and iterator-based mutable joins remain future additions.
+Existing `spawn()`, `insert(entity, component)`, and
+`Commands::spawn_with(component)` calls continue working. Replace repeated
+insertions with `spawn_with((first, second))` or
+`insert_bundle(entity, (first, second))` when previous component values are not
+needed. A one-element tuple requires a trailing comma: `(component,)`.
+Iterator-based mutable joins remain a future addition.
