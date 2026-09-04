@@ -86,8 +86,10 @@ discover it and complete the vertical control loop using the `titan` CLI.
 
 ## Phase 3: browser inspection bridge
 
-Current task: reuse the same RPG and inspection handler in a browser WASM
-bridge with explicit control opt-in and a minimal capability-driven inspector.
+Completed: the shared RPG runs through the WASM protocol adapter with explicit
+control opt-in, PNG capture, and a capability-driven browser inspector. The
+actual WASM control loop and same-origin bridge checks run in CI; the browser
+UI has also been exercised through the reference route.
 
 - Expose the same typed protocol handler through a WASM/in-page message bridge.
 - Build a minimal browser inspector that discovers capabilities rather than
@@ -100,6 +102,9 @@ Completion signal: the protocol-level acceptance sequence works against a WASM
 game without changing its request or response model.
 
 ## Phase 4: interactive rendering
+
+Current task: add immutable extracted snapshots, a real GPU sprite pipeline,
+and native/browser interactive runners around the shared game.
 
 - Add an immutable, deterministic render-extraction boundary after fixed ticks.
 - Implement a `wgpu` 2D backend consuming the same frames and CPU image assets
@@ -167,7 +172,7 @@ Every increment should leave the following green:
 cargo fmt --all --check
 cargo test --workspace --all-targets
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check -p titan -p titan-protocol --target wasm32-unknown-unknown
+cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 ```
 
 Examples are tested against the current engine revision. Breaking APIs and
