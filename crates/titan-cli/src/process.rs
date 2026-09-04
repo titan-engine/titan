@@ -10,6 +10,7 @@ const OUTPUT_LIMIT: usize = 1024 * 1024;
 
 pub struct Output {
     pub success: bool,
+    pub timed_out: bool,
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
@@ -102,6 +103,7 @@ pub fn run(command: &mut Command, timeout: Duration) -> io::Result<Output> {
     }
     Ok(Output {
         success: status.success() && !timed_out,
+        timed_out,
         exit_code: status.code(),
         stdout: text(&stdout),
         stderr,

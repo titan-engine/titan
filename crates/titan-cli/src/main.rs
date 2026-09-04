@@ -117,6 +117,9 @@ struct CommandResult {
     diagnostic_bundle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostic_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_code: Option<&'static str>,
+    elapsed_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -162,7 +165,7 @@ fn main() -> ExitCode {
             &cli.project,
             Duration::from_millis(cli.process_timeout_ms),
         );
-        let mut summary = serde_json::json!({"command": result.command, "success": result.success, "exit_code": result.exit_code});
+        let mut summary = serde_json::json!({"command": result.command, "success": result.success, "exit_code": result.exit_code, "error_code": result.error_code, "elapsed_ms": result.elapsed_ms, "stdout": result.stdout, "stderr": result.stderr});
         capture_diagnostic(&cli, &mut summary, result.success);
         result.diagnostic_bundle = summary["diagnostic_bundle"].as_str().map(str::to_owned);
         result.diagnostic_error = summary["diagnostic_error"].as_str().map(str::to_owned);
@@ -249,16 +252,16 @@ fn request_for(command: &CliCommand) -> Result<Request, LocalError> {
 }
 
 fn execute_remote(cli: &Cli) -> Result<(serde_json::Value, bool), LocalError> {
-    if let CliCommand::Step { frames } = cli.command {
-        if frames > cli.max_frames {
-            return Err((
-                "budget_exceeded".into(),
-                format!(
-                    "step requests {frames} frames, exceeding --max-frames {}",
-                    cli.max_frames
-                ),
-            ));
-        }
+    if let CliCommand::Step { frames } = cli.command
+        && frames > cli.max_frames
+    {
+        return Err((
+            "budget_exceeded".into(),
+            format!(
+                "step requests {frames} frames, exceeding --max-frames {}",
+                cli.max_frames
+            ),
+        ));
     }
     // Parse payloads before discovery so invalid input has a useful local error.
     let request = if matches!(cli.command, CliCommand::Instances) {
@@ -334,6 +337,8 @@ fn execute(command: &CliCommand, project: &Path, timeout: Duration) -> CommandRe
             stderr: String::new(),
             diagnostic_bundle: None,
             diagnostic_error: None,
+            error_code: None,
+            elapsed_ms: 0,
             data: Some(CommandData::Info {
                 cli_version: env!("CARGO_PKG_VERSION"),
                 protocol_schema: SCHEMA_VERSION,
@@ -369,19 +374,28 @@ fn run_cargo(
 ) -> CommandResult {
     let mut command = Command::new(cargo_program());
     command.args(arguments).current_dir(project);
+    let started = std::time::Instant::now();
     let output = process::run(&mut command, timeout);
-    let (success, exit_code, stdout, stderr) = match output {
+    let (success, exit_code, stdout, stderr, error_code) = match output {
         Ok(output) => (
             output.success,
             output.exit_code,
             output.stdout,
             output.stderr,
+            if output.timed_out {
+                Some("timeout")
+            } else if !output.success {
+                Some("process_failed")
+            } else {
+                None
+            },
         ),
         Err(error) => (
             false,
             None,
             String::new(),
             format!("failed to execute Cargo: {error}"),
+            Some("spawn_failed"),
         ),
     };
     CommandResult {
@@ -392,6 +406,8 @@ fn run_cargo(
         stderr,
         diagnostic_bundle: None,
         diagnostic_error: None,
+        error_code,
+        elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         data: Some(CommandData::Process {
             program: cargo_program(),
             arguments: arguments
@@ -405,7 +421,7 @@ fn run_cargo(
 mod process;
 
 /// Persist an allowlisted summary: never transport registration/authentication,
-/// request arguments, environment variables, or arbitrary child output.
+/// request arguments or environment variables. Child logs are bounded by process::run.
 fn capture_diagnostic(cli: &Cli, result: &mut serde_json::Value, success: bool) {
     if matches!(cli.diagnostics, CapturePolicy::Never)
         || (success && matches!(cli.diagnostics, CapturePolicy::OnFailure))
@@ -415,11 +431,37 @@ fn capture_diagnostic(cli: &Cli, result: &mut serde_json::Value, success: bool) 
     }
     let summary = serde_json::json!({
         "success": success,
-        "error_code": result.pointer("/error/code"),
+        "error": result.get("error"),
+        "error_code": result.pointer("/error/code").or_else(|| result.get("error_code")),
         "command": result.get("command"),
         "exit_code": result.get("exit_code"),
     });
-    let mut bundle = titan_diagnostics::DiagnosticBundle::local_failure(summary);
+    let mut bundle = titan_diagnostics::DiagnosticBundle::local_failure(summary.clone());
+    if let Ok(response) = serde_json::from_value::<titan_protocol::ResponseEnvelope>(result.clone())
+    {
+        bundle.response = Some(response);
+        bundle.local_error = None;
+    } else if success {
+        bundle.local_error = None;
+    }
+    bundle.context.insert("result".into(), summary);
+    if let Some(elapsed) = result["elapsed_ms"].as_u64() {
+        bundle
+            .timings_us
+            .insert("process".into(), elapsed.saturating_mul(1000));
+    }
+    for stream in ["stdout", "stderr"] {
+        if let Some(message) = result[stream]
+            .as_str()
+            .filter(|message| !message.is_empty())
+        {
+            bundle.logs.push(titan_diagnostics::DiagnosticLog {
+                level: stream.into(),
+                message: message.into(),
+                frame: None,
+            });
+        }
+    }
     bundle.context.insert("source".into(), "titan-cli".into());
     let root = cli.project.join("target/titan/diagnostics");
     match titan_diagnostics::write_bundle(&root, &bundle, None) {
@@ -457,6 +499,13 @@ fn render(format: OutputFormat, result: &CommandResult) {
 }
 
 fn render_human(result: &CommandResult) {
+    if let Some(path) = &result.diagnostic_bundle {
+        eprintln!("Diagnostics: {path}");
+    }
+    if let Some(error) = &result.diagnostic_error {
+        eprintln!("Diagnostic capture failed: {error}");
+    }
+
     if let Some(CommandData::Info {
         cli_version,
         protocol_schema,
@@ -467,12 +516,6 @@ fn render_human(result: &CommandResult) {
         return;
     }
 
-    if let Some(path) = &result.diagnostic_bundle {
-        eprintln!("Diagnostics: {path}");
-    }
-    if let Some(error) = &result.diagnostic_error {
-        eprintln!("Diagnostic capture failed: {error}");
-    }
     print!("{}", result.stdout);
     eprint!("{}", result.stderr);
     if result.success {
@@ -582,6 +625,51 @@ mod tests {
         assert_eq!(public["instance_id"], "one");
         assert!(public.get("token").is_none());
         assert!(!public.to_string().contains("super-secret"));
+    }
+
+    #[test]
+    fn fallback_bundle_preserves_protocol_response_evidence() {
+        let project =
+            std::env::temp_dir().join(format!("titan-cli-response-{}", std::process::id()));
+        let cli = Cli::try_parse_from(["titan", "--project", project.to_str().unwrap(), "status"])
+            .unwrap();
+        let mut result = serde_json::json!({
+            "schema_version": 1, "request_id": "test", "instance_id": "one",
+            "observed_frame": 42, "state_revision": 9, "status": "failure",
+            "error": {"code": "invalid_value", "message": "specific failure reason", "details": {"key": "value"}, "retryable": false}
+        });
+        let response = result.clone();
+        super::capture_diagnostic(&cli, &mut result, false);
+        let manifest = result["error"]["details"]["diagnostic_bundle"]
+            .as_str()
+            .unwrap();
+        let bundle: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+        assert_eq!(bundle["response"], response);
+        assert!(bundle["local_error"].is_null());
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn runtime_bundle_is_preserved_without_local_duplicate() {
+        let project =
+            std::env::temp_dir().join(format!("titan-cli-preserve-{}", std::process::id()));
+        let cli = Cli::try_parse_from([
+            "titan",
+            "--project",
+            project.to_str().unwrap(),
+            "status",
+            "--diagnostics",
+            "always",
+        ])
+        .unwrap();
+        let mut result = serde_json::json!({"status": "failure", "error": {"details": {"diagnostic_bundle": "/runtime/bundle.json"}}});
+        super::capture_diagnostic(&cli, &mut result, false);
+        assert_eq!(
+            result["error"]["details"]["diagnostic_bundle"],
+            "/runtime/bundle.json"
+        );
+        assert!(!project.exists());
     }
 
     #[test]
