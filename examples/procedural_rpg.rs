@@ -1,11 +1,18 @@
+use std::collections::BTreeMap;
 use std::fs;
+
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use titan::inspection::{InspectionConfig, Inspector};
+use titan_protocol::{
+    CaptureResult, CommandMetadata, ErrorCode, FieldMetadata, InputValue, ProtocolError,
+};
 
 use titan::input::{ActionValue, InputFrame, InputRecording, InputTracker, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
-use titan::{App, Component, FixedUpdate, Startup, World};
+use titan::{App, Component, FixedTime, FixedUpdate, Name, Startup, World};
 
 const TILE_SIZE: i32 = 8;
 const MAP_WIDTH: i32 = 20;
@@ -25,6 +32,22 @@ struct Shard;
 
 #[derive(Component)]
 struct Shrine;
+
+#[derive(Component)]
+struct ActiveShrine;
+
+#[derive(Default)]
+struct ScheduledInput {
+    frames: BTreeMap<u64, Vec<(Action, ActionValue)>>,
+    tracker: InputTracker<Action>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpawnShardArgs {
+    x: i32,
+    y: i32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Action {
@@ -64,7 +87,15 @@ fn main() {
     let assets = app.world().resource::<ImageAssets>().unwrap();
     let image = SoftwareRenderer::render(frame, assets).unwrap();
     let output_path = PathBuf::from("target/titan/procedural-rpg.ppm");
-    write_ppm(&output_path, &image);
+    let mut inspector = build_inspector(output_path.clone());
+    let capture = inspector.handle(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new("capture", titan_protocol::Request::Capture),
+    );
+    if let titan_protocol::ResponseOutcome::Failure { error } = capture.outcome {
+        eprintln!("capture failed: {}", error.message);
+        std::process::exit(1);
+    }
 
     let quest = app.world().resource::<QuestState>().unwrap();
     println!(
@@ -82,10 +113,140 @@ fn build_game() -> App {
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(QuestState::default());
     app.add_systems(Startup, setup);
+    app.add_systems(FixedUpdate, apply_scheduled_input);
     app.add_systems(FixedUpdate, move_player);
     app.add_systems(FixedUpdate, collect_shards);
     app.add_systems(FixedUpdate, extract_frame);
     app
+}
+
+// Registration is independent of transport: callers execute requests between ticks.
+fn build_inspector(output_path: PathBuf) -> Inspector {
+    let mut inspector = Inspector::new(InspectionConfig::controlled(
+        "procedural-rpg",
+        "procedural-rpg",
+    ));
+    inspector
+        .register_command(
+            CommandMetadata {
+                name: "spawn_shard".into(),
+                description: "Spawn a collectible shard at a map tile.".into(),
+                arguments: [("x", MAP_WIDTH), ("y", MAP_HEIGHT)]
+                    .into_iter()
+                    .map(|(name, limit)| {
+                        (
+                            name.into(),
+                            FieldMetadata {
+                                type_name: "i32".into(),
+                                description: "Map tile coordinate".into(),
+                                writable: true,
+                                minimum: Some(0.0),
+                                maximum: Some(f64::from(limit - 1)),
+                                unit: Some("tile".into()),
+                            },
+                        )
+                    })
+                    .collect(),
+            },
+            |app, args: SpawnShardArgs| {
+                if !(0..MAP_WIDTH).contains(&args.x) || !(0..MAP_HEIGHT).contains(&args.y) {
+                    return Err(ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "shard coordinates are outside the map",
+                    ));
+                }
+                app.update_schedule(Startup);
+                spawn_at(
+                    app.world_mut(),
+                    Position {
+                        x: args.x,
+                        y: args.y,
+                    },
+                    Shard,
+                    "spawned-shard",
+                );
+                Ok(())
+            },
+        )
+        .expect("unique command name");
+    inspector.register_input_handler(|app, frame, actions| {
+        if frame <= app.world().resource::<FixedTime>().unwrap().tick() {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "input frame must be in the future",
+            ));
+        }
+        let values = actions
+            .iter()
+            .map(|(name, value)| {
+                let action = match name.as_str() {
+                    "up" => Action::Up,
+                    "down" => Action::Down,
+                    "left" => Action::Left,
+                    "right" => Action::Right,
+                    _ => {
+                        return Err(ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            format!("unknown action: {name}"),
+                        ));
+                    }
+                };
+                let value = match value {
+                    InputValue::Button(true) => ActionValue::PRESSED,
+                    InputValue::Button(false) => ActionValue::RELEASED,
+                    InputValue::Axis(_) => {
+                        return Err(ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            "movement actions require button values",
+                        ));
+                    }
+                };
+                Ok((action, value))
+            })
+            .collect::<Result<Vec<_>, ProtocolError>>()?;
+        if app.world().resource::<ScheduledInput>().is_none() {
+            app.world_mut().insert_resource(ScheduledInput::default());
+        }
+        app.world_mut()
+            .resource_mut::<ScheduledInput>()
+            .unwrap()
+            .frames
+            .insert(frame, values);
+        Ok(())
+    });
+    inspector.register_capture_handler(move |app| {
+        let assets = app.world().resource::<ImageAssets>().ok_or_else(|| {
+            ProtocolError::new(ErrorCode::Busy, "run startup with step before capturing")
+        })?;
+        let image =
+            SoftwareRenderer::render(&render_frame(app.world()), assets).map_err(|error| {
+                ProtocolError::new(ErrorCode::Internal, format!("render failed: {error:?}"))
+            })?;
+        write_ppm(&output_path, &image).map_err(|error| {
+            ProtocolError::new(
+                ErrorCode::Internal,
+                format!("capture write failed: {error}"),
+            )
+        })?;
+        Ok(CaptureResult {
+            width: image.width(),
+            height: image.height(),
+            format: "ppm".into(),
+            artifact: output_path.to_string_lossy().into_owned(),
+            checksum: format!("{:016x}", image_checksum(&image)),
+        })
+    });
+    inspector
+}
+
+fn apply_scheduled_input(world: &mut World) {
+    let frame = world.resource::<FixedTime>().unwrap().tick() + 1;
+    if let Some(scheduled) = world.resource_mut::<ScheduledInput>() {
+        // Each submitted map is a complete snapshot for one completed frame.
+        let values = scheduled.frames.remove(&frame).unwrap_or_default();
+        let input = scheduled.tracker.sample(values);
+        world.insert_resource(input);
+    }
 }
 
 fn setup(world: &mut World) {
@@ -94,17 +255,18 @@ fn setup(world: &mut World) {
     world.insert_resource(assets);
     world.insert_resource(art);
 
-    spawn_at(world, Position { x: 2, y: 2 }, Player);
-    spawn_at(world, Position { x: 4, y: 2 }, Shard);
-    spawn_at(world, Position { x: 4, y: 5 }, Shard);
-    spawn_at(world, Position { x: 8, y: 5 }, Shard);
-    spawn_at(world, Position { x: 10, y: 5 }, Shrine);
+    spawn_at(world, Position { x: 2, y: 2 }, Player, "player");
+    spawn_at(world, Position { x: 4, y: 2 }, Shard, "shard-1");
+    spawn_at(world, Position { x: 4, y: 5 }, Shard, "shard-2");
+    spawn_at(world, Position { x: 8, y: 5 }, Shard, "shard-3");
+    spawn_at(world, Position { x: 10, y: 5 }, Shrine, "shrine");
 }
 
-fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T) {
+fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T, name: &str) {
     let entity = world.spawn();
     world.insert(entity, position).unwrap();
     world.insert(entity, marker).unwrap();
+    world.insert(entity, Name::new(name)).unwrap();
 }
 
 fn move_player(world: &mut World) {
@@ -142,7 +304,11 @@ fn collect_shards(world: &mut World) {
 
     let state = world.resource_mut::<QuestState>().unwrap();
     state.collected_shards += collected.len();
-    state.shrine_active = state.collected_shards == 3;
+    state.shrine_active = state.collected_shards >= 3;
+    if state.shrine_active {
+        let shrine = world.iter::<Shrine>().next().unwrap().0;
+        world.insert(shrine, ActiveShrine).unwrap();
+    }
     let mut commands = world.commands();
     for shard in collected {
         commands.despawn(shard);
@@ -150,6 +316,10 @@ fn collect_shards(world: &mut World) {
 }
 
 fn extract_frame(world: &mut World) {
+    world.insert_resource(ExtractedFrame(render_frame(world)));
+}
+
+fn render_frame(world: &World) -> RenderFrame {
     let art = *world.resource::<Art>().unwrap();
     let shrine_active = world.resource::<QuestState>().unwrap().shrine_active;
     let mut frame = RenderFrame::new(
@@ -188,7 +358,7 @@ fn extract_frame(world: &mut World) {
         );
     }
 
-    world.insert_resource(ExtractedFrame(frame));
+    frame
 }
 
 fn generate_art(assets: &mut ImageAssets) -> Art {
@@ -289,7 +459,7 @@ fn replay(app: &mut App, recording: &InputRecording<Action>) {
     }
 }
 
-fn write_ppm(path: &Path, image: &Image) {
+fn write_ppm(path: &Path, image: &Image) -> std::io::Result<()> {
     let mut bytes = format!("P6\n{} {}\n255\n", image.width(), image.height()).into_bytes();
     let (pixels, remainder) = image.pixels().as_chunks::<4>();
     debug_assert!(remainder.is_empty());
@@ -297,9 +467,9 @@ fn write_ppm(path: &Path, image: &Image) {
         bytes.extend_from_slice(&pixel[..3]);
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).unwrap();
+        fs::create_dir_all(parent)?;
     }
-    fs::write(path, bytes).unwrap();
+    fs::write(path, bytes)
 }
 
 fn image_checksum(image: &Image) -> u64 {
@@ -331,5 +501,240 @@ mod tests {
         let image = SoftwareRenderer::render(frame, app.world().resource::<ImageAssets>().unwrap())
             .unwrap();
         assert_eq!(image_checksum(&image), 0x9861_8cd7_21c5_b52d);
+    }
+
+    fn request(
+        app: &mut titan::App,
+        inspector: &mut titan::inspection::Inspector,
+        request: titan_protocol::Request,
+    ) -> titan_protocol::ResponseEnvelope {
+        inspector.handle(
+            app,
+            &titan_protocol::RequestEnvelope::new("acceptance", request),
+        )
+    }
+
+    fn success(response: titan_protocol::ResponseEnvelope) -> titan_protocol::Response {
+        match response.outcome {
+            titan_protocol::ResponseOutcome::Success { response } => response,
+            other => panic!("expected success: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn protocol_drives_inspection_replay_command_and_reference_capture() {
+        use titan_protocol::{EntityQuery, InputValue, PageRequest, Request, Response};
+        let path =
+            std::env::temp_dir().join(format!("titan-rpg-{}-reference.ppm", std::process::id()));
+        let mut app = build_game();
+        let mut inspector = super::build_inspector(path.clone());
+        let Response::Capabilities(capabilities) =
+            success(request(&mut app, &mut inspector, Request::Capabilities))
+        else {
+            panic!("expected capabilities");
+        };
+        for operation in [
+            titan_protocol::Operation::Invoke,
+            titan_protocol::Operation::InjectInput,
+            titan_protocol::Operation::Capture,
+        ] {
+            assert!(capabilities.operations.contains(&operation));
+        }
+
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::Step { frames: 0 },
+        ));
+        let Response::Entities(page) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entities {
+                query: EntityQuery::default(),
+                page: PageRequest::default(),
+            },
+        )) else {
+            panic!("expected entities")
+        };
+        assert_eq!(page.entities.len(), 5);
+        assert!(
+            page.entities
+                .iter()
+                .any(|entity| entity.name.as_deref() == Some("player"))
+        );
+        let shrine = page
+            .entities
+            .iter()
+            .find(|entity| entity.name.as_deref() == Some("shrine"))
+            .unwrap()
+            .id;
+        let mut frame = 0;
+        for (action, ticks) in [("right", 2), ("down", 3), ("right", 6)] {
+            for _ in 0..ticks {
+                frame += 1;
+                let response = request(
+                    &mut app,
+                    &mut inspector,
+                    Request::InjectInput {
+                        frame,
+                        actions: [(action.into(), InputValue::Button(true))].into(),
+                    },
+                );
+                assert_eq!(response.observed_frame, 0);
+                assert_eq!(
+                    success(response),
+                    Response::Applied {
+                        applied_frame: frame
+                    }
+                );
+            }
+        }
+        let response = request(&mut app, &mut inspector, Request::Step { frames: 11 });
+        assert_eq!(response.observed_frame, 11);
+        success(response);
+        let Response::Entity(details) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entity { entity: shrine },
+        )) else {
+            panic!("expected shrine")
+        };
+        assert!(
+            details
+                .components
+                .keys()
+                .any(|name| name.ends_with("::ActiveShrine"))
+        );
+        let Response::Entities(page) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entities {
+                query: EntityQuery::default(),
+                page: PageRequest::default(),
+            },
+        )) else {
+            panic!("expected entities")
+        };
+        assert_eq!(page.entities.len(), 2);
+        let Response::Capture(capture) =
+            success(request(&mut app, &mut inspector, Request::Capture))
+        else {
+            panic!("expected capture")
+        };
+        assert_eq!((capture.width, capture.height), (160, 112));
+        assert_eq!(capture.checksum, "98618cd721c5b52d");
+        assert_eq!(capture.artifact, path.to_string_lossy());
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"P6\n160 112\n255\n"));
+        assert_eq!(bytes.len(), b"P6\n160 112\n255\n".len() + 160 * 112 * 3);
+        let Response::Commands { commands } =
+            success(request(&mut app, &mut inspector, Request::Commands))
+        else {
+            panic!("expected commands")
+        };
+        assert_eq!(commands[0].name, "spawn_shard");
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::Invoke {
+                name: "spawn_shard".into(),
+                arguments: [("x".into(), 0.into()), ("y".into(), 0.into())].into(),
+            },
+        ));
+        let Response::Capture(changed) =
+            success(request(&mut app, &mut inspector, Request::Capture))
+        else {
+            panic!("expected capture")
+        };
+        assert_ne!(
+            changed.checksum, capture.checksum,
+            "capture must reflect commands without an extra tick"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn rejected_requests_leave_state_unchanged_and_capture_io_is_structured() {
+        use titan_protocol::{ErrorCode, InputValue, Request, ResponseOutcome};
+        let path =
+            std::env::temp_dir().join(format!("titan-rpg-{}-capture-blocker", std::process::id()));
+        std::fs::write(&path, b"file blocks capture directory").unwrap();
+        let mut app = build_game();
+        let mut inspector = super::build_inspector(path.join("capture.ppm"));
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::Step { frames: 0 },
+        ));
+        for invalid in [
+            Request::Invoke {
+                name: "spawn_shard".into(),
+                arguments: [("x".into(), (-1).into()), ("y".into(), 0.into())].into(),
+            },
+            Request::Invoke {
+                name: "spawn_shard".into(),
+                arguments: [("x".into(), "bad".into()), ("y".into(), 0.into())].into(),
+            },
+            Request::InjectInput {
+                frame: 0,
+                actions: Default::default(),
+            },
+            Request::InjectInput {
+                frame: 1,
+                actions: [("fly".into(), InputValue::Button(true))].into(),
+            },
+            Request::InjectInput {
+                frame: 1,
+                actions: [("right".into(), InputValue::Axis(10))].into(),
+            },
+        ] {
+            let response = request(&mut app, &mut inspector, invalid);
+            assert_eq!(response.state_revision, 1);
+            assert!(
+                matches!(response.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
+            );
+        }
+        assert_eq!(app.world().entities().count(), 5);
+        assert!(app.world().resource::<super::ScheduledInput>().is_none());
+        let response = request(&mut app, &mut inspector, Request::Capture);
+        assert_eq!(response.state_revision, 1);
+        assert!(
+            matches!(response.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::Internal)
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn scheduled_input_applies_once_at_its_requested_frame() {
+        use titan_protocol::{InputValue, Request};
+        let mut app = build_game();
+        let mut inspector = super::build_inspector("unused.ppm".into());
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::InjectInput {
+                frame: 2,
+                actions: [("right".into(), InputValue::Button(true))].into(),
+            },
+        ));
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::Step { frames: 1 },
+        ));
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 2);
+        success(request(
+            &mut app,
+            &mut inspector,
+            Request::Step { frames: 2 },
+        ));
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+        let input = app
+            .world()
+            .resource::<titan::input::InputFrame<super::Action>>()
+            .unwrap();
+        assert!(!input.is_active(&super::Action::Right));
+        assert!(input.just_released(&super::Action::Right));
     }
 }
