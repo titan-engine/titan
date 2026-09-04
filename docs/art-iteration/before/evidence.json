@@ -1,0 +1,22 @@
+{
+  "source_revision": "375303cbd0104fb7b2b0d1cc3caa0f86ba174490",
+  "startup": {
+    "frame": 0,
+    "checksum": "65576d60e54754b8",
+    "width": 160,
+    "height": 112,
+    "image": "startup.png"
+  },
+  "completed": {
+    "frame": 11,
+    "checksum": "98618cd721c5b52d",
+    "width": 160,
+    "height": 112,
+    "image": "completed.png"
+  },
+  "assertions": {
+    "remaining_entities": 2,
+    "shrine_active": true,
+    "replay_ticks": 11
+  }
+}
