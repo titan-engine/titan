@@ -15,7 +15,9 @@ use titan::input::{InputRecording, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
-use titan::{App, Component, FixedTime, FixedUpdate, Name, Query, Res, Startup, World};
+use titan::{
+    App, Commands, Component, FixedTime, FixedUpdate, Name, Query, Res, ResMut, Startup, World,
+};
 
 const TILE_SIZE: i32 = 8;
 const MAP_WIDTH: i32 = 20;
@@ -41,6 +43,7 @@ struct ActiveShrine;
 
 #[derive(Default)]
 struct ScheduledInput {
+    enabled: bool,
     frames: BTreeMap<u64, Vec<(Action, ActionValue)>>,
     tracker: InputTracker<Action>,
 }
@@ -80,10 +83,12 @@ pub fn build_game() -> App {
     app.world_mut()
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(QuestState::default());
+    app.world_mut().insert_resource(ScheduledInput::default());
     app.add_systems(Startup, setup);
     app.add_systems(FixedUpdate, apply_scheduled_input);
     app.add_systems(FixedUpdate, move_player);
     app.add_systems(FixedUpdate, collect_shards);
+    app.add_systems(FixedUpdate, activate_shrine);
     app.add_extractor(render_frame);
     app
 }
@@ -200,14 +205,9 @@ pub fn inspector_with_capture(
                 Ok((action, value))
             })
             .collect::<Result<Vec<_>, ProtocolError>>()?;
-        if app.world().resource::<ScheduledInput>().is_none() {
-            app.world_mut().insert_resource(ScheduledInput::default());
-        }
-        app.world_mut()
-            .resource_mut::<ScheduledInput>()
-            .unwrap()
-            .frames
-            .insert(frame, values);
+        let scheduled = app.world_mut().resource_mut::<ScheduledInput>().unwrap();
+        scheduled.enabled = true;
+        scheduled.frames.insert(frame, values);
         Ok(())
     });
     inspector.register_capture_handler(capture);
@@ -223,13 +223,18 @@ pub fn render_image(world: &World) -> Result<Image, ProtocolError> {
     })
 }
 
-fn apply_scheduled_input(world: &mut World) {
-    let frame = world.resource::<FixedTime>().unwrap().tick() + 1;
-    if let Some(scheduled) = world.resource_mut::<ScheduledInput>() {
+fn apply_scheduled_input(
+    time: Res<FixedTime>,
+    mut scheduled: ResMut<ScheduledInput>,
+    mut input: ResMut<InputFrame<Action>>,
+) {
+    if scheduled.enabled {
         // Each submitted map is a complete snapshot for one completed frame.
-        let values = scheduled.frames.remove(&frame).unwrap_or_default();
-        let input = scheduled.tracker.sample(values);
-        world.insert_resource(input);
+        let values = scheduled
+            .frames
+            .remove(&(time.tick() + 1))
+            .unwrap_or_default();
+        *input = scheduled.tracker.sample(values);
     }
 }
 
@@ -247,10 +252,7 @@ fn setup(world: &mut World) {
 }
 
 fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T, name: &str) {
-    let entity = world.spawn();
-    world.insert(entity, position).unwrap();
-    world.insert(entity, marker).unwrap();
-    world.insert(entity, Name::new(name)).unwrap();
+    world.spawn_with((position, marker, Name::new(name)));
 }
 
 fn move_player(mut players: Query<(&mut Position, &Player)>, input: Res<InputFrame<Action>>) {
@@ -262,35 +264,33 @@ fn move_player(mut players: Query<(&mut Position, &Player)>, input: Res<InputFra
     });
 }
 
-fn collect_shards(world: &mut World) {
-    let player_position = world
-        .iter::<Player>()
-        .next()
-        .and_then(|(entity, _)| world.get::<Position>(entity))
-        .copied()
-        .unwrap();
-    let collected: Vec<_> = world
-        .iter::<Shard>()
-        .filter_map(|(entity, _)| {
-            let position = world.get::<Position>(entity)?;
-            (position.x == player_position.x && position.y == player_position.y).then_some(entity)
-        })
-        .collect();
-
-    if collected.is_empty() {
+fn collect_shards(
+    mut players: Query<(&Position, &Player)>,
+    mut shards: Query<(&Position, &Shard)>,
+    mut state: ResMut<QuestState>,
+    mut commands: Commands,
+) {
+    let mut player_position = None;
+    players.for_each_sorted(|_, (position, _)| {
+        player_position.get_or_insert(*position);
+    });
+    let Some(player_position) = player_position else {
         return;
-    }
-
-    let state = world.resource_mut::<QuestState>().unwrap();
-    state.collected_shards += collected.len();
+    };
+    shards.for_each_sorted(|entity, (position, _)| {
+        if position.x == player_position.x && position.y == player_position.y {
+            state.collected_shards += 1;
+            commands.despawn(entity);
+        }
+    });
     state.shrine_active = state.collected_shards >= 3;
+}
+
+fn activate_shrine(mut shrines: Query<&Shrine>, state: Res<QuestState>, mut commands: Commands) {
     if state.shrine_active {
-        let shrine = world.iter::<Shrine>().next().unwrap().0;
-        world.insert(shrine, ActiveShrine).unwrap();
-    }
-    let mut commands = world.commands();
-    for shard in collected {
-        commands.despawn(shard);
+        shrines.for_each_sorted(|entity, _| {
+            commands.insert(entity, ActiveShrine);
+        });
     }
 }
 
@@ -461,6 +461,44 @@ pub fn image_checksum(image: &Image) -> u64 {
 mod tests {
     use super::{QuestState, build_game, image_checksum, recorded_walk, replay};
     use titan::render::{ImageAssets, SoftwareRenderer};
+
+    #[test]
+    fn overlapping_shards_are_collected_once_at_the_schedule_boundary() {
+        let mut app = build_game();
+        app.update_schedule(titan::Startup);
+        for _ in 0..3 {
+            super::spawn_at(
+                app.world_mut(),
+                super::Position { x: 2, y: 2 },
+                super::Shard,
+                "overlapping-shard",
+            );
+        }
+        app.try_advance_fixed(1).unwrap();
+        assert_eq!(
+            app.world()
+                .resource::<QuestState>()
+                .unwrap()
+                .collected_shards,
+            3
+        );
+        assert_eq!(app.world().iter::<super::Shard>().count(), 3);
+        assert_eq!(app.world().iter::<super::ActiveShrine>().count(), 1);
+        app.try_advance_fixed(1).unwrap();
+        assert_eq!(
+            app.world()
+                .resource::<QuestState>()
+                .unwrap()
+                .collected_shards,
+            3
+        );
+        assert!(app.system_metadata(titan::FixedUpdate).all(|system| {
+            system
+                .accesses
+                .iter()
+                .all(|access| access.target != titan::AccessTarget::World)
+        }));
+    }
 
     #[test]
     fn interactive_movement_repeats_every_six_ticks_and_releases() {
@@ -710,7 +748,12 @@ mod tests {
             );
         }
         assert_eq!(app.world().entities().count(), 5);
-        assert!(app.world().resource::<super::ScheduledInput>().is_none());
+        assert!(
+            !app.world()
+                .resource::<super::ScheduledInput>()
+                .unwrap()
+                .enabled
+        );
         let response = request(&mut app, &mut inspector, Request::Capture);
         assert_eq!(response.state_revision, 1);
         assert!(
