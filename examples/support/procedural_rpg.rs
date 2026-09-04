@@ -214,6 +214,25 @@ pub fn inspector_with_capture(
     inspector
 }
 
+/// Bounded game-specific position values for native diagnostic bundles.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn diagnostic_positions(world: &World) -> serde_json::Value {
+    let positions: Vec<_> = world
+        .entities()
+        .filter_map(|entity| {
+            world.get::<Position>(entity).map(|position| {
+                serde_json::json!({
+                    "entity": {"index": entity.index(), "generation": entity.generation()},
+                    "x": position.x,
+                    "y": position.y,
+                })
+            })
+        })
+        .take(1000)
+        .collect();
+    serde_json::json!(positions)
+}
+
 pub fn render_image(world: &World) -> Result<Image, ProtocolError> {
     let assets = world.resource::<ImageAssets>().ok_or_else(|| {
         ProtocolError::new(ErrorCode::Busy, "run startup with step before capturing")

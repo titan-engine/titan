@@ -13,6 +13,7 @@ titan-macros = { path = "crates/titan-macros" }
 titan-protocol = { path = "crates/titan-protocol" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+titan-diagnostics = { path = "crates/titan-diagnostics" }
 ctrlc = { version = "3", features = ["termination"] }
 titan-remote = { path = "crates/titan-remote" }
 pollster = "0.4"

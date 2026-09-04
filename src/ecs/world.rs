@@ -186,6 +186,18 @@ impl World {
         self.allocator.entities()
     }
 
+    /// Returns sorted metadata for all component types registered by insertion,
+    /// including types whose last instance has been removed.
+    pub fn component_metadata(&self) -> Vec<ComponentMetadata> {
+        let mut metadata: Vec<_> = self
+            .components
+            .values()
+            .map(|storage| storage.metadata())
+            .collect();
+        metadata.sort_by_key(|metadata| metadata.type_name);
+        metadata
+    }
+
     /// Returns sorted Rust type names for components attached to an entity.
     pub fn component_type_names(&self, entity: Entity) -> Vec<&'static str> {
         if !self.is_alive(entity) {

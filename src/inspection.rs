@@ -127,6 +127,14 @@ impl Inspector {
         self
     }
 
+    /// Returns registered command descriptions in deterministic name order.
+    pub fn command_metadata(&self) -> Vec<CommandMetadata> {
+        self.commands
+            .values()
+            .map(|command| command.metadata.clone())
+            .collect()
+    }
+
     pub fn handle(&mut self, app: &mut App, request: &RequestEnvelope) -> ResponseEnvelope {
         if request.schema_version != SCHEMA_VERSION {
             return self.failure(

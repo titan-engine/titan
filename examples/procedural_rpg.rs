@@ -61,6 +61,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     let mut instance = format!("procedural-rpg-{}", std::process::id());
     let mut duration = None;
     let mut configured = false;
+    let mut diagnostic_policy = titan_diagnostics::DiagnosticPolicy::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--serve" => serve = true,
@@ -70,6 +71,15 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--instance" => {
                 instance = args.next().ok_or("--instance requires an ID")?;
+                configured = true;
+            }
+            "--diagnostics" => {
+                diagnostic_policy = match args.next().as_deref() {
+                    Some("on-failure") => titan_diagnostics::DiagnosticPolicy::OnFailure,
+                    Some("always") => titan_diagnostics::DiagnosticPolicy::Always,
+                    Some("never") => titan_diagnostics::DiagnosticPolicy::Never,
+                    _ => return Err("--diagnostics requires on-failure, always, or never".into()),
+                };
                 configured = true;
             }
             "--run-for-ms" => {
@@ -82,7 +92,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "procedural_rpg [--serve [--project DIR] [--instance ID] [--run-for-ms MS]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use titan attach and protocol requests to drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "procedural_rpg [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use titan attach and protocol requests to drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }
@@ -91,7 +101,9 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     }
     if !serve {
         if configured {
-            return Err("--project, --instance, and --run-for-ms require --serve".into());
+            return Err(
+                "--project, --instance, --run-for-ms, and --diagnostics require --serve".into(),
+            );
         }
         return Ok(false);
     }
@@ -130,12 +142,46 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         server.registration().instance_id,
         server.registration().endpoint
     );
+    let mut diagnostics =
+        titan_diagnostics::DiagnosticInspector::new(project.join("target/titan/diagnostics"));
+    diagnostics.policy = diagnostic_policy;
     let started = Instant::now();
     while !stopped.load(Ordering::Acquire)
         && duration.is_none_or(|duration| started.elapsed() < duration)
     {
         // This thread alone owns the game, and fixed time advances only on Step.
-        queue.drain(|request| inspector.handle(&mut app, request));
+        queue.drain(|request| {
+            let result = diagnostics.handle(&mut inspector, &mut app, request, |app, bundle| {
+                bundle.world_state["positions"] = game::diagnostic_positions(app.world());
+                if let Some(quest) = app.world().resource::<QuestState>() {
+                    bundle.world_state["quest"] = serde_json::json!({
+                        "collected_shards": quest.collected_shards,
+                        "shrine_active": quest.shrine_active,
+                    });
+                }
+                match game::render_image(app.world()) {
+                    Ok(image) => Some(image),
+                    Err(error) => {
+                        bundle.logs.push(titan_diagnostics::DiagnosticLog {
+                            level: "warning".into(),
+                            message: format!("diagnostic capture failed: {}", error.message),
+                            frame: bundle
+                                .response
+                                .as_ref()
+                                .map(|response| response.observed_frame),
+                        });
+                        None
+                    }
+                }
+            });
+            for error in result.errors {
+                eprintln!("{error}");
+            }
+            if let Some(written) = result.written {
+                eprintln!("diagnostic bundle: {}", written.manifest.display());
+            }
+            result.response
+        });
         std::thread::sleep(Duration::from_millis(1));
     }
     server.shutdown();

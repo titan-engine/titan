@@ -1,5 +1,9 @@
 //! Transport-neutral diagnostic data, bounded request histories, and image checks.
 //! Native hosts may persist bundles; browser hosts can serialize the same data.
+#[cfg(not(target_arch = "wasm32"))]
+mod inspector;
+#[cfg(not(target_arch = "wasm32"))]
+pub use inspector::{DiagnosticInspector, DiagnosticResult};
 mod compare;
 mod history;
 #[cfg(not(target_arch = "wasm32"))]
