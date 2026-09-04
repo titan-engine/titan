@@ -55,6 +55,17 @@ WASM acceptance tests. See [rendering](docs/rendering.md) and
 [browser inspection](docs/browser.md) for details. Stop the local server with
 Ctrl-C when finished.
 
+## Try the independent arena game
+
+```sh
+cargo run --manifest-path games/arena/Cargo.toml --bin play
+```
+
+Avoid the coral pursuers for 20 seconds. Move with arrows/WASD; R restarts.
+For a macOS app bundle, browser play and deterministic replay commands, see the
+[arena README](games/arena/README.md). The [independent exercise](docs/arena-exercise.md)
+records a failed run, diagnosis, tuning fix and native/browser evidence.
+
 ## Inspect and control a running game
 
 Start a paused runtime:
@@ -92,7 +103,8 @@ recent input, and captures. Stop the runtime with Ctrl-C.
 
 The [standalone starter](starters/minimal/README.md) can be copied outside this
 checkout and uses public Titan APIs for native, browser and headless runs.
-Milestone 2 is using it to build an independent arena-survival demo. Windows native discovery, production stability,
+An [independently built arena-survival demo](games/arena/README.md) now exercises
+that workflow, with deterministic native and browser checks. Windows native discovery, production stability,
 an editor, and a general asset pipeline are outside the current supported scope.
 
 ## Development and contributions

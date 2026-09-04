@@ -9,45 +9,20 @@ copy/build instructions and [the audit](starter-audit.md) for the boundary.
 `scripts/test-starter.py --browser` verifies an external copy through native and
 actual-WASM control loops. The RPG checksum remains `190a92085def5677`.
 
-## Build the arena game with an independent agent
+## Pending: playable user review
 
-Give a fresh agent the milestone's game brief, starter, and repository-local
-documentation, without the RPG implementation history or advance explanations
-of anticipated gaps. Let it inspect public engine source when necessary, but
-record when documentation was insufficient. The game must use its own components,
-resources, systems, input definitions, and generated assets.
+The independent arena build, diagnosed failure/fix and fresh verification are
+recorded in [the exercise](arena-exercise.md) and [verification](arena-verification.md).
+Native and browser graphics, exact replay, bounded diagnostics and CI coverage
+are in place. Review the [playable arena](../games/arena/README.md) with the user.
+If tuning or presentation changes are requested, retain semantic assertions and
+review before changing exact image expectations.
 
-Record concrete obstacles and the commands, failures, and artifacts that exposed
-them. Distinguish game bugs, missing documentation, reusable host setup, and
-engine limitations. A successful build achieved through undocumented assistance
-is not sufficient evidence that the starter is usable.
-
-Completion: the arena game can be played on native and browser targets and driven
-headlessly through the same inspection protocol, with deterministic replay and
-state assertions.
-
-## Fix demonstrated gaps and repeat the exercise
-
-Prioritize issues that prevented or confused the independent build. Keep gameplay
-rules in the game; move a helper into the engine only when a reusable responsibility
-is clear. Collisions, optional queries, richer metadata, and camera support are
-candidates, not a preapproved feature backlog.
-
-Correct the relevant APIs or docs, then have a fresh agent verify the corrected
-workflow. Add regression coverage for demonstrated engine defects. Preserve both
-games and their independent replay expectations.
-
-Completion: the final verification succeeds with documented steps and no private
-RPG dependencies. Record the remaining limitations honestly, with no unresolved
-blockers to the milestone's acceptance criteria.
-
-## Close the milestone
-
-Capture native/browser play evidence, headless replay results, one useful failure
-bundle, and an agent iteration that diagnoses and fixes a failed attempt. Link
-that evidence from the milestone document, request user review of the playable
-result, and choose the next objective from the observed gaps. Remove completed
-execution sections from this plan instead of accumulating historical checklists.
+After acceptance, choose the next objective from demonstrated costs: duplicated
+host adapters across standalone games are a candidate for small consolidation.
+No engine feature is required to complete this milestone. Keep current platform
+and separate player/inspection-instance limitations documented. Do not mark user
+review complete or choose a new implementation objective on the user's behalf.
 
 ## Constraints and quality gates
 

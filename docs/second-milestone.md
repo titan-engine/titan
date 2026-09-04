@@ -1,5 +1,17 @@
 # Milestone 2: build a second game from the starter
 
+## Current status
+
+Implementation and independent verification are complete; playable user review
+is pending. Start with the [arena play instructions](../games/arena/README.md).
+The [starter verification](starter-verification.md),
+[independent build and failed-attempt diagnosis](arena-exercise.md),
+[fresh arena verification](arena-verification.md), and
+[verification summary](milestone-2/verification.json) record the evidence.
+The reusable macOS bundle step also makes the native window accessible to
+Computer Use. CI now covers copied bundles, starter setup and both games' native/WASM control loops; the
+new local commits have not been pushed or run on GitHub.
+
 ## Goal
 
 Prove that Titan's agent workflow transfers to a new game without relying on

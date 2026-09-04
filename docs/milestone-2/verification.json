@@ -1,0 +1,67 @@
+{
+  "date": "2026-09-05",
+  "platform": "macOS arm64",
+  "starter": {
+    "external_copy_native_control": "passed",
+    "external_copy_wasm_control": "passed",
+    "external_copy_native_window": "2 GPU frames",
+    "external_copy_browser_canvas": "passed",
+    "restart_frame_before": 288,
+    "restart_frame_after": 288
+  },
+  "arena": {
+    "seed": 41700,
+    "initial_checksum": "1e5d05f547d53435",
+    "won_checksum": "be61b1c710b101b6",
+    "browser_gpu_win": {
+      "frame": 1200,
+      "elapsed": 1200,
+      "health": 2,
+      "spawned": 5,
+      "outcome": "Won"
+    },
+    "browser_gpu_loss_after_restart": {
+      "frame": 2400,
+      "elapsed": 310,
+      "health": 0,
+      "spawned": 2,
+      "outcome": "Lost"
+    },
+    "browser_gpu_active_after_restart": {
+      "frame": 2640,
+      "elapsed": 240,
+      "health": 3,
+      "spawned": 1,
+      "outcome": "Running"
+    },
+    "native_window_presented_frames": 6000,
+    "native_gpu_readback": "exact RGBA at initial, active and loss scenes for unorm and sRGB targets",
+    "native_control": "passed",
+    "actual_wasm_control": "passed",
+    "fresh_independent_verification": "passed"
+  },
+  "rpg": {
+    "software_checksum": "190a92085def5677",
+    "native_control": "passed",
+    "actual_wasm_control": "passed",
+    "gpu_readback_tolerance": 0
+  },
+  "root_gates": [
+    "cargo fmt --all --check",
+    "cargo test --workspace --all-targets",
+    "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+    "cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown"
+  ],
+  "root_gates_result": "passed",
+  "ci": "coverage added; new commits not pushed/run on GitHub",
+  "user_play_review": "pending",
+  "macos_bundles": {
+    "external_copies": [
+      "starter passed",
+      "arena passed"
+    ],
+    "relocated_bundle_executables": "passed",
+    "computer_use_native_arena": "window discovery, screenshot, restart and close passed",
+    "ci": "macOS bundle job added; remote execution pending"
+  }
+}
