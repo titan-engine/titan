@@ -7,6 +7,7 @@ extern crate self as titan;
 
 pub mod app;
 pub mod ecs;
+pub mod render;
 pub mod time;
 
 pub use app::{App, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
