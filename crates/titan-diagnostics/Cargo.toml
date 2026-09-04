@@ -1,0 +1,11 @@
+[package]
+name = "titan-diagnostics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+titan = { path = "../.." }
+titan-protocol = { path = "../titan-protocol" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+png = "0.18"

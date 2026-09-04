@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/titan-browser", "crates/titan-cli", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote", "crates/titan-render-wgpu"]
+members = ["crates/titan-browser", "crates/titan-cli", "crates/titan-diagnostics", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote", "crates/titan-render-wgpu"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
