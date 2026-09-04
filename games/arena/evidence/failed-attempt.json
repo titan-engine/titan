@@ -1,0 +1,16 @@
+{
+  "error": {
+    "code": "invalid_value",
+    "details": {
+      "diagnostic_bundle": "failed-run/bundle.json"
+    },
+    "message": "run has not survived; inspect elapsed, health and recent inputs",
+    "retryable": false
+  },
+  "instance_id": "arena-failure",
+  "observed_frame": 495,
+  "request_id": "cli-73596",
+  "schema_version": 1,
+  "state_revision": 496,
+  "status": "failure"
+}

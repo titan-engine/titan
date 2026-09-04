@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Arena GPU replay verification</title>
+<style>
+body {margin:24px; background:#101519; color:#e6edf0; font:16px system-ui,sans-serif}
+canvas {width:640px; height:448px; image-rendering:pixelated; display:block; margin:16px 0}
+button {font:inherit; padding:8px 12px; margin-right:8px} pre {white-space:pre-wrap}
+</style>
+<h1>Arena GPU replay verification</h1>
+<p>Bounded integration fixture. Every run starts from the game’s restart operation.</p>
+<button id="initial">Initial scene</button><button id="active">Pursuit at tick 240</button><button id="win">Replay survival</button><button id="loss">Idle loss</button>
+<canvas id="canvas" width="640" height="448" aria-label="Arena GPU replay result"></canvas>
+<pre id="result" role="status">Choose a scenario.</pre>
+<script type="module">
+import init, {BrowserPlayer} from '../inspector/pkg/titan_game.js';
+const canvas = document.querySelector('canvas');
+const result = document.querySelector('#result');
+const buttons = [...document.querySelectorAll('button')];
+const actions = ['up', 'down', 'left', 'right'];
+let player;
+function route(tick) {
+  if (tick < 30) return 'up';
+  if (tick < 90) return 'right';
+  const phase = (tick - 90) % 360;
+  return phase < 60 ? 'down' : phase < 180 ? 'left' : phase < 240 ? 'up' : 'right';
+}
+async function run(ticks, moving, expected) {
+  buttons.forEach(button => button.disabled = true);
+  try {
+    await init();
+    player ??= await BrowserPlayer.create(canvas);
+    const previous = JSON.parse(player.status()).frame;
+    player.restart();
+    if (JSON.parse(player.status()).frame !== previous) throw new Error('Restart reset host clock');
+    for (let tick=0; tick<ticks; tick++) {
+      for (const action of actions) player.set_action(action, moving && action === route(tick));
+      player.frame(1000/60);
+    }
+    for (const action of actions) player.set_action(action, false);
+    player.frame(0);
+    const state = JSON.parse(player.status());
+    if (state.frame !== previous + ticks) throw new Error('Fixed frame count mismatch');
+    for (const [key, value] of Object.entries(expected)) {
+      if (state.run[key] !== value) throw new Error(`${key}: expected ${value}, got ${state.run[key]}`);
+    }
+    result.textContent = 'PASS\n' + JSON.stringify(state, null, 2);
+  } catch (error) {
+    result.textContent = 'FAIL: ' + (error.stack ?? error);
+  } finally { buttons.forEach(button => button.disabled = false); }
+}
+document.querySelector('#initial').onclick = () => run(0, false, {outcome:'Running',health:3,elapsed:0,spawned:0});
+document.querySelector('#active').onclick = () => run(240, true, {outcome:'Running',elapsed:240});
+document.querySelector('#win').onclick = () => run(1200, true, {outcome:'Won',health:2,elapsed:1200,spawned:5});
+document.querySelector('#loss').onclick = () => run(1200, false, {outcome:'Lost',health:0,elapsed:310});
+window.addEventListener('pagehide', () => player?.free());
+</script>
+</html>
