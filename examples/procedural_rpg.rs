@@ -1,5 +1,5 @@
 #[path = "support/procedural_rpg.rs"]
-mod game;
+pub mod game;
 
 use game::{
     QuestState, build_game, build_inspector, configured_inspector, image_checksum, recorded_walk,

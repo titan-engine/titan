@@ -1,7 +1,9 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
-use crate::{DeferredCommandError, FixedTime, World};
+use crate::{
+    DeferredCommandError, FixedTime, IntoSystem, SystemError, SystemMetadata, World, system::System,
+};
 
 /// Identifies an independently runnable collection of systems.
 pub trait ScheduleLabel: Send + Sync + 'static {}
@@ -21,7 +23,6 @@ impl ScheduleLabel for FixedUpdate {}
 pub struct Update;
 impl ScheduleLabel for Update {}
 
-type System = Box<dyn FnMut(&mut World) + Send + 'static>;
 type ExtractedValue = Box<dyn Any + Send + Sync>;
 
 struct Extractor {
@@ -35,13 +36,24 @@ struct Schedule {
     systems: Vec<System>,
 }
 
-impl Schedule {
-    fn run(&mut self, world: &mut World) {
-        for system in &mut self.systems {
-            system(world);
+/// A checked schedule failure. Earlier world changes are not rolled back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AppError {
+    Deferred(DeferredCommandError),
+    System {
+        system: &'static str,
+        error: SystemError,
+    },
+}
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Deferred(error) => error.fmt(f),
+            Self::System { system, error } => write!(f, "system {system}: {error}"),
         }
     }
 }
+impl std::error::Error for AppError {}
 
 /// Configures an application by installing related resources and systems.
 pub trait Plugin {
@@ -53,7 +65,7 @@ pub struct App {
     world: World,
     schedules: HashMap<TypeId, Schedule>,
     startup_complete: bool,
-    deferred_errors: Vec<DeferredCommandError>,
+    errors: Vec<AppError>,
     extractors: Vec<Extractor>,
 }
 
@@ -65,7 +77,7 @@ impl Default for App {
             world,
             schedules: HashMap::new(),
             startup_complete: false,
-            deferred_errors: Vec::new(),
+            errors: Vec::new(),
             extractors: Vec::new(),
         }
     }
@@ -87,18 +99,48 @@ impl App {
         &mut self.world
     }
 
-    /// Adds a system to a schedule, preserving insertion order.
-    pub fn add_systems<L, S>(&mut self, _label: L, system: S) -> &mut Self
+    /// Adds a system in insertion order, rejecting conflicting declarations.
+    ///
+    /// Functions accept typed parameters or exclusive `&mut World` access.
+    /// Exclusive closures must annotate their argument as `|world: &mut World|`.
+    /// Panics on invalid declarations; use `try_add_systems` for a checked result.
+    pub fn add_systems<L, S, Marker>(&mut self, label: L, system: S) -> &mut Self
     where
         L: ScheduleLabel,
-        S: FnMut(&mut World) + Send + 'static,
+        S: IntoSystem<Marker>,
     {
+        self.try_add_systems(label, system)
+            .expect("invalid system access declaration")
+    }
+
+    /// Registers a system after validating all component and resource accesses.
+    pub fn try_add_systems<L, S, Marker>(
+        &mut self,
+        _label: L,
+        system: S,
+    ) -> Result<&mut Self, SystemError>
+    where
+        L: ScheduleLabel,
+        S: IntoSystem<Marker>,
+    {
+        let system = system.into_system()?;
         self.schedules
             .entry(TypeId::of::<L>())
             .or_default()
             .systems
-            .push(Box::new(system));
-        self
+            .push(system);
+        Ok(self)
+    }
+
+    /// Reports systems and explicit deferred boundaries in execution order.
+    pub fn system_metadata<L: ScheduleLabel>(
+        &self,
+        _label: L,
+    ) -> impl Iterator<Item = &SystemMetadata> {
+        self.schedules
+            .get(&TypeId::of::<L>())
+            .into_iter()
+            .flat_map(|schedule| schedule.systems.iter().map(System::metadata))
     }
 
     /// Registers an immutable snapshot builder outside the simulation schedules.
@@ -118,7 +160,7 @@ impl App {
     ) -> &mut Self {
         let registered = Extractor {
             output_type: TypeId::of::<T>(),
-            extract: Box::new(move |world| Box::new(extractor(world))),
+            extract: Box::new(move |world: &crate::World| Box::new(extractor(world))),
             latest: None,
         };
         if let Some(existing) = self
@@ -170,36 +212,64 @@ impl App {
 
     /// Takes failures produced by deferred commands during prior schedules.
     pub fn take_deferred_errors(&mut self) -> Vec<DeferredCommandError> {
-        std::mem::take(&mut self.deferred_errors)
+        let mut deferred = Vec::new();
+        self.errors.retain(|error| {
+            if let AppError::Deferred(error) = error {
+                deferred.push(*error);
+                false
+            } else {
+                true
+            }
+        });
+        deferred
+    }
+
+    /// Takes typed-system failures while preserving pending deferred failures.
+    pub fn take_system_errors(&mut self) -> Vec<AppError> {
+        let mut systems = Vec::new();
+        self.errors.retain(|error| {
+            if matches!(error, AppError::System { .. }) {
+                systems.push(error.clone());
+                false
+            } else {
+                true
+            }
+        });
+        systems
     }
 
     /// Applies queued structural changes at an explicit safe point and reports
-    /// all outstanding deferred failures. Successful changes are not rolled back.
-    pub fn apply_deferred(&mut self) -> Result<(), Vec<DeferredCommandError>> {
-        self.deferred_errors.extend(self.world.apply_deferred());
+    /// all outstanding schedule failures. Successful changes are not rolled back.
+    pub fn apply_deferred(&mut self) -> Result<(), Vec<AppError>> {
+        self.errors.extend(
+            self.world
+                .apply_deferred()
+                .into_iter()
+                .map(AppError::Deferred),
+        );
         self.refresh_extracted();
-        self.check_deferred_errors()
+        self.check_errors()
     }
 
-    /// Advances fixed ticks, stopping at the first failed schedule boundary.
+    /// Advances fixed ticks, stopping at the first failed system or deferred boundary.
     ///
     /// Outstanding errors are returned before running startup or any ticks.
     /// A failed fixed update still counts as an executed tick: systems and
     /// successful structural changes are not rolled back. Startup failures
     /// stop execution before the first tick. Errors are consumed by this call.
-    pub fn try_advance_fixed(&mut self, ticks: u64) -> Result<(), Vec<DeferredCommandError>> {
-        self.check_deferred_errors()?;
+    pub fn try_advance_fixed(&mut self, ticks: u64) -> Result<(), Vec<AppError>> {
+        self.check_errors()?;
         self.run_startup();
-        self.check_deferred_errors()?;
+        self.check_errors()?;
         for _ in 0..ticks {
             self.advance_fixed(1);
-            self.check_deferred_errors()?;
+            self.check_errors()?;
         }
         Ok(())
     }
 
-    fn check_deferred_errors(&mut self) -> Result<(), Vec<DeferredCommandError>> {
-        let errors = self.take_deferred_errors();
+    fn check_errors(&mut self) -> Result<(), Vec<AppError>> {
+        let errors = std::mem::take(&mut self.errors);
         if errors.is_empty() {
             Ok(())
         } else {
@@ -248,9 +318,29 @@ impl App {
 
     fn run_schedule(&mut self, label: TypeId) {
         if let Some(schedule) = self.schedules.get_mut(&label) {
-            schedule.run(&mut self.world);
+            for system in &mut schedule.systems {
+                if system.is_deferred_boundary() {
+                    let failures = self.world.apply_deferred();
+                    if !failures.is_empty() {
+                        self.errors
+                            .extend(failures.into_iter().map(AppError::Deferred));
+                        break;
+                    }
+                } else if let Err(error) = system.run(&mut self.world) {
+                    self.errors.push(AppError::System {
+                        system: system.metadata().name,
+                        error,
+                    });
+                    break;
+                }
+            }
         }
-        self.deferred_errors.extend(self.world.apply_deferred());
+        self.errors.extend(
+            self.world
+                .apply_deferred()
+                .into_iter()
+                .map(AppError::Deferred),
+        );
     }
 }
 
@@ -278,10 +368,10 @@ mod tests {
     fn startup_runs_once_before_other_schedules() {
         let mut app = App::new();
         app.world_mut().insert_resource(Counts::default());
-        app.add_systems(Startup, |world| {
+        app.add_systems(Startup, |world: &mut crate::World| {
             world.resource_mut::<Counts>().unwrap().startup += 1;
         });
-        app.add_systems(CustomSchedule, |world| {
+        app.add_systems(CustomSchedule, |world: &mut crate::World| {
             world.resource_mut::<Counts>().unwrap().custom += 1;
         });
 
@@ -299,11 +389,11 @@ mod tests {
         fn run() -> (i64, FixedTime) {
             let mut app = App::new();
             app.set_fixed_time(FixedTime::from_duration(Duration::from_millis(20)));
-            app.add_systems(Startup, |world| {
+            app.add_systems(Startup, |world: &mut crate::World| {
                 let entity = world.spawn();
                 world.insert(entity, Position(0)).unwrap();
             });
-            app.add_systems(FixedUpdate, |world| {
+            app.add_systems(FixedUpdate, |world: &mut crate::World| {
                 for (_, position) in world.iter_mut::<Position>() {
                     position.0 += 3;
                 }
@@ -325,7 +415,7 @@ mod tests {
         struct MovementPlugin;
         impl Plugin for MovementPlugin {
             fn build(&self, app: &mut App) {
-                app.add_systems(FixedUpdate, |world| {
+                app.add_systems(FixedUpdate, |world: &mut crate::World| {
                     world.resource_mut::<Counts>().unwrap().custom += 1;
                 });
             }
@@ -341,7 +431,7 @@ mod tests {
     #[test]
     fn structural_commands_apply_at_schedule_boundaries() {
         let mut app = App::new();
-        app.add_systems(FixedUpdate, |world| {
+        app.add_systems(FixedUpdate, |world: &mut crate::World| {
             let mut commands = world.commands();
             commands.spawn_with(Position(10));
         });
@@ -357,14 +447,14 @@ mod tests {
     fn checked_stepping_stops_after_the_first_failed_tick() {
         let mut app = App::new();
         let entity = app.world_mut().spawn();
-        app.add_systems(FixedUpdate, move |world| {
+        app.add_systems(FixedUpdate, move |world: &mut crate::World| {
             world.commands().despawn(entity).despawn(entity);
         });
 
         let errors = app.try_advance_fixed(10).unwrap_err();
 
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].entity(), entity);
+        assert!(matches!(errors[0], super::AppError::Deferred(error) if error.entity() == entity));
         assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), 1);
         assert!(!app.world().is_alive(entity));
         assert!(app.take_deferred_errors().is_empty());
@@ -374,7 +464,7 @@ mod tests {
     fn checked_stepping_reports_startup_and_outstanding_errors_before_ticks() {
         let mut app = App::new();
         let entity = app.world_mut().spawn();
-        app.add_systems(Startup, move |world| {
+        app.add_systems(Startup, move |world: &mut crate::World| {
             world.commands().despawn(entity).despawn(entity);
         });
         assert_eq!(app.try_advance_fixed(2).unwrap_err().len(), 1);
@@ -417,10 +507,10 @@ mod tests {
     fn extraction_observes_completed_ticks_and_applied_deferred_entities() {
         let mut app = App::new();
         app.add_extractor(snapshot);
-        app.add_systems(Startup, |world| {
+        app.add_systems(Startup, |world: &mut crate::World| {
             world.commands().spawn_with(Position(1));
         });
-        app.add_systems(FixedUpdate, |world| {
+        app.add_systems(FixedUpdate, |world: &mut crate::World| {
             let previous = world.entities().collect::<Vec<_>>();
             let mut commands = world.commands();
             for entity in previous {
@@ -453,10 +543,10 @@ mod tests {
     fn explicit_extraction_and_command_boundaries_do_not_run_systems_or_ticks() {
         let mut app = App::new();
         app.world_mut().insert_resource(Counts::default());
-        app.add_systems(Startup, |world| {
+        app.add_systems(Startup, |world: &mut crate::World| {
             world.resource_mut::<Counts>().unwrap().startup += 1;
         });
-        app.add_systems(FixedUpdate, |world| {
+        app.add_systems(FixedUpdate, |world: &mut crate::World| {
             world.resource_mut::<Counts>().unwrap().custom += 1;
         });
         app.add_extractor(snapshot);
@@ -526,7 +616,7 @@ mod tests {
         let entity = app.world_mut().spawn();
         app.world_mut().insert(entity, Position(1)).unwrap();
         app.add_extractor(snapshot);
-        app.add_systems(FixedUpdate, move |world| {
+        app.add_systems(FixedUpdate, move |world: &mut crate::World| {
             world.commands().despawn(entity).despawn(entity);
         });
         assert!(app.try_advance_fixed(3).is_err());

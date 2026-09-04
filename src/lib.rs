@@ -10,12 +10,16 @@ pub mod ecs;
 pub mod input;
 pub mod inspection;
 pub mod render;
+pub mod system;
 pub mod time;
 
-pub use app::{App, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
+pub use app::{App, AppError, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
 pub use ecs::{
     Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation, Entity,
     FindNameError, InsertError, Name, QueryAccessError, World,
 };
 pub use time::FixedTime;
 pub use titan_macros::Component;
+
+pub use ecs::{AccessMode, AccessTarget, Query, QueryData, Res, ResMut, SystemAccess, SystemError};
+pub use system::{ApplyDeferred, IntoSystem, SystemMetadata};

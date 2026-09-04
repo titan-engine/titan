@@ -101,14 +101,15 @@ impl DeferredCommand for Despawn {
 /// the entity and its components are not visible until the commands are
 /// applied at the end of the schedule or by [`World::apply_deferred`].
 pub struct Commands<'world> {
-    pub(crate) world: &'world mut World,
+    pub(crate) allocator: &'world mut super::allocator::EntityAllocator,
+    pub(crate) deferred: &'world mut Vec<Box<dyn DeferredCommand>>,
 }
 
 impl Commands<'_> {
     /// Reserves an entity and queues its activation.
     pub fn spawn(&mut self) -> Entity {
-        let entity = self.world.reserve_entity();
-        self.world.push_command(Activate::new(entity));
+        let entity = self.allocator.reserve_entity();
+        self.deferred.push(Box::new(Activate::new(entity)));
         entity
     }
 
@@ -121,13 +122,13 @@ impl Commands<'_> {
 
     /// Queues insertion or replacement of a component.
     pub fn insert<T: Component>(&mut self, entity: Entity, component: T) -> &mut Self {
-        self.world.push_command(Insert { entity, component });
+        self.deferred.push(Box::new(Insert { entity, component }));
         self
     }
 
     /// Queues an entity for despawning.
     pub fn despawn(&mut self, entity: Entity) -> &mut Self {
-        self.world.push_command(Despawn { entity });
+        self.deferred.push(Box::new(Despawn { entity }));
         self
     }
 }

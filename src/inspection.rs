@@ -379,23 +379,41 @@ fn unregistered_operation() -> ProtocolError {
     )
 }
 
-fn deferred_failure(errors: Vec<crate::DeferredCommandError>) -> ProtocolError {
-    let mut error = ProtocolError::new(ErrorCode::Internal, "deferred ECS commands failed");
-    error.details.insert(
-        "deferred_errors".to_owned(),
-        serde_json::Value::Array(
-            errors
-                .into_iter()
-                .map(|error| {
-                    serde_json::json!({
-                        "entity": to_protocol_entity(error.entity()),
-                        "operation": format!("{:?}", error.operation()).to_lowercase(),
-                        "message": error.to_string(),
-                    })
-                })
-                .collect(),
-        ),
+fn deferred_failure(errors: Vec<crate::AppError>) -> ProtocolError {
+    let mut error = ProtocolError::new(
+        ErrorCode::Internal,
+        "application schedule or deferred commands failed",
     );
+    let mut deferred = Vec::new();
+    let mut systems = Vec::new();
+    for failure in errors {
+        match failure {
+            crate::AppError::Deferred(failure) => deferred.push(serde_json::json!({
+                "entity": to_protocol_entity(failure.entity()),
+                "operation": format!("{:?}", failure.operation()).to_lowercase(),
+                "message": failure.to_string(),
+            })),
+            crate::AppError::System { system, error } => {
+                let (kind, type_name) = match &error {
+                    crate::SystemError::MissingResource { type_name } => {
+                        ("missing_resource", *type_name)
+                    }
+                    crate::SystemError::ConflictingAccess { type_name, .. } => {
+                        ("conflicting_access", *type_name)
+                    }
+                };
+                systems.push(serde_json::json!({ "system": system, "kind": kind, "type_name": type_name, "message": error.to_string() }));
+            }
+        }
+    }
+    if !deferred.is_empty() {
+        error
+            .details
+            .insert("deferred_errors".into(), deferred.into());
+    }
+    if !systems.is_empty() {
+        error.details.insert("system_errors".into(), systems.into());
+    }
     error
 }
 
@@ -431,7 +449,7 @@ mod tests {
         let player = app.world_mut().spawn();
         app.world_mut().insert(player, Name::new("player")).unwrap();
         app.world_mut().insert(player, Position(0)).unwrap();
-        app.add_systems(FixedUpdate, |world| {
+        app.add_systems(FixedUpdate, |world: &mut crate::World| {
             for (_, position) in world.iter_mut::<Position>() {
                 position.0 += 1;
             }
@@ -789,7 +807,7 @@ mod tests {
     #[test]
     fn failed_step_reports_partial_progress_without_success_revision() {
         let (mut app, mut inspector) = inspected_app();
-        app.add_systems(FixedUpdate, |world| {
+        app.add_systems(FixedUpdate, |world: &mut crate::World| {
             let entity = world.entities().next().unwrap();
             let mut commands = world.commands();
             commands.despawn(entity);
@@ -933,5 +951,33 @@ mod tests {
                 }
             }
         ));
+    }
+    #[test]
+    fn missing_typed_resources_are_structured_protocol_failures() {
+        struct Missing;
+        let (mut app, mut inspector) = inspected_app();
+        app.add_systems(FixedUpdate, |_: crate::Res<Missing>| {
+            panic!("missing resource system ran")
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("missing-resource", Request::Step { frames: 3 }),
+        );
+        assert_eq!(response.observed_frame, 1);
+        assert_eq!(response.state_revision, 0);
+        let ResponseOutcome::Failure { error } = response.outcome else {
+            panic!("expected system failure")
+        };
+        assert_eq!(error.code, ErrorCode::Internal);
+        assert_eq!(
+            error.details["system_errors"][0]["kind"],
+            "missing_resource"
+        );
+        assert!(
+            error.details["system_errors"][0]["type_name"]
+                .as_str()
+                .unwrap()
+                .ends_with("::Missing")
+        );
     }
 }

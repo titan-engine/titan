@@ -11,12 +11,11 @@ use titan_protocol::{
 };
 
 use titan::input::{ActionValue, InputFrame, InputTracker};
-#[cfg(not(target_arch = "wasm32"))]
 use titan::input::{InputRecording, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
-use titan::{App, Component, FixedTime, FixedUpdate, Name, Startup, World};
+use titan::{App, Component, FixedTime, FixedUpdate, Name, Query, Res, Startup, World};
 
 const TILE_SIZE: i32 = 8;
 const MAP_WIDTH: i32 = 20;
@@ -76,9 +75,6 @@ struct Art {
     shrine_active: ImageId,
 }
 
-#[allow(dead_code)]
-struct ExtractedFrame(RenderFrame);
-
 pub fn build_game() -> App {
     let mut app = App::new();
     app.world_mut()
@@ -88,7 +84,7 @@ pub fn build_game() -> App {
     app.add_systems(FixedUpdate, apply_scheduled_input);
     app.add_systems(FixedUpdate, move_player);
     app.add_systems(FixedUpdate, collect_shards);
-    app.add_systems(FixedUpdate, extract_frame);
+    app.add_extractor(render_frame);
     app
 }
 
@@ -257,18 +253,13 @@ fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T, name
     world.insert(entity, Name::new(name)).unwrap();
 }
 
-fn move_player(world: &mut World) {
-    let input = world.resource::<InputFrame<Action>>().unwrap();
+fn move_player(mut players: Query<(&mut Position, &Player)>, input: Res<InputFrame<Action>>) {
     let x = i32::from(input.is_active(&Action::Right)) - i32::from(input.is_active(&Action::Left));
     let y = i32::from(input.is_active(&Action::Down)) - i32::from(input.is_active(&Action::Up));
-    let player = world
-        .iter::<Player>()
-        .next()
-        .map(|(entity, _)| entity)
-        .unwrap();
-    let position = world.get_mut::<Position>(player).unwrap();
-    position.x = (position.x + x).clamp(0, MAP_WIDTH - 1);
-    position.y = (position.y + y).clamp(0, MAP_HEIGHT - 1);
+    players.for_each(|_, (position, _)| {
+        position.x = (position.x + x).clamp(0, MAP_WIDTH - 1);
+        position.y = (position.y + y).clamp(0, MAP_HEIGHT - 1);
+    });
 }
 
 fn collect_shards(world: &mut World) {
@@ -301,10 +292,6 @@ fn collect_shards(world: &mut World) {
     for shard in collected {
         commands.despawn(shard);
     }
-}
-
-fn extract_frame(world: &mut World) {
-    world.insert_resource(ExtractedFrame(render_frame(world)));
 }
 
 fn render_frame(world: &World) -> RenderFrame {
@@ -423,7 +410,6 @@ fn terrain_variation(seed: u64, x: i32, y: i32) -> u32 {
     (value ^ (value >> 31)) as u32 & 1
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn recorded_walk() -> InputRecording<Action> {
     let mut tracker = InputTracker::new();
     let mut recording = InputRecording::new(RecordingHeader::new(
@@ -439,7 +425,6 @@ pub fn recorded_walk() -> InputRecording<Action> {
     recording
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn replay(app: &mut App, recording: &InputRecording<Action>) {
     for frame in recording.frames() {
         *app.world_mut()
@@ -478,6 +463,45 @@ mod tests {
     use titan::render::{ImageAssets, SoftwareRenderer};
 
     #[test]
+    fn interactive_movement_repeats_every_six_ticks_and_releases() {
+        let mut app = build_game();
+        let mut input = super::InteractiveInput::default();
+        input.set_action("right", true).unwrap();
+        input.tick(&mut app);
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+        for _ in 0..5 {
+            input.tick(&mut app);
+        }
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+        input.tick(&mut app);
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 4);
+        input.set_action("right", false).unwrap();
+        for _ in 0..12 {
+            input.tick(&mut app);
+        }
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 4);
+        assert!(input.set_action("jump", true).is_err());
+    }
+
+    #[test]
+    fn interactive_taps_survive_release_before_the_next_fixed_tick() {
+        let mut app = build_game();
+        let mut input = super::InteractiveInput::default();
+        input.set_action("right", true).unwrap();
+        input.set_action("right", false).unwrap();
+        input.tick(&mut app);
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+        input.tick(&mut app);
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+        for _ in 0..12 {
+            input.tick(&mut app);
+        }
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 3);
+    }
+
+    #[test]
     fn recorded_walk_collects_every_shard_and_activates_the_shrine() {
         let mut app = build_game();
         let recording = recorded_walk();
@@ -488,7 +512,7 @@ mod tests {
         assert!(quest.shrine_active);
         assert_eq!(recording.len(), 11);
 
-        let frame = &app.world().resource::<super::ExtractedFrame>().unwrap().0;
+        let frame = app.extracted::<titan::render::RenderFrame>().unwrap();
         let image = SoftwareRenderer::render(frame, app.world().resource::<ImageAssets>().unwrap())
             .unwrap();
         assert_eq!(image_checksum(&image), 0x9861_8cd7_21c5_b52d);
@@ -728,4 +752,67 @@ mod tests {
         assert!(!input.is_active(&super::Action::Right));
         assert!(input.just_released(&super::Action::Right));
     }
+}
+
+/// Converts held interactive directions into repeatable tile movement pulses.
+/// Protocol recordings bypass this helper and keep their exact per-tick input.
+#[derive(Default)]
+pub struct InteractiveInput {
+    held: std::collections::BTreeSet<Action>,
+    pending_presses: std::collections::BTreeSet<Action>,
+    tracker: InputTracker<Action>,
+    repeat_in: u8,
+}
+
+impl InteractiveInput {
+    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
+        let action = match name {
+            "up" => Action::Up,
+            "down" => Action::Down,
+            "left" => Action::Left,
+            "right" => Action::Right,
+            _ => return Err(format!("unknown action: {name}")),
+        };
+        let changed = if pressed {
+            self.held.insert(action)
+        } else {
+            self.held.remove(&action)
+        };
+        if changed {
+            if pressed {
+                self.pending_presses.insert(action);
+            }
+            self.repeat_in = 0;
+        }
+        Ok(())
+    }
+
+    pub fn tick(&mut self, app: &mut App) {
+        let values = if self.repeat_in == 0 {
+            self.repeat_in = 5;
+            let values = self
+                .held
+                .union(&self.pending_presses)
+                .copied()
+                .map(|action| (action, ActionValue::PRESSED))
+                .collect::<Vec<_>>();
+            self.pending_presses.clear();
+            values
+        } else {
+            self.repeat_in -= 1;
+            Vec::new()
+        };
+        app.world_mut().insert_resource(self.tracker.sample(values));
+        app.advance_fixed(1);
+    }
+}
+
+pub fn status(app: &App) -> String {
+    let quest = app.world().resource::<QuestState>().unwrap();
+    serde_json::json!({
+        "frame": app.world().resource::<FixedTime>().unwrap().tick(),
+        "collected_shards": quest.collected_shards,
+        "shrine_active": quest.shrine_active,
+    })
+    .to_string()
 }
