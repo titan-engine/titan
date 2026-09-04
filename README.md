@@ -17,4 +17,5 @@ work without depending on a graphical editor.
 - [In-process inspection](docs/inspection.md)
 - [Browser inspection](docs/browser.md)
 - [Interactive rendering](docs/rendering.md)
+- [ECS authoring and migration](docs/ecs-authoring.md)
 - [Implementation plan](docs/implementation-plan.md)

@@ -9,10 +9,13 @@ the current implementation change; Git retains earlier versions.
 Titan currently has:
 
 - a custom ECS with generational entities and sparse-set component storage;
-- component derives, basic metadata, optional names, and two-component joins;
+- component derives, basic metadata, optional names, and typed tuple queries;
+- access-validated `Query`, `Res`, `ResMut`, and `Commands` system parameters,
+  sequential system metadata, sorted query callbacks, and explicit deferred nodes;
 - deferred structural commands applied at deterministic schedule boundaries;
 - ordered application schedules, plugins, resources, and fixed-tick execution;
-- renderer-neutral 2D frames and an exact GPU-free software renderer;
+- immutable renderer-neutral 2D snapshots, an exact GPU-free software renderer,
+  and a wgpu sprite backend with native and browser interactive runners;
 - deterministic logical input frames and replay recordings;
 - a procedural 2D RPG example with generated pixel art, a small shard quest,
   semantic assertions, and an exact rendered-image checksum;
@@ -22,7 +25,10 @@ Titan currently has:
 - a CLI with human-readable and JSON output for checking, testing, and running
   examples; and
 - authenticated native loopback transport, project-local discovery, and CLI
-  attachment to the paused headless RPG; and
+  attachment to the paused headless RPG;
+- a WASM protocol adapter and browser inspector with explicit control opt-in;
+- tested diagnostic bundle, bounded history, API summary, and image comparison
+  helpers (automatic runtime/CLI integration remains pending); and
 - native and WebAssembly CI checks, including a separate-process control loop.
 
 ## Next vertical objective
@@ -103,8 +109,10 @@ game without changing its request or response model.
 
 ## Phase 4: interactive rendering
 
-Current task: add immutable extracted snapshots, a real GPU sprite pipeline,
-and native/browser interactive runners around the shared game.
+Completed: immutable extraction and real GPU textured sprites drive both native
+and browser interactive players. The native runner and actual browser canvas
+have completed the reference route. Metal offscreen readbacks on both unorm and
+sRGB targets match the exact software checksum. See [rendering](rendering.md).
 
 - Add an immutable, deterministic render-extraction boundary after fixed ticks.
 - Implement a `wgpu` 2D backend consuming the same frames and CPU image assets
@@ -121,6 +129,16 @@ reference image.
 
 ## Phase 5: ECS authoring ergonomics
 
+In progress. Typed parameters and tuple query callbacks through arity four,
+registration-time access validation, sequential metadata, explicit deferred
+nodes, and sorted traversal are implemented. RPG movement uses the new API.
+See [ECS authoring](ecs-authoring.md) for usage and migration notes.
+
+**Immediate resume task: implement tuple bundles, then migrate the remaining
+RPG systems to typed parameters.** Keep setup or extraction exclusive only
+where it improves clarity. Preserve the current replay and capture checksums.
+Query traversal currently uses scoped callbacks rather than mutable iterators.
+
 - Add typed `Query`, `Res`, `ResMut`, and `Commands` system parameters.
 - Detect conflicting component and resource access before systems execute.
 - Generate tuple queries and system parameters to a practical fixed arity.
@@ -135,6 +153,13 @@ Completion signal: the RPG uses the intended Bevy-like public API without
 requiring systems to manually accept and navigate `&mut World`.
 
 ## Phase 6: diagnostics and agent documentation
+
+The `titan-diagnostics` helper crate provides tested bundle serialization and
+writing, bounded request history, metadata summaries, and image comparisons.
+It is not yet wired into runtime or CLI failures. After Phase 5, connect those
+helpers so on-failure diagnostics happen automatically, then add controlled
+test budgets and the repository-local agent skill. Do not treat this phase as
+complete merely because the standalone helpers exist.
 
 - Produce a diagnostic bundle on failure by default, configurable to always.
 - Include structured errors, relevant world state, input history, fixed tick,

@@ -66,7 +66,7 @@ readback tests are explicit:
 
 ```sh
 cargo test -p titan-render-wgpu --test offscreen -- --ignored
-TITAN_GPU_TOLERANCE=0 cargo test -p titan-render-wgpu --test offscreen -- --ignored
+TITAN_GPU_TOLERANCE=0 cargo test -p titan-render-wgpu --test offscreen completed_rpg_replay -- --ignored
 ```
 
 They cover sprite semantics and the complete RPG replay. The RPG readback has
