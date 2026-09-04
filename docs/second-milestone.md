@@ -2,8 +2,9 @@
 
 ## Current status
 
-Implementation and independent verification are complete; playable user review
-is pending. Start with the [arena play instructions](../games/arena/README.md).
+Accepted on 2026-09-05. The user played both native and browser versions and
+confirmed that both work well. Implementation, independent verification and
+playable user review are complete. Start with the [arena play instructions](../games/arena/README.md).
 The [starter verification](starter-verification.md),
 [independent build and failed-attempt diagnosis](arena-exercise.md),
 [fresh arena verification](arena-verification.md), and

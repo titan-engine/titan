@@ -54,7 +54,7 @@
   ],
   "root_gates_result": "passed",
   "ci": "coverage added; new commits not pushed/run on GitHub",
-  "user_play_review": "pending",
+  "user_play_review": "accepted",
   "macos_bundles": {
     "external_copies": [
       "starter passed",
@@ -63,5 +63,10 @@
     "relocated_bundle_executables": "passed",
     "computer_use_native_arena": "window discovery, screenshot, restart and close passed",
     "ci": "macOS bundle job added; remote execution pending"
-  }
+  },
+  "user_play_review_date": "2026-09-05",
+  "user_play_review_targets": [
+    "native",
+    "browser"
+  ]
 }
