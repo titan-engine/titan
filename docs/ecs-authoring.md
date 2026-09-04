@@ -84,9 +84,9 @@ their bundles become visible only when commands are applied.
 `Bundle` is sealed. Reusable constructors should return tuples or `impl Bundle`;
 a custom bundle derive is not required.
 
-## Migration
+## Exclusive systems and errors
 
-Exclusive functions continue working. Exclusive closures now require an explicit
+Exclusive functions are supported. Exclusive closures require an explicit
 argument type so Rust can distinguish their signature from typed parameters:
 
 ```rust
@@ -98,18 +98,17 @@ app.add_systems(FixedUpdate, |world: &mut World| {
 });
 ```
 
-`try_advance_fixed` and `apply_deferred` now return `Vec<AppError>` on failure;
-match `AppError::Deferred` for the previous deferred-command error payload.
-Existing `spawn()`, `insert(entity, component)`, and
-`Commands::spawn_with(component)` calls continue working. Replace repeated
-insertions with `spawn_with((first, second))` or
+`try_advance_fixed` and `apply_deferred` return `Vec<AppError>` on failure;
+match `AppError::Deferred` for deferred-command failures.
+`spawn()`, `insert(entity, component)`, and `Commands::spawn_with(component)`
+support individual components. Use `spawn_with((first, second))` or
 `insert_bundle(entity, (first, second))` when previous component values are not
 needed. A one-element tuple requires a trailing comma: `(component,)`.
-Iterator-based mutable joins remain a future addition.
+Mutable joins use scoped callbacks, not iterators.
 
 ## RPG example
 
-All fixed-update systems now declare typed access. Scheduled input is an existing
+All RPG fixed-update systems declare typed access. Scheduled input is an existing
 resource that becomes enabled on the first accepted protocol input; it otherwise
 leaves interactive and direct replay input untouched. Shard collection and shrine
 activation are separate systems, with structural changes visible at the schedule's

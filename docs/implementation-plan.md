@@ -1,235 +1,92 @@
 # Implementation plan
 
-This is the current execution plan for reaching Titan's first milestone. It is
-a living roadmap, not an architectural history. Update it when priorities or
-the current implementation change; Git retains earlier versions.
+The active objective is [milestone 2: build a second game from the starter](second-milestone.md).
+The procedural RPG milestone is accepted, including the sunlit-meadow result.
+This file contains pending execution work; completed plans live in Git.
 
-## Current foundation
+## Immediate next task: establish the starter boundary
 
-Titan currently has:
+Audit the RPG's setup, native runners, browser adapter, capture hooks, and build
+scripts. Identify which pieces are reusable engine/host setup and which encode
+RPG rules. Create the smallest runnable starter that uses Titan's public APIs
+without importing `examples/support/procedural_rpg.rs`.
 
-- a custom ECS with generational entities and sparse-set component storage;
-- component derives, basic metadata, optional names, and typed tuple queries;
-- access-validated `Query`, `Res`, `ResMut`, and `Commands` system parameters,
-  sequential system metadata, sorted query callbacks, tuple bundles, and explicit deferred nodes;
-- deferred structural commands applied at deterministic schedule boundaries;
-- ordered application schedules, plugins, resources, and fixed-tick execution;
-- immutable renderer-neutral 2D snapshots, an exact GPU-free software renderer,
-  and a wgpu sprite backend with native and browser interactive runners;
-- deterministic logical input frames and replay recordings;
-- a procedural 2D RPG example with generated pixel art, a small shard quest,
-  semantic assertions, and an exact rendered-image checksum;
-- transport-neutral structured inspection request and response types;
-- in-process capabilities, status, entity inspection, controlled stepping, typed
-  game commands, logical input injection, and software capture hooks;
-- a CLI with human-readable and JSON output for checking, testing, and running
-  examples; and
-- authenticated native loopback transport, project-local discovery, and CLI
-  attachment to the paused headless RPG;
-- a WASM protocol adapter and browser inspector with explicit control opt-in;
-- automatic native runtime/CLI failure bundles, bounded history, API summaries,
-  image comparisons, and controlled execution budgets; and
-- native and WebAssembly CI checks, including a separate-process control loop.
+Prefer a checked-in starter and a documented copy/build workflow. Add a generator
+command or another crate only if the first consumer demonstrates a need. Keep
+working examples available throughout extraction.
 
-## Proven vertical objective
+Completion: a copied starter builds in a separate directory, runs a minimal
+scene headlessly and interactively on native and browser targets, and has no
+shard, shrine, RPG action, or RPG asset dependencies.
 
-The procedural RPG now supports this complete agent-facing control loop:
+## Make the starter usable from repository-local guidance
 
-```text
-launch headless game
-    -> discover and attach
-    -> inspect capabilities and named entities
-    -> inject or replay input
-    -> advance exact fixed ticks
-    -> invoke a game-defined command
-    -> capture a software-rendered frame
-    -> return structured results and artifacts
-```
+Document dependency setup, where game code belongs, commands for each target,
+and how to expose input, named entities, commands, validated fields, captures,
+and diagnostics. Reuse the current protocol and CLI; identify any host adapters
+that still require game-specific glue explicitly.
 
-Preserve this tested control loop while broadening the renderer or game. It
-directly tests Titan's defining workflow.
+Give the starter a small controlled smoke test and include it in CI. Keep
+instructions short and executable from a fresh checkout. Update the workflow
+skill to distinguish the generic starter from the RPG regression example once
+the starter exists; do not document unimplemented commands as available.
 
-## Phase 1: complete in-process inspection
+Completion: the documented commands launch a clean starter, discover its runtime,
+step it, inspect it, capture it, and stop it within bounded execution limits.
 
-Completed: the procedural RPG acceptance test now exercises this sequence
-through protocol requests, including the original exact capture checksum.
-See [in-process inspection](inspection.md) for adapter and failure semantics.
+## Build the arena game with an independent agent
 
-- Register command metadata and typed handlers.
-- List commands deterministically.
-- Invoke commands with structured arguments at the inspection safe point.
-- Increment state revision only after successful mutations or commands.
-- Add an RPG command such as resetting the quest or spawning a shard.
-- Surface deferred ECS command failures through structured protocol errors.
-- Register logical input injection and software-frame capture hooks.
-- Test the entire request sequence without sockets or subprocesses first.
+Give a fresh agent the milestone's game brief, starter, and repository-local
+documentation, without the RPG implementation history or advance explanations
+of anticipated gaps. Let it inspect public engine source when necessary, but
+record when documentation was insufficient. The game must use its own components,
+resources, systems, input definitions, and generated assets.
 
-Completion signal: an in-process test can inspect the RPG, replay its route,
-activate the shrine, and retrieve a capture result using protocol requests only.
+Record concrete obstacles and the commands, failures, and artifacts that exposed
+them. Distinguish game bugs, missing documentation, reusable host setup, and
+engine limitations. A successful build achieved through undocumented assistance
+is not sufficient evidence that the starter is usable.
 
-## Phase 2: native discovery, transport, and CLI attachment
+Completion: the arena game can be played on native and browser targets and driven
+headlessly through the same inspection protocol, with deterministic replay and
+state assertions.
 
-Completed for macOS and Linux. `python3 scripts/test-control-loop.py` drives
-the headless RPG through separate CLI processes and verifies replay, inspection,
-command invocation, exact capture, structured failures, and clean shutdown.
+## Fix demonstrated gaps and repeat the exercise
 
-- Put transport requests into a bounded queue; transport code must never access
-  the ECS world directly.
-- Drain requests only at explicit deterministic safe points.
-- Add a loopback-only native HTTP/JSON adapter.
-- Allocate an ephemeral port and a random bearer token for each run.
-- Write owner-only per-instance registration files containing project identity,
-  process identity, endpoint, protocol version, mode, and token.
-- Ignore or clean stale registrations and report ambiguous matches explicitly.
-- Add CLI commands for capabilities, status, entities, stepping, input,
-  invocation, and capture.
-- Keep JSON stdout to exactly one structured response; send progress to stderr.
-- Test discovery, authentication, schema mismatch, timeouts, full queues, and
-  clean runtime shutdown.
+Prioritize issues that prevented or confused the independent build. Keep gameplay
+rules in the game; move a helper into the engine only when a reusable responsibility
+is clear. Collisions, optional queries, richer metadata, and camera support are
+candidates, not a preapproved feature backlog.
 
-Completion signal: one terminal launches the headless RPG and another can
-discover it and complete the vertical control loop using the `titan` CLI.
+Correct the relevant APIs or docs, then have a fresh agent verify the corrected
+workflow. Add regression coverage for demonstrated engine defects. Preserve both
+games and their independent replay expectations.
 
-## Phase 3: browser inspection bridge
+Completion: the final verification succeeds with documented steps and no private
+RPG dependencies. Record the remaining limitations honestly, with no unresolved
+blockers to the milestone's acceptance criteria.
 
-Completed: the shared RPG runs through the WASM protocol adapter with explicit
-control opt-in, PNG capture, and a capability-driven browser inspector. The
-actual WASM control loop and same-origin bridge checks run in CI; the browser
-UI has also been exercised through the reference route.
+## Close the milestone
 
-- Expose the same typed protocol handler through a WASM/in-page message bridge.
-- Build a minimal browser inspector that discovers capabilities rather than
-  assuming them.
-- Keep browser mutation explicitly enabled and same-origin by default.
-- Add an optional outgoing connection to a Titan development host only when a
-  browser game must be controlled by the native CLI.
+Capture native/browser play evidence, headless replay results, one useful failure
+bundle, and an agent iteration that diagnoses and fixes a failed attempt. Link
+that evidence from the milestone document, request user review of the playable
+result, and choose the next objective from the observed gaps. Remove completed
+execution sections from this plan instead of accumulating historical checklists.
 
-Completion signal: the protocol-level acceptance sequence works against a WASM
-game without changing its request or response model.
+## Constraints and quality gates
 
-## Phase 4: interactive rendering
+Preserve the accepted RPG behavior and software checksum `190a92085def5677` for
+changes unrelated to its visuals. Keep discovery authentication, browser control
+opt-in, field validation, deterministic safe points, and bounded diagnostics.
+Do not silently present transport timeouts as cancellation of running systems.
 
-Completed: immutable extraction and real GPU textured sprites drive both native
-and browser interactive players. The native runner and actual browser canvas
-have completed the reference route. Metal offscreen readbacks on both unorm and
-sRGB targets match the exact software checksum. See [rendering](rendering.md).
+No speculative editor, 3D, networking, scene format, asset pipeline, parallel
+executor, or broad reflection redesign is part of this milestone. Use the fixed
+arena view unless the game demonstrates a camera requirement. Keep current
+platform limitations documented rather than expanding platform scope.
 
-- Add an immutable, deterministic render-extraction boundary after fixed ticks.
-- Implement a `wgpu` 2D backend consuming the same frames and CPU image assets
-  as the software renderer.
-- Add a `winit` native runner without coupling its event loop to `App`.
-- Add a WebAssembly canvas runner for the same game builder.
-- Map native and browser events to logical actions at fixed-tick boundaries.
-- Treat software captures as exact reference output and GPU captures as
-  integration evidence with configurable perceptual tolerance.
-
-Completion signal: the procedural RPG is playable natively and in a browser,
-while its headless replay continues producing the same semantic result and
-reference image.
-
-## Phase 5: ECS authoring ergonomics
-
-Completed. Typed parameters and tuple query callbacks through arity four,
-registration-time access validation, sequential metadata, explicit deferred
-nodes, sorted traversal, and nested tuple bundles through arity twelve are
-implemented. All RPG fixed-update systems use typed parameters.
-See [ECS authoring](ecs-authoring.md) for usage and migration notes.
-
-Setup and immutable extraction retain direct world access for clarity.
-The current meadow replay capture checksum is `190a92085def5677`. Query traversal
-uses scoped callbacks rather than mutable iterators.
-
-- Add typed `Query`, `Res`, `ResMut`, and `Commands` system parameters.
-- Detect conflicting component and resource access before systems execute.
-- Generate tuple queries and system parameters to a practical fixed arity.
-- Keep the initial executor sequential while recording access metadata needed
-  by a future parallel scheduler.
-- Add an explicit `apply_deferred` schedule node.
-- Add bundles so spawning a normal game entity is concise.
-- Add a deterministic sorted-by-entity iteration option for algorithms that
-  require canonical ordering.
-
-Completion signal: the RPG uses the intended Bevy-like public API without
-requiring systems to manually accept and navigate `&mut World`.
-
-## Phase 6: diagnostics and agent documentation
-
-Implemented for native inspection and CLI workflows. `DiagnosticInspector`
-collects failure bundles automatically in the paused RPG serve loop, including
-bounded request/input history, entity and game state, timings, registered API
-metadata, and best-effort PNG captures. The CLI preserves runtime bundles and
-writes local/process diagnostics when needed. Policies support on-failure,
-always, and never. See the [diagnostics crate](../crates/titan-diagnostics/README.md)
-and [CLI documentation](cli.md).
-
-Controlled stepping has frame limits and native cooperative wall-clock limits;
-Cargo test/example processes have bounded output and wall-clock termination.
-The [repository-local workflow skill](../.agents/skills/titan-workflow/SKILL.md)
-provides compact guidance. Automatic browser bundle export and attaching bundles
-to arbitrary direct Rust test panics remain outside the native integration;
-the portable data/history/image helpers are available to those hosts.
-
-- Produce a diagnostic bundle on failure by default, configurable to always.
-- Include structured errors, relevant world state, input history, fixed tick,
-  state revision, logs, timings, and captures.
-- Generate compact local API summaries from component and command metadata.
-- Add a project-local agent skill focused on the Titan CLI workflow.
-- Add frame-budget and wall-clock timeout support to controlled tests.
-- Add exact and perceptual image comparison helpers.
-
-Completion signal: an agent can diagnose a failed feature attempt using only
-repository-local documentation and the generated diagnostic bundle.
-
-## Remaining milestone acceptance
-
-The six implementation phases establish the native agent control loop; they do
-not by themselves satisfy every item in `first-milestone.md`.
-
-- Explicit typed field adapters now expose readable values and writable metadata.
-  The RPG registers bounded tile coordinates; native writes require
-  `--allow-mutation`, browser writes require control opt-in. CLI and protocol
-  tests cover valid edits and rejected edits without advancing fixed time.
-  Broad reflection and derive-generated serialization remain deferred.
-- The recorded sunlit-meadow iteration now includes real before/after captures,
-  semantic checks and exact native GPU evidence. See [the iteration record](art-iteration/README.md).
-  The user chose the meadow concept; final captures await their aesthetic review.
-- The fixed whole-map view serves this small slice; a scrolling camera is deferred
-  until a concrete larger game area needs it.
-
-## Next decision and verification evidence
-
-The approved sunlit-meadow direction has been implemented and captured. Review
-the [before/after evidence](art-iteration/index.html) before choosing a subsequent
-engine or game milestone. No further renderer expansion is required for this
-small demo. The current implementation has exercised the planned control loop,
-authoring, diagnostics, field editing, and a recorded visual iteration.
-
-The art iteration passed formatting, workspace tests, strict Clippy, WASM target
-checks, native separate-process controls, actual WASM controls, and browser bridge
-tests. Native GPU readbacks on both unorm and sRGB outputs match the software
-reference `190a92085def5677` with zero tolerance. Historical baseline captures
-retain their original checksum in the iteration record.
-
-## Deliberately deferred
-
-Do not expand into these areas until the vertical objective works:
-
-- 3D rendering;
-- a general-purpose editor;
-- hot code reload;
-- multiplayer and rollback networking;
-- multithreaded system execution;
-- mobile and console targets;
-- a general scene format;
-- a complete imported-asset pipeline; and
-- broad RPG mechanics.
-
-The architecture should leave room for these features, but speculative support
-must not slow down validation of the agent iteration loop.
-
-## Ongoing quality gate
-
-Every increment should leave the following green:
+Each implementation increment must pass:
 
 ```sh
 cargo fmt --all --check
@@ -238,7 +95,18 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 ```
 
-Examples are tested against the current engine revision. Breaking APIs and
-formats are acceptable during this phase, but the current repository must
-remain internally consistent and especially impactful changes should include a
-concise migration note.
+For shared host, protocol, input, or game changes, also run the existing native
+and actual-WASM control loops:
+
+```sh
+python3 scripts/test-control-loop.py
+python3 scripts/build-browser.py
+node scripts/test-browser.mjs
+node --test web/inspector/bridge.test.mjs
+```
+
+Extend CI to build and test the starter and arena targets when introduced. Run
+native GPU readback and inspect the browser canvas when rendering changes.
+Software images are exact references; GPU comparisons are integration evidence.
+Commit small coherent increments, keep current examples compiling, and document
+material API migrations alongside the affected usage guide.

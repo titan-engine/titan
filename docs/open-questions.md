@@ -1,66 +1,41 @@
-# Open design questions
+# Open questions for milestone 2
 
-These are intentionally unresolved. They should be answered through focused
-design work or small prototypes before their answers become expensive to
-change.
+These questions guide the starter and independent arena-game exercise. Resolve
+them with the smallest working consumer, then move the resulting behavior into
+its usage documentation and remove the answered question. The execution order
+is in the [implementation plan](implementation-plan.md).
 
-## Established choices
+## Reusable setup
 
-The first slice uses a deterministic generated tile map, three shard pickups,
-and shrine activation. ECS storage is sparse-set with generational entities;
-execution is sequential with validated typed access and deferred structural
-commands. Native inspection uses authenticated loopback HTTP/JSON and local
-registration files. Browser inspection uses a WASM adapter and same-origin
-message bridge. Software captures are exact references; native/browser GPU
-rendering consumes the same immutable frames. See the implementation plan and
-focused docs for current APIs and guarantees.
+- What is the smallest public boundary between game construction, logical input,
+  render extraction, and native/browser host setup?
+- Which current runner or build-script assumptions are tied to the RPG, and which
+  can be shared without introducing an oversized framework?
+- How should a copied starter declare its local or pinned Titan dependency and
+  build its browser entry point without assuming the engine workspace layout?
 
-## First game slice and visual acceptance
+## Game authoring
 
-- The sunlit-meadow direction is implemented. Does the final captured result
-  meet the demo's visual target, or need another refinement?
-- What objective semantic checks and human visual review should accompany that
-  before/after iteration?
-- Which future game slice would justify a scrolling camera and larger area?
-  The current whole-map view is sufficient for the small shard quest.
+- Do arena movement, pursuit, spawning, and collision systems fit the existing
+  typed parameters and queries? If not, what exact missing operation blocks them?
+- Which collision helpers, if any, merit reuse after the first game-local version?
+- What health, timing, and outcome presentation can use existing rendering
+  facilities, and what minimal addition is justified if they are insufficient?
 
-## ECS and execution evolution
+## Inspection and diagnosis
 
-- When does profiling justify archetypal/hybrid storage or parallel execution?
-- How will a future parallel scheduler preserve or deliberately relax canonical
-  ordering guarantees?
-- What state belongs in snapshots, and how should opaque resources participate?
-- Should optional resource/query parameters or wider query arity come next once
-  a concrete game needs them?
+- Which arena values and commands are needed to diagnose failures, and where does
+  manual field/metadata registration become a demonstrated authoring obstacle?
+- Can the independent agent discover all build, run, replay, and diagnostic steps
+  from local guidance without explanations specific to the RPG?
+- Are the existing request history and execution budgets sufficient for the arena
+  scenarios, including failures? Which missing evidence actually prevents a fix?
 
-## Reflection and serialization
+## Validation and iteration cost
 
-- Which reflection capabilities are mandatory for a derived component?
-- Is serialization a separate derive/capability from inspection?
-- How are custom field editors, validation, units, and ranges represented?
-- How are component schemas exposed compactly enough for an agent context
-  window without inventing a mandatory game manifest?
-
-## Runtime protocol evolution
-
-- Should browser hosts export diagnostic bundles automatically, and through which
-  download/development-host mechanism?
-- When is an outgoing browser-to-native development connection needed?
-- Which workloads require interruptible or worker-isolated execution beyond
-  cooperative native tick deadlines and browser frame limits?
-
-## Crates and dependencies
-
-- What dependency maintenance and licensing criteria are mandatory?
-- Which `wgpu` abstractions should be exposed or hidden by the first renderer?
-
-## Quality policy
-
-- Which additional Clippy lint policies, beyond the current denied warnings,
-  would catch demonstrated engine-specific defects?
-- What are the initial build-time, test-time, and runtime performance budgets?
-- Should performance assertions become part of CI, and on which stable runners
-  can they be meaningful?
-- What release/versioning convention best communicates frequent breaking
-  revisions before a stable public release?
-
+- What deterministic scenarios cover both victory and defeat without making the
+  tests slow or brittle?
+- What are the measured starter build and game iteration times, and where is the
+  largest avoidable delay? Add performance policy only after measuring it.
+- After the independent exercise, which demonstrated limitation deserves the next
+  milestone rather than another isolated workaround?

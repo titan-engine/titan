@@ -20,8 +20,7 @@ view after reviewing the first capture.
 
 Agent visual review checked startup and completion: the route is visible,
 collectibles contrast with the ground, scenery frames the play area, and the
-player remains readable at the shrine. The user approved the meadow concept;
-these final game captures are available for their review.
+player remains readable at the shrine. The user approved both the meadow direction and the completed demo.
 
 Scenery is render-only and does not imply collision. Movement remains legal
 across the full map. The existing fixed whole-map view is sufficient for this

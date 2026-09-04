@@ -73,12 +73,11 @@ large undifferentiated manual.
 
 ### Inspectable and controllable runtime
 
-A running game should expose a public, documented local protocol. The likely
-initial transport is structured messages over HTTP and/or WebSocket, with a
-typed in-code request model underneath. CLI flags and other query syntaxes can
-map to that same representation.
+A running game should expose a public, documented local protocol. Native
+inspection uses authenticated loopback HTTP/JSON, with a typed in-code request
+model shared with the browser adapter. CLI flags map to that representation.
 
-The runtime should eventually expose:
+The intended inspection surface includes:
 
 - registered component and resource types and their available metadata;
 - active entities, optional human-readable names, and component values;
@@ -141,35 +140,20 @@ not speculatively for every possible subsystem.
 
 ### Custom ECS
 
-Titan will build a custom entity-component-system implementation. The initial
-user experience can be Bevy-like:
+Titan uses a custom entity-component-system implementation with Bevy-like
+Rust authoring: derived components, typed queries and resources, deferred
+structural commands, optional entity names, and customizable schedules.
 
-```rust
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
-        .add_systems(Update, movement)
-        .run();
-}
-```
-
-Initial direction:
-
-- components are ordinary Rust types, normally registered with a derive;
-- systems use typed queries and resources;
-- structural changes are command-buffered by default;
-- an explicit synchronization point may apply changes early at a known cost;
-- important entities may have optional stable human-readable names or paths;
-- scheduling is customizable at the library level;
-- the high-level framework supplies conventional stages;
-- systems can run in parallel when their declared access permits it; and
-- the determinism-versus-throughput policy is configurable.
+The executor is sequential. Access metadata and explicit deferred boundaries
+provide a basis for future parallel scheduling when a concrete workload warrants
+it. Canonical traversal is available for algorithms that need deterministic
+ordering. Any future throughput policy must make its determinism tradeoffs
+explicit.
 
 The ECS should remain useful for both very small games and large worlds with
 large entity counts. Snapshot and rollback support is strategically important
-for debugging, replay, and multiplayer, although it need not be complete in the
-first milestone.
+for debugging, replay, and multiplayer. Expand them in response to concrete
+debugging or game requirements.
 
 ### Reflection
 
@@ -186,7 +170,7 @@ every type.
 ### Rendering and assets
 
 Titan supports both 2D and 3D in its long-term design, with 2D implemented
-first. `wgpu` is the expected initial graphics foundation. Native Metal and
+first. `wgpu` is the current GPU graphics foundation. Direct native Metal and
 Vulkan backends may be explored later. High-level rendering APIs should cover
 normal use while lower-level access remains possible.
 

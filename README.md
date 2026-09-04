@@ -3,15 +3,15 @@
 Titan is an experimental, Rust-first game engine designed for a workflow in
 which human programmers direct AI agents to build and iterate on games.
 
-The project is in early implementation. The initial goal is to prove that
-an agent can create a small procedural 2D RPG, run the same game interactively
-or headlessly, inspect and control it through structured tooling, and verify its
-work without depending on a graphical editor.
+The procedural RPG milestone is complete: the same game runs interactively and
+headlessly, supports structured inspection and control, and has verified visual
+iteration evidence. The current goal is to make that workflow reusable through
+a minimal starter and an independently built arena-survival demo.
 
 ## Project documents
 
 - [Vision and principles](docs/vision.md)
-- [First milestone](docs/first-milestone.md)
+- [Current milestone: starter and arena demo](docs/second-milestone.md)
 - [Open design questions](docs/open-questions.md)
 - [CLI workflow](docs/cli.md)
 - [In-process inspection](docs/inspection.md)
