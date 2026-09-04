@@ -17,7 +17,8 @@ Titan currently has:
 - a procedural 2D RPG example with generated pixel art, a small shard quest,
   semantic assertions, and an exact rendered-image checksum;
 - transport-neutral structured inspection request and response types;
-- in-process capabilities, status, entity inspection, and controlled stepping;
+- in-process capabilities, status, entity inspection, controlled stepping, typed
+  game commands, logical input injection, and software capture hooks;
 - a CLI with human-readable and JSON output for checking, testing, and running
   examples; and
 - native and WebAssembly CI checks.
@@ -42,7 +43,9 @@ features. It directly tests Titan's defining workflow.
 
 ## Phase 1: complete in-process inspection
 
-Immediate resume task: add game-defined command registration to `Inspector`.
+Completed: the procedural RPG acceptance test now exercises this sequence
+through protocol requests, including the original exact capture checksum.
+See [in-process inspection](inspection.md) for adapter and failure semantics.
 
 - Register command metadata and typed handlers.
 - List commands deterministically.
@@ -57,6 +60,9 @@ Completion signal: an in-process test can inspect the RPG, replay its route,
 activate the shrine, and retrieve a capture result using protocol requests only.
 
 ## Phase 2: native discovery, transport, and CLI attachment
+
+Current task: connect the native adapter, discovery, and CLI to a long-running
+headless RPG, then run the same control loop across processes.
 
 - Put transport requests into a bounded queue; transport code must never access
   the ECS world directly.
