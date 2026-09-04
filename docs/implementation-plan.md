@@ -11,7 +11,7 @@ Titan currently has:
 - a custom ECS with generational entities and sparse-set component storage;
 - component derives, basic metadata, optional names, and typed tuple queries;
 - access-validated `Query`, `Res`, `ResMut`, and `Commands` system parameters,
-  sequential system metadata, sorted query callbacks, and explicit deferred nodes;
+  sequential system metadata, sorted query callbacks, tuple bundles, and explicit deferred nodes;
 - deferred structural commands applied at deterministic schedule boundaries;
 - ordered application schedules, plugins, resources, and fixed-tick execution;
 - immutable renderer-neutral 2D snapshots, an exact GPU-free software renderer,
@@ -129,15 +129,15 @@ reference image.
 
 ## Phase 5: ECS authoring ergonomics
 
-In progress. Typed parameters and tuple query callbacks through arity four,
+Completed. Typed parameters and tuple query callbacks through arity four,
 registration-time access validation, sequential metadata, explicit deferred
-nodes, and sorted traversal are implemented. RPG movement uses the new API.
+nodes, sorted traversal, and nested tuple bundles through arity twelve are
+implemented. All RPG fixed-update systems use typed parameters.
 See [ECS authoring](ecs-authoring.md) for usage and migration notes.
 
-**Immediate resume task: implement tuple bundles, then migrate the remaining
-RPG systems to typed parameters.** Keep setup or extraction exclusive only
-where it improves clarity. Preserve the current replay and capture checksums.
-Query traversal currently uses scoped callbacks rather than mutable iterators.
+Setup and immutable extraction retain direct world access for clarity.
+The replay and capture checksum remains `98618cd721c5b52d`. Query traversal
+uses scoped callbacks rather than mutable iterators.
 
 - Add typed `Query`, `Res`, `ResMut`, and `Commands` system parameters.
 - Detect conflicting component and resource access before systems execute.

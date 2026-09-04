@@ -106,3 +106,12 @@ insertions with `spawn_with((first, second))` or
 `insert_bundle(entity, (first, second))` when previous component values are not
 needed. A one-element tuple requires a trailing comma: `(component,)`.
 Iterator-based mutable joins remain a future addition.
+
+## RPG example
+
+All fixed-update systems now declare typed access. Scheduled input is an existing
+resource that becomes enabled on the first accepted protocol input; it otherwise
+leaves interactive and direct replay input untouched. Shard collection and shrine
+activation are separate systems, with structural changes visible at the schedule's
+final deferred boundary. Setup and immutable render extraction keep direct world
+access for clarity. Spawning uses `(Position, marker, Name)` bundles.
