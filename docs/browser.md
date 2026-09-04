@@ -20,13 +20,21 @@ checks; no frontend package manager is required.
 The inspector starts with a paused, read-only game. It discovers capabilities,
 shows named entities and command metadata, and displays software captures.
 Explicitly enabling controls starts a fresh controlled game and exposes
-stepping, logical input, and registered commands. Reloading returns to read-only
-mode. Field mutation remains limited by the engine's reflection support.
+stepping, logical input, registered commands, and explicitly registered writable
+component fields. Reloading returns to read-only mode. The RPG exposes integer
+`Position.x` and `Position.y` within map bounds. Discover the fully qualified
+component name through entity details before submitting a `set_field` request;
+Rust type names can differ between browser and native builds. Successful field
+writes change the revision and subsequent capture without advancing a tick.
+Invalid types or out-of-range values leave state and revision unchanged.
 
 `BrowserRuntime(false)` rejects `step`, `invoke`, `inject_input`, and `set_field`
 with structured errors. This adapter policy is stronger than the engine's
 field-mutation flag: registering a game command alone does not grant browser
 control. The read-only capabilities list omits all write operations.
+`BrowserRuntime(true)` enables the field-mutation flag alongside the other
+controls. It exposes only fields explicitly registered by the game; this is not
+unrestricted component reflection.
 
 Captures are PNG data URIs in the existing `CaptureResult.artifact` field.
 The checksum is computed from the uncompressed RGBA image, so native PPM and
@@ -65,7 +73,8 @@ node --test web/inspector/bridge.test.mjs
 
 The first test executes generated WASM under Node and checks the full protocol
 sequence, read-only rejection, exact replay checksum, PNG output, command
-changes, and schema errors. The second checks message source/origin filtering
+changes, valid field writes without stepping, invalid field value rejection,
+and schema errors. The second checks message source/origin filtering
 and response correlation. Native host tests also decode the PNG and verify its
 RGBA checksum. CI runs these alongside the native separate-process acceptance.
 

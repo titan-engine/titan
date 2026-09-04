@@ -33,9 +33,8 @@ impl BrowserRuntime {
         app.update_schedule(Startup);
         let mut config = InspectionConfig::controlled("procedural-rpg-browser", "procedural-rpg");
         config.run_mode = RunMode::Browser;
-        // Field mutation remains unavailable; control opt-in enables registered
-        // game operations separately from reflected field writes.
-        config.mutation_enabled = false;
+        // The explicit control opt-in also permits registered component fields.
+        config.mutation_enabled = enable_control;
         let inspector = game::inspector_with_capture(config, capture);
         Self {
             app,
@@ -252,8 +251,8 @@ mod tests {
         else {
             panic!("capabilities");
         };
-        assert!(!capabilities.mutation_enabled);
-        assert!(!capabilities.operations.contains(&Operation::Mutate));
+        assert!(capabilities.mutation_enabled);
+        assert!(capabilities.operations.contains(&Operation::Mutate));
         for operation in [Operation::Step, Operation::Invoke, Operation::InjectInput] {
             assert!(capabilities.operations.contains(&operation));
         }
