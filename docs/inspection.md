@@ -73,7 +73,7 @@ runtime request. Inspect state before retrying a timed-out mutation.
 
 ## Failures and revisions
 
-Successful step, command, and input requests advance the inspector's revision.
+Successful field edit, step, command, and input requests advance the inspector's revision.
 Read requests and rejected requests leave it unchanged. A revision tracks
 successful inspection operations; it is not a world checksum or transaction ID.
 
@@ -99,3 +99,58 @@ cargo test --example procedural_rpg
 ```
 
 The original direct replay remains an independent exact-image reference.
+
+## Explicit component fields
+
+Games expose individual fields with `Inspector::register_field::<Component, Value>`.
+This opt-in API does not require component serialization or derived reflection:
+
+```rust
+# use titan::{Component, inspection::{InspectionConfig, Inspector}};
+# use titan_protocol::FieldMetadata;
+# #[derive(Component)] struct Position { x: i32 }
+# let mut inspector = Inspector::new(InspectionConfig::controlled("game", "project"));
+inspector.register_field::<Position, i32>(
+    "x",
+    FieldMetadata {
+        type_name: "i32".into(), description: "Horizontal tile".into(),
+        writable: true, minimum: Some(0.0), maximum: Some(19.0),
+        unit: Some("tile".into()),
+    },
+    |position| position.x,
+    |_position, _value| Ok(()),
+    |position, value| position.x = value,
+)?;
+# Ok::<(), titan_protocol::ProtocolError>(())
+```
+
+The component key is its full Rust type name, matching entity inspection.
+`EntityDetails.components[component]` contains an object of registered field
+values; unregistered component types remain `null`. The optional
+`component_fields[component][field]` object describes each exposed field's type,
+bounds, unit, and writability. `component_field_metadata()` also lists registered
+fields for components with no current instances, so diagnostic API summaries
+remain useful after entities are removed.
+
+`register_read_only_field::<Component, Value>(name, metadata, getter)` exposes a
+value without a setter. Registration normalizes `metadata.writable` to match the
+API used. `type_name` is a caller-supplied display label; the generic `Value`
+type controls JSON decoding. Duplicate or blank field names and nonfinite or reversed numeric bounds
+are rejected without replacing an existing registration.
+
+`SetField` first checks `InspectionConfig.mutation_enabled`, which is false by
+default. It then validates the full entity generation and component presence,
+finds the writable field, deserializes its typed value, checks declared numeric
+bounds, and calls the immutable validator. Only then does the infallible setter
+receive mutable component access. Use the validator for additional game rules
+and the setter only to assign the validated field. Rejected edits leave the
+component, fixed tick, and revision unchanged; successful edits increment the
+revision once and return `applied_frame` without advancing the clock. Field edits
+do not flush deferred commands or run schedules.
+
+Disabled mutation returns `mutation_disabled` before examining the target.
+Missing entities or components return `not_found`; unregistered or read-only
+fields return `read_only`; invalid types, bounds, or game validation return
+structured errors. `Mutate` is advertised only when mutation is enabled and at
+least one writable field is registered. Getter serialization failures return
+`internal`. Field getter/setter callbacks should not panic.

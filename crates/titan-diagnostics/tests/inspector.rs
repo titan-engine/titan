@@ -113,6 +113,20 @@ fn policy_and_failed_writes_do_not_change_game_results() {
 fn entity_snapshot_is_bounded_and_reports_truncation() {
     let root = Temp::new();
     let (mut app, mut inspector) = setup();
+    inspector
+        .register_read_only_field::<Name, String>(
+            "text",
+            titan_protocol::FieldMetadata {
+                type_name: "String".into(),
+                description: "Entity label".into(),
+                writable: true,
+                minimum: None,
+                maximum: None,
+                unit: None,
+            },
+            |name| name.as_str().to_owned(),
+        )
+        .unwrap();
     let removed = app.world_mut().spawn();
     app.world_mut()
         .insert(removed, Name::new("removed"))
@@ -137,12 +151,12 @@ fn entity_snapshot_is_bounded_and_reports_truncation() {
     );
     assert_eq!(bundle.world_state["entity_count"], 1001);
     assert_eq!(bundle.world_state["truncated"], true);
-    assert!(
-        bundle
-            .api_summary
-            .unwrap()
-            .components
-            .iter()
-            .any(|component| component.name.ends_with("::Name"))
-    );
+    let api = bundle.api_summary.unwrap();
+    let name = api
+        .components
+        .iter()
+        .find(|component| component.name.ends_with("::Name"))
+        .unwrap();
+    assert!(!name.fields["text"].writable);
+    assert_eq!(name.fields["text"].description, "Entity label");
 }

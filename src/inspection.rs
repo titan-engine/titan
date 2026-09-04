@@ -8,11 +8,11 @@ use std::time::Instant;
 use serde::de::DeserializeOwned;
 use titan_protocol::{
     Capabilities, CaptureResult, CommandMetadata, EntityDetails, EntityId, EntityPage,
-    EntitySummary, ErrorCode, InputValue, Operation, ProtocolError, Request, RequestEnvelope,
-    Response, ResponseEnvelope, RunMode, RuntimeStatus, SCHEMA_VERSION,
+    EntitySummary, ErrorCode, FieldMetadata, InputValue, Operation, ProtocolError, Request,
+    RequestEnvelope, Response, ResponseEnvelope, RunMode, RuntimeStatus, SCHEMA_VERSION,
 };
 
-use crate::{App, FixedTime, Name};
+use crate::{App, Component, Entity, FixedTime, Name, World};
 
 /// Runtime settings visible through inspection capabilities.
 #[derive(Clone, Debug)]
@@ -61,12 +61,58 @@ impl Default for StepBudget {
     }
 }
 
+// Preserve integer precision when comparing JSON integers against f64 metadata.
+// Metadata bounds are finite; comparing via as_f64 alone rounds integers >2^53.
+fn numeric_cmp(value: &serde_json::Value, bound: f64) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let integer_order = if let Some(integer) = value.as_i64() {
+        if bound < i64::MIN as f64 {
+            return Ordering::Greater;
+        }
+        if bound >= 9_223_372_036_854_775_808.0 {
+            return Ordering::Less;
+        }
+        integer.cmp(&(bound as i64))
+    } else if let Some(integer) = value.as_u64() {
+        if bound < 0.0 {
+            return Ordering::Greater;
+        }
+        if bound >= 18_446_744_073_709_551_616.0 {
+            return Ordering::Less;
+        }
+        integer.cmp(&(bound as u64))
+    } else {
+        return value
+            .as_f64()
+            .expect("validated numeric field")
+            .partial_cmp(&bound)
+            .expect("finite values");
+    };
+    integer_order.then_with(|| 0.0_f64.partial_cmp(&bound.fract()).expect("finite bound"))
+}
+
+fn missing_component() -> ProtocolError {
+    ProtocolError::new(
+        ErrorCode::NotFound,
+        "entity does not contain the requested component",
+    )
+}
+
 type CommandHandler =
     Box<dyn FnMut(&mut App, serde_json::Value) -> Result<(), ProtocolError> + Send>;
 type InputHandler = Box<
     dyn FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError> + Send,
 >;
 type CaptureHandler = Box<dyn FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send>;
+
+type FieldGetter = Box<dyn Fn(&World, Entity) -> Result<serde_json::Value, ProtocolError> + Send>;
+type FieldSetter =
+    Box<dyn Fn(&mut World, Entity, &serde_json::Value) -> Result<(), ProtocolError> + Send>;
+struct RegisteredField {
+    metadata: FieldMetadata,
+    getter: FieldGetter,
+    setter: Option<FieldSetter>,
+}
 
 struct RegisteredCommand {
     metadata: CommandMetadata,
@@ -83,6 +129,7 @@ pub struct Inspector {
     state_revision: u64,
     step_budget: StepBudget,
     commands: BTreeMap<String, RegisteredCommand>,
+    fields: BTreeMap<String, BTreeMap<String, RegisteredField>>,
     input_handler: Option<InputHandler>,
     capture_handler: Option<CaptureHandler>,
 }
@@ -94,9 +141,160 @@ impl Inspector {
             state_revision: 0,
             step_budget: StepBudget::DEFAULT,
             commands: BTreeMap::new(),
+            fields: BTreeMap::new(),
             input_handler: None,
             capture_handler: None,
         }
+    }
+
+    /// Exposes a component field using the component's full Rust type name.
+    /// JSON decoding, numeric metadata bounds, and the immutable validator run
+    /// before the infallible setter receives mutable component access. Validators
+    /// should enforce game invariants; setters should assign only the field.
+    /// Duplicate or blank field names and invalid numeric bounds are rejected.
+    pub fn register_field<T: Component, V: serde::Serialize + DeserializeOwned + 'static>(
+        &mut self,
+        field: impl Into<String>,
+        mut metadata: FieldMetadata,
+        getter: impl Fn(&T) -> V + Send + 'static,
+        validate: impl Fn(&T, &V) -> Result<(), ProtocolError> + Send + 'static,
+        setter: impl Fn(&mut T, V) + Send + 'static,
+    ) -> Result<&mut Self, ProtocolError> {
+        metadata.writable = true;
+        let bounds = metadata.clone();
+        self.insert_field::<T>(
+            field.into(),
+            metadata,
+            Box::new(move |world, entity| {
+                let component = world.get::<T>(entity).ok_or_else(missing_component)?;
+                serde_json::to_value(getter(component)).map_err(|error| {
+                    ProtocolError::new(
+                        ErrorCode::Internal,
+                        format!("serializing component field: {error}"),
+                    )
+                })
+            }),
+            Some(Box::new(move |world, entity, value| {
+                let component = world.get::<T>(entity).ok_or_else(missing_component)?;
+                let decoded: V = serde_json::from_value(value.clone()).map_err(|error| {
+                    ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        format!("invalid field value: {error}"),
+                    )
+                })?;
+                if bounds.minimum.is_some() || bounds.maximum.is_some() {
+                    value
+                        .as_f64()
+                        .filter(|value| value.is_finite())
+                        .ok_or_else(|| {
+                            ProtocolError::new(
+                                ErrorCode::InvalidValue,
+                                "bounded field requires a finite numeric value",
+                            )
+                        })?;
+                    if bounds
+                        .minimum
+                        .is_some_and(|minimum| numeric_cmp(value, minimum).is_lt())
+                        || bounds
+                            .maximum
+                            .is_some_and(|maximum| numeric_cmp(value, maximum).is_gt())
+                    {
+                        return Err(ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            "field value is outside its declared bounds",
+                        ));
+                    }
+                }
+                validate(component, &decoded)?;
+                setter(
+                    world.get_mut::<T>(entity).ok_or_else(missing_component)?,
+                    decoded,
+                );
+                Ok(())
+            })),
+        )
+    }
+
+    /// Exposes a read-only field; registration does not enable runtime mutation.
+    pub fn register_read_only_field<T: Component, V: serde::Serialize + 'static>(
+        &mut self,
+        field: impl Into<String>,
+        mut metadata: FieldMetadata,
+        getter: impl Fn(&T) -> V + Send + 'static,
+    ) -> Result<&mut Self, ProtocolError> {
+        metadata.writable = false;
+        self.insert_field::<T>(
+            field.into(),
+            metadata,
+            Box::new(move |world, entity| {
+                let component = world.get::<T>(entity).ok_or_else(missing_component)?;
+                serde_json::to_value(getter(component)).map_err(|error| {
+                    ProtocolError::new(
+                        ErrorCode::Internal,
+                        format!("serializing component field: {error}"),
+                    )
+                })
+            }),
+            None,
+        )
+    }
+
+    fn insert_field<T: Component>(
+        &mut self,
+        field: String,
+        metadata: FieldMetadata,
+        getter: FieldGetter,
+        setter: Option<FieldSetter>,
+    ) -> Result<&mut Self, ProtocolError> {
+        let component = std::any::type_name::<T>();
+        if field.trim().is_empty()
+            || self
+                .fields
+                .get(component)
+                .is_some_and(|fields| fields.contains_key(&field))
+        {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "component field name must be nonempty and unique",
+            ));
+        }
+        if metadata.minimum.is_some_and(|value| !value.is_finite())
+            || metadata.maximum.is_some_and(|value| !value.is_finite())
+            || metadata
+                .minimum
+                .zip(metadata.maximum)
+                .is_some_and(|(min, max)| min > max)
+        {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "field bounds must be finite and ordered",
+            ));
+        }
+        self.fields.entry(component.into()).or_default().insert(
+            field,
+            RegisteredField {
+                metadata,
+                getter,
+                setter,
+            },
+        );
+        Ok(self)
+    }
+
+    /// Explicitly registered field descriptions, including components with no instances.
+    pub fn component_field_metadata(&self) -> BTreeMap<String, BTreeMap<String, FieldMetadata>> {
+        self.fields
+            .iter()
+            .map(|(component, fields)| {
+                (
+                    component.clone(),
+                    fields
+                        .iter()
+                        .map(|(name, field)| (name.clone(), field.metadata.clone()))
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     /// Configures limits for subsequent controlled step requests.
@@ -351,11 +549,29 @@ impl Inspector {
                     .world()
                     .component_type_names(entity)
                     .into_iter()
-                    .map(|name| (name.to_owned(), serde_json::Value::Null))
-                    .collect::<BTreeMap<_, _>>();
+                    .map(|name| {
+                        let value = match self.fields.get(name) {
+                            Some(fields) => serde_json::Value::Object(
+                                fields
+                                    .iter()
+                                    .map(|(name, field)| {
+                                        Ok((name.clone(), (field.getter)(app.world(), entity)?))
+                                    })
+                                    .collect::<Result<_, ProtocolError>>()?,
+                            ),
+                            None => serde_json::Value::Null,
+                        };
+                        Ok((name.to_owned(), value))
+                    })
+                    .collect::<Result<BTreeMap<_, _>, ProtocolError>>()?;
                 Ok(Response::Entity(EntityDetails {
                     id: to_protocol_entity(entity),
                     name: app.world().get::<Name>(entity).map(|name| name.to_string()),
+                    component_fields: self
+                        .component_field_metadata()
+                        .into_iter()
+                        .filter(|(name, _)| components.contains_key(name))
+                        .collect(),
                     components,
                 }))
             }
@@ -377,10 +593,45 @@ impl Inspector {
                 ErrorCode::MutationDisabled,
                 "runtime mutation was not explicitly enabled",
             )),
-            Request::SetField { .. } => Err(ProtocolError::new(
-                ErrorCode::ReadOnly,
-                "this component does not expose writable reflected fields",
-            )),
+            Request::SetField {
+                entity,
+                component,
+                field,
+                value,
+            } => {
+                let entity = Entity::from_parts(entity.index, entity.generation);
+                if !app.world().is_alive(entity) {
+                    return Err(ProtocolError::new(
+                        ErrorCode::NotFound,
+                        "entity is not alive",
+                    ));
+                }
+                if !app
+                    .world()
+                    .component_type_names(entity)
+                    .contains(&component.as_str())
+                {
+                    return Err(missing_component());
+                }
+                let registered = self
+                    .fields
+                    .get(component)
+                    .and_then(|fields| fields.get(field))
+                    .ok_or_else(|| {
+                        ProtocolError::new(
+                            ErrorCode::ReadOnly,
+                            "component field is not registered for mutation",
+                        )
+                    })?;
+                let setter = registered.setter.as_ref().ok_or_else(|| {
+                    ProtocolError::new(ErrorCode::ReadOnly, "component field is read-only")
+                })?;
+                setter(app.world_mut(), entity, value)?;
+                self.state_revision = self.state_revision.wrapping_add(1);
+                Ok(Response::Applied {
+                    applied_frame: current_frame(app),
+                })
+            }
             Request::Commands => Ok(Response::Commands {
                 commands: self
                     .commands
@@ -448,7 +699,12 @@ impl Inspector {
         if self.config.controlled {
             operations.push(Operation::Step);
         }
-        if self.config.mutation_enabled {
+        if self.config.mutation_enabled
+            && self
+                .fields
+                .values()
+                .any(|fields| fields.values().any(|field| field.setter.is_some()))
+        {
             operations.push(Operation::Mutate);
         }
         if !self.commands.is_empty() {
@@ -1209,5 +1465,246 @@ mod tests {
                 .unwrap()
                 .ends_with("::Missing")
         );
+    }
+}
+
+#[cfg(test)]
+mod field_tests {
+    use super::*;
+    use titan_protocol::ResponseOutcome;
+    #[derive(crate::Component)]
+    struct Position {
+        x: i32,
+        limit: i32,
+    }
+    fn metadata() -> FieldMetadata {
+        FieldMetadata {
+            type_name: "i32".into(),
+            description: "horizontal tile".into(),
+            writable: false,
+            minimum: Some(0.0),
+            maximum: Some(10.0),
+            unit: Some("tile".into()),
+        }
+    }
+    fn register(inspector: &mut Inspector) {
+        inspector
+            .register_field::<Position, i32>(
+                "x",
+                metadata(),
+                |p| p.x,
+                |p, v| {
+                    if *v > p.limit {
+                        Err(ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            "beyond entity limit",
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                },
+                |p, v| p.x = v,
+            )
+            .unwrap();
+        inspector
+            .register_read_only_field::<Position, i32>("limit", metadata(), |p| p.limit)
+            .unwrap();
+    }
+    fn request(entity: Entity, field: &str, value: serde_json::Value) -> RequestEnvelope {
+        RequestEnvelope::new(
+            "set",
+            Request::SetField {
+                entity: to_protocol_entity(entity),
+                component: std::any::type_name::<Position>().into(),
+                field: field.into(),
+                value,
+            },
+        )
+    }
+    fn has_mutate(inspector: &Inspector) -> bool {
+        inspector
+            .capabilities()
+            .operations
+            .contains(&Operation::Mutate)
+    }
+    #[test]
+    fn typed_fields_reflect_metadata_and_reject_without_mutation() {
+        let mut app = App::new();
+        let entity = app.world_mut().spawn();
+        app.world_mut()
+            .insert(entity, Position { x: 1, limit: 8 })
+            .unwrap();
+        let mut config = InspectionConfig::controlled("test", "project");
+        config.mutation_enabled = true;
+        let mut inspector = Inspector::new(config);
+        assert!(!has_mutate(&inspector));
+        register(&mut inspector);
+        assert!(has_mutate(&inspector));
+        let accepted = inspector.handle(&mut app, &request(entity, "x", 5.into()));
+        assert_eq!(accepted.state_revision, 1);
+        assert_eq!(accepted.observed_frame, 0);
+        assert!(matches!(
+            accepted.outcome,
+            ResponseOutcome::Success {
+                response: Response::Applied { applied_frame: 0 }
+            }
+        ));
+        for (field, value, code) in [
+            ("x", serde_json::json!("5"), ErrorCode::InvalidValue),
+            ("x", (-1).into(), ErrorCode::InvalidValue),
+            ("x", 11.into(), ErrorCode::InvalidValue),
+            ("x", 9.into(), ErrorCode::InvalidValue),
+            ("missing", 2.into(), ErrorCode::ReadOnly),
+            ("limit", 2.into(), ErrorCode::ReadOnly),
+        ] {
+            let rejected = inspector.handle(&mut app, &request(entity, field, value));
+            assert_eq!(rejected.state_revision, 1);
+            assert_eq!(app.world().get::<Position>(entity).unwrap().x, 5);
+            assert!(
+                matches!(rejected.outcome,ResponseOutcome::Failure {error} if error.code==code)
+            );
+        }
+        let details = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "inspect",
+                Request::Entity {
+                    entity: to_protocol_entity(entity),
+                },
+            ),
+        );
+        let ResponseOutcome::Success {
+            response: Response::Entity(details),
+        } = details.outcome
+        else {
+            panic!("entity")
+        };
+        let component = std::any::type_name::<Position>();
+        assert_eq!(
+            details.components[component],
+            serde_json::json!({"x":5,"limit":8})
+        );
+        assert!(details.component_fields[component]["x"].writable);
+        assert!(!details.component_fields[component]["limit"].writable);
+        assert_eq!(details.component_fields[component]["x"].maximum, Some(10.0));
+        app.world_mut().remove::<Position>(entity);
+        let missing = inspector.handle(&mut app, &request(entity, "x", 2.into()));
+        assert!(
+            matches!(missing.outcome,ResponseOutcome::Failure {error} if error.code==ErrorCode::NotFound)
+        );
+        app.world_mut().despawn(entity);
+        let recycled = app.world_mut().spawn();
+        app.world_mut()
+            .insert(recycled, Position { x: 3, limit: 8 })
+            .unwrap();
+        let stale = inspector.handle(&mut app, &request(entity, "x", 2.into()));
+        assert!(
+            matches!(stale.outcome,ResponseOutcome::Failure {error} if error.code==ErrorCode::NotFound)
+        );
+        assert_eq!(stale.state_revision, 1);
+        assert_eq!(app.world().get::<Position>(recycled).unwrap().x, 3);
+    }
+    #[test]
+    fn bounds_preserve_integer_precision_and_fractional_ordering() {
+        use std::cmp::Ordering::*;
+        #[derive(crate::Component)]
+        struct Wide(u64);
+        let mut app = App::new();
+        let entity = app.world_mut().spawn();
+        app.world_mut().insert(entity, Wide(1)).unwrap();
+        let mut config = InspectionConfig::controlled("test", "project");
+        config.mutation_enabled = true;
+        let mut inspector = Inspector::new(config);
+        let mut bounds = metadata();
+        bounds.maximum = Some(9_007_199_254_740_992.0);
+        inspector
+            .register_field::<Wide, u64>(
+                "value",
+                bounds,
+                |wide| wide.0,
+                |_, _| Ok(()),
+                |wide, value| wide.0 = value,
+            )
+            .unwrap();
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "wide",
+                Request::SetField {
+                    entity: to_protocol_entity(entity),
+                    component: std::any::type_name::<Wide>().into(),
+                    field: "value".into(),
+                    value: serde_json::json!(9_007_199_254_740_993_u64),
+                },
+            ),
+        );
+        assert!(
+            matches!(response.outcome,ResponseOutcome::Failure {error} if error.code==ErrorCode::InvalidValue)
+        );
+        assert_eq!(response.state_revision, 0);
+        assert_eq!(app.world().get::<Wide>(entity).unwrap().0, 1);
+        for (value, bound, expected) in [
+            (
+                serde_json::json!(9_007_199_254_740_993_u64),
+                9_007_199_254_740_992.0,
+                Greater,
+            ),
+            (
+                serde_json::json!(-9_007_199_254_740_993_i64),
+                -9_007_199_254_740_992.0,
+                Less,
+            ),
+            (
+                serde_json::json!(u64::MAX),
+                18_446_744_073_709_551_616.0,
+                Less,
+            ),
+            (
+                serde_json::json!(i64::MIN),
+                -9_223_372_036_854_775_808.0,
+                Equal,
+            ),
+            (serde_json::json!(2), 2.5, Less),
+            (serde_json::json!(-2), -2.5, Greater),
+        ] {
+            assert_eq!(numeric_cmp(&value, bound), expected);
+        }
+    }
+
+    #[test]
+    fn registration_is_explicit_and_disabled_mutations_take_precedence() {
+        let mut app = App::new();
+        let mut inspector = Inspector::new(InspectionConfig::controlled("test", "project"));
+        register(&mut inspector);
+        assert!(!has_mutate(&inspector));
+        assert!(
+            inspector
+                .register_read_only_field::<Position, i32>("x", metadata(), |p| p.x)
+                .is_err()
+        );
+        assert!(
+            inspector
+                .register_read_only_field::<Position, i32>(" ", metadata(), |p| p.x)
+                .is_err()
+        );
+        let mut invalid = metadata();
+        invalid.minimum = Some(20.0);
+        assert!(
+            inspector
+                .register_read_only_field::<Position, i32>("bad", invalid, |p| p.x)
+                .is_err()
+        );
+        assert_eq!(
+            inspector.component_field_metadata()[std::any::type_name::<Position>()].len(),
+            2
+        );
+        let result = inspector.handle(
+            &mut app,
+            &request(Entity::from_parts(99, 99), "x", 2.into()),
+        );
+        assert!(
+            matches!(result.outcome,ResponseOutcome::Failure {error} if error.code==ErrorCode::MutationDisabled)
+        );
+        assert_eq!(result.state_revision, 0);
     }
 }

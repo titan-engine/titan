@@ -231,6 +231,9 @@ pub struct EntityDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub components: BTreeMap<String, Value>,
+    /// Explicitly exposed field metadata for components present on this entity.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub component_fields: BTreeMap<String, BTreeMap<String, FieldMetadata>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -350,5 +353,33 @@ mod tests {
         assert_eq!(json["state_revision"], 9);
         assert_eq!(json["status"], "failure");
         assert_eq!(json["error"]["code"], "not_controlled");
+    }
+    #[test]
+    fn entity_field_metadata_is_additive_and_round_trips() {
+        let legacy =
+            serde_json::json!({"id":{"index":0,"generation":0},"components":{"Position":null}});
+        let mut details: super::EntityDetails = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(details.component_fields.is_empty());
+        assert_eq!(serde_json::to_value(&details).unwrap(), legacy);
+        details.component_fields.insert(
+            "Position".into(),
+            std::collections::BTreeMap::from([(
+                "x".into(),
+                super::FieldMetadata {
+                    type_name: "i32".into(),
+                    description: String::new(),
+                    writable: true,
+                    minimum: Some(0.0),
+                    maximum: Some(19.0),
+                    unit: None,
+                },
+            )]),
+        );
+        let json = serde_json::to_value(&details).unwrap();
+        assert_eq!(json["component_fields"]["Position"]["x"]["writable"], true);
+        assert_eq!(
+            serde_json::from_value::<super::EntityDetails>(json).unwrap(),
+            details
+        );
     }
 }

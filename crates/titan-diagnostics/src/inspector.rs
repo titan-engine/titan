@@ -67,12 +67,27 @@ impl DiagnosticInspector {
         }).collect();
         let count = world.entities().count();
         bundle.world_state = serde_json::json!({"entities": entities, "entity_count": count, "truncated": count > 1000});
+        let mut components: std::collections::BTreeMap<_, _> = world
+            .component_metadata()
+            .iter()
+            .map(|metadata| {
+                (
+                    metadata.type_name.to_owned(),
+                    ApiComponent::from_metadata(metadata),
+                )
+            })
+            .collect();
+        for (name, fields) in inspector.component_field_metadata() {
+            components
+                .entry(name.clone())
+                .or_insert_with(|| ApiComponent {
+                    name,
+                    ..Default::default()
+                })
+                .fields = fields;
+        }
         bundle.api_summary = Some(ApiSummary::new(
-            world
-                .component_metadata()
-                .iter()
-                .map(ApiComponent::from_metadata)
-                .collect(),
+            components.into_values().collect(),
             inspector.command_metadata(),
         ));
         for error in &result.errors {
