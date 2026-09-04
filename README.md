@@ -90,9 +90,9 @@ recent input, and captures. Stop the runtime with Ctrl-C.
 - A procedural RPG with native and actual-WASM control-loop tests, semantic
   assertions, and verified software/GPU captures.
 
-The next milestone is a reusable starter and a second, independently built
-arena-survival demo. Runner setup is still partly RPG-specific; a generic game
-starter is not available yet. Windows native discovery, production stability,
+The [standalone starter](starters/minimal/README.md) can be copied outside this
+checkout and uses public Titan APIs for native, browser and headless runs.
+Milestone 2 is using it to build an independent arena-survival demo. Windows native discovery, production stability,
 an editor, and a general asset pipeline are outside the current supported scope.
 
 ## Development and contributions
@@ -121,6 +121,8 @@ GPU.
 - [Current milestone: starter and arena demo](docs/second-milestone.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Open design questions](docs/open-questions.md)
+- [Copy the minimal game starter](starters/minimal/README.md)
+- [Starter boundary audit](docs/starter-audit.md)
 - [ECS authoring](docs/ecs-authoring.md)
 - [CLI workflow](docs/cli.md)
 - [In-process inspection](docs/inspection.md)

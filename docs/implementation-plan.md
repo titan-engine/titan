@@ -4,35 +4,10 @@ The active objective is [milestone 2: build a second game from the starter](seco
 The procedural RPG milestone is accepted, including the sunlit-meadow result.
 This file contains pending execution work; completed plans live in Git.
 
-## Immediate next task: establish the starter boundary
-
-Audit the RPG's setup, native runners, browser adapter, capture hooks, and build
-scripts. Identify which pieces are reusable engine/host setup and which encode
-RPG rules. Create the smallest runnable starter that uses Titan's public APIs
-without importing `examples/support/procedural_rpg.rs`.
-
-Prefer a checked-in starter and a documented copy/build workflow. Add a generator
-command or another crate only if the first consumer demonstrates a need. Keep
-working examples available throughout extraction.
-
-Completion: a copied starter builds in a separate directory, runs a minimal
-scene headlessly and interactively on native and browser targets, and has no
-shard, shrine, RPG action, or RPG asset dependencies.
-
-## Make the starter usable from repository-local guidance
-
-Document dependency setup, where game code belongs, commands for each target,
-and how to expose input, named entities, commands, validated fields, captures,
-and diagnostics. Reuse the current protocol and CLI; identify any host adapters
-that still require game-specific glue explicitly.
-
-Give the starter a small controlled smoke test and include it in CI. Keep
-instructions short and executable from a fresh checkout. Update the workflow
-skill to distinguish the generic starter from the RPG regression example once
-the starter exists; do not document unimplemented commands as available.
-
-Completion: the documented commands launch a clean starter, discover its runtime,
-step it, inspect it, capture it, and stop it within bounded execution limits.
+The starter boundary is implemented in `starters/minimal`; see its README for
+copy/build instructions and [the audit](starter-audit.md) for the boundary.
+`scripts/test-starter.py --browser` verifies an external copy through native and
+actual-WASM control loops. The RPG checksum remains `190a92085def5677`.
 
 ## Build the arena game with an independent agent
 
