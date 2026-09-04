@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Titan · Play the starter</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101519;color:#e6edf0}*{box-sizing:border-box}body{max-width:1040px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;gap:24px;align-items:center}h1{margin:8px 0;font-size:clamp(24px,4vw,36px)}.eyebrow{letter-spacing:.16em;font-size:11px;color:#9cdac2}p{color:#aebec2;line-height:1.5}a{color:#9cdac2}button{font:inherit;border:1px solid #51676c;background:#243c43;color:#edf8f5;border-radius:6px;padding:10px 18px;cursor:pointer}button:hover{background:#36545b}button:focus-visible,a:focus-visible{outline:3px solid #8de4b3;outline-offset:3px}button:disabled{opacity:.45;cursor:default}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:24px 0 16px}.status{margin-left:auto;font-variant-numeric:tabular-nums;color:#bae5c8}.scene{position:relative;background:#0b1011;border:1px solid #354c4f;border-radius:10px;overflow:hidden}canvas{display:block;width:100%;aspect-ratio:10/7;image-rendering:pixelated;outline:none}canvas:focus-visible{outline:3px solid #8de4b3;outline-offset:-4px}.hint{padding:12px 16px;margin:0;border-top:1px solid #354c4f}.directions{display:flex;gap:8px;justify-content:center;margin:20px 0;touch-action:none}.error{background:#431f23;color:#ffd3d3;padding:16px;border-radius:8px;white-space:pre-wrap}.error[hidden]{display:none}footer{font-size:13px;color:#8fa7ac;line-height:1.6}#result{color:#ade7c3;min-height:1.6em}
+</style>
+</head>
+<body>
+<header><div><div class="eyebrow">TITAN / MINIMAL STARTER</div><h1>Your game starts here.</h1></div><a href="../inspector/">Open inspector</a></header>
+<p>A movable sprite in a small fixed scene. Replace the game module to build your own game.</p>
+<div class="toolbar"><button id="start">Play</button><button id="pause" disabled>Pause</button><button id="restart" disabled>Restart</button><span class="status" id="status" role="status">Ready</span></div>
+<div id="error" class="error" role="alert" hidden></div>
+<div class="scene"><canvas id="game" width="640" height="448" tabindex="0" aria-label="Starter game. Move with arrow keys or W A S D."></canvas><p class="hint">Move with arrow keys or W A S D. Click the scene to focus.</p></div>
+<div class="directions" aria-label="Movement controls"><button data-action="left" aria-label="Move left" disabled>←</button><button data-action="up" aria-label="Move up" disabled>↑</button><button data-action="down" aria-label="Move down" disabled>↓</button><button data-action="right" aria-label="Move right" disabled>→</button></div>
+<p id="result" role="status"></p>
+<footer>60 fixed ticks per second · GPU sprite rendering · Same game as the headless and browser inspection tests.</footer>
+<script type="module" src="play.js"></script>
+</body>
+</html>

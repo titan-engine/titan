@@ -1,6 +1,6 @@
 ---
 name: titan-workflow
-description: Build, run, inspect, replay, and diagnose Titan games using this repository's CLI and deterministic RPG example. Use for game iteration and engine changes that need runtime evidence.
+description: Build, run, inspect, replay, and diagnose Titan games using the standalone starter and the RPG regression example. Use for game iteration and engine changes that need runtime evidence.
 ---
 
 # Titan game iteration
@@ -10,6 +10,25 @@ current priorities and `docs/cli.md` for flags and structured output. Use
 `docs/ecs-authoring.md` when editing systems, `docs/browser.md` for WASM, and
 `docs/rendering.md` for interactive or GPU work. These paths are relative to the
 repository root, three directories above this skill folder.
+
+## New games
+
+Start with `starters/minimal/README.md`: copy the standalone package, configure
+its Titan path dependencies, and put game definitions in `src/game.rs`. The
+starter has its own native controlled runner, GPU player, browser adapters and
+portable build script. It does not import RPG support code.
+
+`python3 scripts/test-starter.py` verifies a copy outside the repository.
+`python3 starters/minimal/scripts/build-browser.py` and
+`node starters/minimal/scripts/test-browser.mjs` exercise its actual WASM.
+Native CLI inspection works identically after selecting the copied project's
+path and instance. Browser inspection uses its local page/message bridge, not
+native discovery. Keep game state and recent inputs useful in diagnostic bundles.
+
+Read the copied starter's README for its input, restart and field semantics;
+the RPG's tile pulses and reference route below are not generic game rules.
+
+## RPG regression
 
 Build the native control tools with:
 

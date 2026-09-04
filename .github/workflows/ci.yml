@@ -39,6 +39,9 @@ jobs:
       - name: Exercise the native RPG through separate CLI processes
         run: python3 scripts/test-control-loop.py
 
+      - name: Verify copied standalone starter
+        run: python3 scripts/test-starter.py
+
   wasm:
     name: WebAssembly core check
     runs-on: ubuntu-latest
@@ -48,7 +51,7 @@ jobs:
 
       - name: Install stable Rust with WebAssembly target
         run: |
-          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
           rustup default stable
 
       - name: Check engine and protocol for WebAssembly
@@ -59,3 +62,7 @@ jobs:
           python3 scripts/build-browser.py
           node scripts/test-browser.mjs
           node --test web/inspector/bridge.test.mjs
+
+      - name: Build starter WASM and exercise its control loop
+        run: |
+          python3 scripts/test-starter.py --browser
