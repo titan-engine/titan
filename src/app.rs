@@ -109,6 +109,39 @@ impl App {
         std::mem::take(&mut self.deferred_errors)
     }
 
+    /// Applies queued structural changes at an explicit safe point and reports
+    /// all outstanding deferred failures. Successful changes are not rolled back.
+    pub fn apply_deferred(&mut self) -> Result<(), Vec<DeferredCommandError>> {
+        self.deferred_errors.extend(self.world.apply_deferred());
+        self.check_deferred_errors()
+    }
+
+    /// Advances fixed ticks, stopping at the first failed schedule boundary.
+    ///
+    /// Outstanding errors are returned before running startup or any ticks.
+    /// A failed fixed update still counts as an executed tick: systems and
+    /// successful structural changes are not rolled back. Startup failures
+    /// stop execution before the first tick. Errors are consumed by this call.
+    pub fn try_advance_fixed(&mut self, ticks: u64) -> Result<(), Vec<DeferredCommandError>> {
+        self.check_deferred_errors()?;
+        self.run_startup();
+        self.check_deferred_errors()?;
+        for _ in 0..ticks {
+            self.advance_fixed(1);
+            self.check_deferred_errors()?;
+        }
+        Ok(())
+    }
+
+    fn check_deferred_errors(&mut self) -> Result<(), Vec<DeferredCommandError>> {
+        let errors = self.take_deferred_errors();
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     /// Runs one customizable schedule.
     ///
     /// Running `Startup` explicitly still obeys its run-once guarantee.
@@ -250,5 +283,50 @@ mod tests {
         assert_eq!(app.world().entity_count(), 1);
         assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 10);
         assert!(app.take_deferred_errors().is_empty());
+    }
+
+    #[test]
+    fn checked_stepping_stops_after_the_first_failed_tick() {
+        let mut app = App::new();
+        let entity = app.world_mut().spawn();
+        app.add_systems(FixedUpdate, move |world| {
+            world.commands().despawn(entity).despawn(entity);
+        });
+
+        let errors = app.try_advance_fixed(10).unwrap_err();
+
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].entity(), entity);
+        assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), 1);
+        assert!(!app.world().is_alive(entity));
+        assert!(app.take_deferred_errors().is_empty());
+    }
+
+    #[test]
+    fn checked_stepping_reports_startup_and_outstanding_errors_before_ticks() {
+        let mut app = App::new();
+        let entity = app.world_mut().spawn();
+        app.add_systems(Startup, move |world| {
+            world.commands().despawn(entity).despawn(entity);
+        });
+        assert_eq!(app.try_advance_fixed(2).unwrap_err().len(), 1);
+        assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), 0);
+        app.world_mut().commands().despawn(entity);
+        app.update();
+        assert_eq!(app.try_advance_fixed(2).unwrap_err().len(), 1);
+        assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), 0);
+        app.try_advance_fixed(2).unwrap();
+        assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), 2);
+    }
+
+    #[test]
+    fn explicit_safe_point_applies_commands_and_returns_failures() {
+        let mut app = App::new();
+        let entity = app.world_mut().commands().spawn_with(Position(7));
+        app.apply_deferred().unwrap();
+        assert_eq!(app.world().get::<Position>(entity), Some(&Position(7)));
+        app.world_mut().commands().despawn(entity).despawn(entity);
+        assert_eq!(app.apply_deferred().unwrap_err().len(), 1);
+        assert!(app.apply_deferred().is_ok());
     }
 }
