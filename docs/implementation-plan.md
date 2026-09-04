@@ -27,8 +27,8 @@ Titan currently has:
 - authenticated native loopback transport, project-local discovery, and CLI
   attachment to the paused headless RPG;
 - a WASM protocol adapter and browser inspector with explicit control opt-in;
-- tested diagnostic bundle, bounded history, API summary, and image comparison
-  helpers (automatic runtime/CLI integration remains pending); and
+- automatic native runtime/CLI failure bundles, bounded history, API summaries,
+  image comparisons, and controlled execution budgets; and
 - native and WebAssembly CI checks, including a separate-process control loop.
 
 ## Next vertical objective
@@ -154,12 +154,20 @@ requiring systems to manually accept and navigate `&mut World`.
 
 ## Phase 6: diagnostics and agent documentation
 
-The `titan-diagnostics` helper crate provides tested bundle serialization and
-writing, bounded request history, metadata summaries, and image comparisons.
-It is not yet wired into runtime or CLI failures. After Phase 5, connect those
-helpers so on-failure diagnostics happen automatically, then add controlled
-test budgets and the repository-local agent skill. Do not treat this phase as
-complete merely because the standalone helpers exist.
+Implemented for native inspection and CLI workflows. `DiagnosticInspector`
+collects failure bundles automatically in the paused RPG serve loop, including
+bounded request/input history, entity and game state, timings, registered API
+metadata, and best-effort PNG captures. The CLI preserves runtime bundles and
+writes local/process diagnostics when needed. Policies support on-failure,
+always, and never. See the [diagnostics crate](../crates/titan-diagnostics/README.md)
+and [CLI documentation](cli.md).
+
+Controlled stepping has frame limits and native cooperative wall-clock limits;
+Cargo test/example processes have bounded output and wall-clock termination.
+The [repository-local workflow skill](../.agents/skills/titan-workflow/SKILL.md)
+provides compact guidance. Automatic browser bundle export and attaching bundles
+to arbitrary direct Rust test panics remain outside the native integration;
+the portable data/history/image helpers are available to those hosts.
 
 - Produce a diagnostic bundle on failure by default, configurable to always.
 - Include structured errors, relevant world state, input history, fixed tick,
@@ -171,6 +179,20 @@ complete merely because the standalone helpers exist.
 
 Completion signal: an agent can diagnose a failed feature attempt using only
 repository-local documentation and the generated diagnostic bundle.
+
+## Remaining milestone acceptance
+
+The six implementation phases establish the native agent control loop; they do
+not by themselves satisfy every item in `first-milestone.md`.
+
+- `SetField` still rejects writes: the game exposes commands, but no explicitly
+  writable component fields. Add a small validated adapter before choosing broad
+  reflection/serialization design.
+- Record an end-to-end game iteration with a reviewed visual improvement and
+  before/after evidence. The exact reference art is intentionally unchanged by
+  these infrastructure changes.
+- The demo uses a fixed whole-map view. Decide whether a scrolling camera is
+  necessary for this small slice before expanding the renderer.
 
 ## Deliberately deferred
 

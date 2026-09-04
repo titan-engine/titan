@@ -1954,6 +1954,7 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
+ "titan-diagnostics",
  "titan-macros",
  "titan-protocol",
  "titan-remote",
@@ -1982,8 +1983,10 @@ name = "titan-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "libc",
  "serde",
  "serde_json",
+ "titan-diagnostics",
  "titan-protocol",
  "titan-remote",
 ]

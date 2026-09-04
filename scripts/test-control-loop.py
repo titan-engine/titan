@@ -80,6 +80,21 @@ def main():
                 rejected = cli("invoke", "spawn_shard", "--arguments", '{"x":-1,"y":0}', success=False)
                 assert rejected["error"]["code"] == "invalid_value"
                 assert rejected["state_revision"] == stepped["state_revision"]
+                manifest = Path(rejected["error"]["details"]["diagnostic_bundle"])
+                assert manifest.is_absolute() and manifest.is_file()
+                bundle = json.loads(manifest.read_text())
+                assert bundle["response"]["observed_frame"] == 11
+                assert bundle["response"]["state_revision"] == stepped["state_revision"]
+                assert bundle["request"]["request"]["type"] == "invoke"
+                assert bundle["response"]["error"]["code"] == "invalid_value"
+                assert len(bundle["history"]["accepted_inputs"]) == 11
+                assert bundle["world_state"]["quest"] == {"collected_shards": 3, "shrine_active": True}
+                assert bundle["capture"]["checksum"] == "98618cd721c5b52d"
+                assert (manifest.parent / bundle["capture"]["artifact"]).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+                assert "spawn_shard" in (manifest.parent / "api.txt").read_text()
+                assert "request" in bundle["timings_us"]
+                # The CLI preserves the richer runtime bundle instead of writing a duplicate.
+                assert len(list((project / "target/titan/diagnostics").glob("*/bundle.json"))) == 1
                 cli("invoke", "spawn_shard", "--arguments", '{"x":0,"y":0}')
                 assert cli("capture")["response"]["checksum"] != capture["checksum"]
                 assert cli("status")["observed_frame"] == 11

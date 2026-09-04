@@ -1,8 +1,18 @@
 # Diagnostic helpers
 
-This crate provides independently tested diagnostic building blocks. Automatic
-runtime/CLI collection is **not wired yet**; Phase 6 remains in progress. Hosts
-must call the policy/history/writer functions explicitly at their safe points.
+This crate provides diagnostic data, image comparisons, and native safe-point
+collection. `DiagnosticInspector` wraps `Inspector::handle`, records recent
+requests, and writes bundles on failures by default. The native RPG serve loop
+uses it automatically; the CLI also bundles local, transport, and Cargo failures.
+See [CLI diagnostics](../../docs/cli.md) for policies and execution budgets.
+
+The wrapper snapshots up to 1,000 entity IDs, names, and component lists, records
+request and collection timings, and emits component/command API metadata. A
+read-only host callback adds game-specific values and an optional image. The RPG
+includes quest state, positions, and a software PNG. Failed capture attempts are
+logged; failed persistence is returned separately without replacing the original
+protocol outcome. Browser and direct Rust test hosts can use the portable helpers,
+but automatic filesystem collection is currently a native integration.
 
 `DiagnosticPolicy` defaults to `OnFailure` and also supports `Always` and `Never`.
 `RequestHistory` retains an oldest-first sequence of typed request/response pairs

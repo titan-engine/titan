@@ -19,3 +19,5 @@ work without depending on a graphical editor.
 - [Interactive rendering](docs/rendering.md)
 - [ECS authoring and migration](docs/ecs-authoring.md)
 - [Implementation plan](docs/implementation-plan.md)
+
+Repository-local agent guidance lives in [the Titan workflow skill](.agents/skills/titan-workflow/SKILL.md).
