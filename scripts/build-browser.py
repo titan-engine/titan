@@ -13,7 +13,7 @@ def run(*arguments):
 
 def main():
     metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--format-version", "1"], cwd=REPO, text=True
+        ["cargo", "metadata", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"], cwd=REPO, text=True
     ))
     target = Path(metadata["target_directory"])
     version = next(package["version"] for package in metadata["packages"] if package["name"] == "wasm-bindgen")

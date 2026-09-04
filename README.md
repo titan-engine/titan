@@ -16,4 +16,5 @@ work without depending on a graphical editor.
 - [CLI workflow](docs/cli.md)
 - [In-process inspection](docs/inspection.md)
 - [Browser inspection](docs/browser.md)
+- [Interactive rendering](docs/rendering.md)
 - [Implementation plan](docs/implementation-plan.md)

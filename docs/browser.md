@@ -8,10 +8,10 @@ Build and serve locally:
 
 ```sh
 python3 scripts/build-browser.py
-python3 -m http.server 8000 --bind 127.0.0.1 --directory web/inspector
+python3 -m http.server 8000 --bind 127.0.0.1 --directory web
 ```
 
-Open `http://127.0.0.1:8000`. The build script installs a matching
+Open `http://127.0.0.1:8000/inspector/` (or `/play/` for interactive GPU play). The build script installs a matching
 `wasm-bindgen-cli` under `target/titan/tools`, adds the Rust WASM target if
 needed, and generates web and Node packages. Generated packages are ignored by
 Git. Rust, Cargo, Python 3, and Node.js are used by the build and acceptance
@@ -69,5 +69,5 @@ changes, and schema errors. The second checks message source/origin filtering
 and response correlation. Native host tests also decode the PNG and verify its
 RGBA checksum. CI runs these alongside the native separate-process acceptance.
 
-This phase provides inspection and software captures. Continuous interactive
-rendering and keyboard-driven play belong to the next renderer phase.
+The inspection page provides controlled stepping and exact software captures.
+The [interactive player](rendering.md) uses the GPU backend and keyboard input.
