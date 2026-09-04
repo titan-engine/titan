@@ -429,7 +429,13 @@ fn generate_art(assets: &mut ImageAssets) -> Art {
             |x, y| {
                 let (x, y) = (x as i32, y as i32);
                 let path = meadow_path(x, y);
-                let noise = (x * 73 + y * 151 + (x * y * 19)).rem_euclid(101);
+                // Match the reference recording's seed; no runtime randomness.
+                let mut noise = 0x0054_4954_414e_u64
+                    ^ (x as u64).wrapping_mul(0x9e37_79b9)
+                    ^ (y as u64).rotate_left(17);
+                noise ^= noise >> 30;
+                noise = noise.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+                let noise = (noise ^ (noise >> 27)) % 101;
                 if path {
                     if !meadow_path(x - 1, y) || !meadow_path(x, y - 1) {
                         Color::rgb(151, 151, 91)
