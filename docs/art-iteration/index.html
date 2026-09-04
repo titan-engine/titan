@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Titan · Sunlit meadow iteration</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#17211c;color:#edf1df}body{max-width:1050px;margin:auto;padding:32px 24px}h1{font-size:28px;font-weight:600;margin:8px 0}p{color:#b9c8b4;line-height:1.5}nav{display:flex;gap:8px;margin:24px 0}button{font:inherit;padding:9px 15px;border:1px solid #70866b;background:transparent;color:inherit;border-radius:5px;cursor:pointer}button[aria-pressed=true]{background:#d4dfb5;color:#223126}button:focus-visible{outline:3px solid #f2c878;outline-offset:3px}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:24px}figure{margin:0}figcaption{margin:0 0 10px;font-weight:600}img{width:100%;height:auto;image-rendering:pixelated;background:#253b2b}.eyebrow{font-size:12px;letter-spacing:.13em;color:#d7cf8e}footer{margin-top:24px;font-size:14px;color:#b9c8b4}a{color:#d7cf8e}@media(max-width:650px){.comparison{grid-template-columns:1fr}}
+</style>
+<div class="eyebrow">TITAN / RECORDED ART ITERATION</div>
+<h1>Sunlit meadow</h1>
+<p>The same 20 × 14 map, generated in code. Three shards, one shrine, the same eleven-tick route.</p>
+<nav aria-label="Scene"><button data-scene="startup" aria-pressed="true">Before the quest</button><button data-scene="completed" aria-pressed="false">Quest complete</button></nav>
+<div class="comparison">
+<figure><figcaption>Original</figcaption><img id="before" src="before/startup.png" width="160" height="112" alt="Original RPG at startup"></figure>
+<figure><figcaption>Sunlit meadow</figcaption><img id="after" src="after/startup.png" width="160" height="112" alt="Sunlit meadow RPG at startup"></figure>
+</div>
+<footer><span id="status" role="status">Frame 0 · three collectible shards</span> · Exact software captures via the native CLI. <a href="README.md">Iteration notes</a></footer>
+<script>
+for(const button of document.querySelectorAll('button[data-scene]'))button.addEventListener('click',()=>{
+const scene=button.dataset.scene;
+for(const other of document.querySelectorAll('button[data-scene]'))other.setAttribute('aria-pressed',String(other===button));
+for(const stage of ['before','after']){const image=document.getElementById(stage);image.src=stage+'/'+scene+'.png';image.alt=(stage==='before'?'Original':'Sunlit meadow')+' RPG '+(scene==='startup'?'at startup':'with quest complete');}
+document.getElementById('status').textContent=scene==='startup'?'Frame 0 · three collectible shards':'Frame 11 · three shards collected · shrine active';
+});
+</script>
+</html>

@@ -136,7 +136,7 @@ implemented. All RPG fixed-update systems use typed parameters.
 See [ECS authoring](ecs-authoring.md) for usage and migration notes.
 
 Setup and immutable extraction retain direct world access for clarity.
-The replay and capture checksum remains `98618cd721c5b52d`. Query traversal
+The current meadow replay capture checksum is `190a92085def5677`. Query traversal
 uses scoped callbacks rather than mutable iterators.
 
 - Add typed `Query`, `Res`, `ResMut`, and `Commands` system parameters.
@@ -190,24 +190,25 @@ not by themselves satisfy every item in `first-milestone.md`.
   `--allow-mutation`, browser writes require control opt-in. CLI and protocol
   tests cover valid edits and rejected edits without advancing fixed time.
   Broad reflection and derive-generated serialization remain deferred.
-- Record an end-to-end game iteration with a reviewed visual improvement and
-  before/after evidence. The exact reference art is intentionally unchanged by
-  these infrastructure changes.
-- The demo uses a fixed whole-map view. Decide whether a scrolling camera is
-  necessary for this small slice before expanding the renderer.
+- The recorded sunlit-meadow iteration now includes real before/after captures,
+  semantic checks and exact native GPU evidence. See [the iteration record](art-iteration/README.md).
+  The user chose the meadow concept; final captures await their aesthetic review.
+- The fixed whole-map view serves this small slice; a scrolling camera is deferred
+  until a concrete larger game area needs it.
 
 ## Next decision and verification evidence
 
-The immediate next task is the recorded visual-improvement iteration. Choose an
-art direction with the user before changing the reference assets, then capture
-before/after output, retain semantic assertions, and document the visual review.
-A camera expansion should follow only if that chosen slice needs it.
+The approved sunlit-meadow direction has been implemented and captured. Review
+the [before/after evidence](art-iteration/index.html) before choosing a subsequent
+engine or game milestone. No further renderer expansion is required for this
+small demo. The current implementation has exercised the planned control loop,
+authoring, diagnostics, field editing, and a recorded visual iteration.
 
-The authoring, diagnostic, and writable-inspection increments passed formatting,
-workspace tests, strict Clippy, the WASM target checks, the native separate-process
-control loop, actual WASM control tests, and browser bridge tests. The unchanged
-reference replay still produces `98618cd721c5b52d`. GPU-specific ignored tests
-were not rerun for these non-renderer changes.
+The art iteration passed formatting, workspace tests, strict Clippy, WASM target
+checks, native separate-process controls, actual WASM controls, and browser bridge
+tests. Native GPU readbacks on both unorm and sRGB outputs match the software
+reference `190a92085def5677` with zero tolerance. Historical baseline captures
+retain their original checksum in the iteration record.
 
 ## Deliberately deferred
 

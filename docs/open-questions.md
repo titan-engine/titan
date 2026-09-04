@@ -17,11 +17,12 @@ focused docs for current APIs and guarantees.
 
 ## First game slice and visual acceptance
 
-- Which art direction should guide the required recorded visual improvement?
+- The sunlit-meadow direction is implemented. Does the final captured result
+  meet the demo's visual target, or need another refinement?
 - What objective semantic checks and human visual review should accompany that
   before/after iteration?
-- Is the current whole-map view sufficient for this slice, or should the next
-  game change exercise a scrolling camera and a larger area?
+- Which future game slice would justify a scrolling camera and larger area?
+  The current whole-map view is sufficient for the small shard quest.
 
 ## ECS and execution evolution
 

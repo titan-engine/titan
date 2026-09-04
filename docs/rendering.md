@@ -71,7 +71,7 @@ TITAN_GPU_TOLERANCE=0 cargo test -p titan-render-wgpu --test offscreen completed
 
 They cover sprite semantics and the complete RPG replay. The RPG readback has
 been verified on Metal against both unorm and sRGB targets with the exact
-software checksum `98618cd721c5b52d`. General alpha/tint cases allow small
+software checksum `190a92085def5677`. General alpha/tint cases allow small
 per-channel rounding differences, configurable by `TITAN_GPU_TOLERANCE`.
 Software captures remain the exact reference; a GPU comparison is integration
 evidence and does not replace the headless semantic tests.

@@ -56,7 +56,7 @@ capture/write failures rather than assuming every artifact exists.
 inspection, commands, captures, diagnostic failures, and shutdown in separate
 processes. The reference route is right 2, down 3, right 6: eleven fixed ticks,
 three collected shards, active shrine, software RGBA checksum
-`98618cd721c5b52d`. Preserve it for behavior-neutral engine changes. For intentional
+`190a92085def5677`. Preserve it for behavior-neutral engine changes. For intentional
 visual changes, compare before/after images and semantic results before updating
 an expected checksum; a new checksum alone is not evidence of improvement.
 
