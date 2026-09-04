@@ -31,9 +31,9 @@ Titan currently has:
   image comparisons, and controlled execution budgets; and
 - native and WebAssembly CI checks, including a separate-process control loop.
 
-## Next vertical objective
+## Proven vertical objective
 
-Prove one complete agent-facing control loop against the procedural RPG:
+The procedural RPG now supports this complete agent-facing control loop:
 
 ```text
 launch headless game
@@ -46,8 +46,8 @@ launch headless game
     -> return structured results and artifacts
 ```
 
-This objective takes priority over broadening the renderer or adding more game
-features. It directly tests Titan's defining workflow.
+Preserve this tested control loop while broadening the renderer or game. It
+directly tests Titan's defining workflow.
 
 ## Phase 1: complete in-process inspection
 
@@ -185,14 +185,29 @@ repository-local documentation and the generated diagnostic bundle.
 The six implementation phases establish the native agent control loop; they do
 not by themselves satisfy every item in `first-milestone.md`.
 
-- `SetField` still rejects writes: the game exposes commands, but no explicitly
-  writable component fields. Add a small validated adapter before choosing broad
-  reflection/serialization design.
+- Explicit typed field adapters now expose readable values and writable metadata.
+  The RPG registers bounded tile coordinates; native writes require
+  `--allow-mutation`, browser writes require control opt-in. CLI and protocol
+  tests cover valid edits and rejected edits without advancing fixed time.
+  Broad reflection and derive-generated serialization remain deferred.
 - Record an end-to-end game iteration with a reviewed visual improvement and
   before/after evidence. The exact reference art is intentionally unchanged by
   these infrastructure changes.
 - The demo uses a fixed whole-map view. Decide whether a scrolling camera is
   necessary for this small slice before expanding the renderer.
+
+## Next decision and verification evidence
+
+The immediate next task is the recorded visual-improvement iteration. Choose an
+art direction with the user before changing the reference assets, then capture
+before/after output, retain semantic assertions, and document the visual review.
+A camera expansion should follow only if that chosen slice needs it.
+
+The authoring, diagnostic, and writable-inspection increments passed formatting,
+workspace tests, strict Clippy, the WASM target checks, the native separate-process
+control loop, actual WASM control tests, and browser bridge tests. The unchanged
+reference replay still produces `98618cd721c5b52d`. GPU-specific ignored tests
+were not rerun for these non-renderer changes.
 
 ## Deliberately deferred
 

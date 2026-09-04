@@ -37,6 +37,13 @@ target/debug/titan --format json --instance iteration step 1
 target/debug/titan --format json --instance iteration capture
 ```
 
+Field edits additionally require native `--allow-mutation` at launch (browser
+control opt-in covers edits). Read the entity's `component_fields` metadata and
+use its exact qualified component key with `set-field INDEX GENERATION COMPONENT
+FIELD --value JSON`. Registered getters expose values in `components`; metadata
+states types, bounds, and writability. A CLI flag cannot enable a running host's
+mutation policy. Invalid types/bounds are rejected before assignment.
+
 Read `observed_frame`, `state_revision`, and the structured outcome. Failed
 operations may have partially changed state; unchanged revision means no
 successful operation was recorded, not transaction rollback. Do not blindly

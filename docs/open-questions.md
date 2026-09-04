@@ -4,33 +4,33 @@ These are intentionally unresolved. They should be answered through focused
 design work or small prototypes before their answers become expensive to
 change.
 
-## First game slice
+## Established choices
 
-- What is the smallest RPG interaction that tests meaningful state and systems:
-  combat, an inventory pickup, dialogue, a quest, or something else?
-- What visual feature set is needed for the initial generated pixel art?
-- How large and structurally varied must the procedural world be?
-- What objective evidence demonstrates that an agent made the art "prettier"?
+The first slice uses a deterministic generated tile map, three shard pickups,
+and shrine activation. ECS storage is sparse-set with generational entities;
+execution is sequential with validated typed access and deferred structural
+commands. Native inspection uses authenticated loopback HTTP/JSON and local
+registration files. Browser inspection uses a WASM adapter and same-origin
+message bridge. Software captures are exact references; native/browser GPU
+rendering consumes the same immutable frames. See the implementation plan and
+focused docs for current APIs and guarantees.
 
-## Execution and browser architecture
+## First game slice and visual acceptance
 
-- How much of the first milestone's browser experience is the WebAssembly game
-  itself, and how much is a separate inspector application?
-- How does the inspection transport behave in WebAssembly, where listening on a
-  local socket is not the same as in a native process?
-- Which GPU-independent renderer or reference path will produce CI captures?
-- What level of pixel determinism is practical across native, WebAssembly, GPU,
-  and software rendering paths?
+- Which art direction should guide the required recorded visual improvement?
+- What objective semantic checks and human visual review should accompany that
+  before/after iteration?
+- Is the current whole-map view sufficient for this slice, or should the next
+  game change exercise a scrolling camera and a larger area?
 
-## ECS internals
+## ECS and execution evolution
 
-- Archetypal tables, sparse sets, or a hybrid storage strategy?
-- How are entity generations and optional persistent names represented?
-- What are the exact query and system-parameter APIs?
-- How are access conflicts derived and validated?
-- What deterministic ordering guarantees are made?
-- How will the future parallel scheduler preserve or deliberately relax them?
-- What state is included in snapshots, and how are opaque resources handled?
+- When does profiling justify archetypal/hybrid storage or parallel execution?
+- How will a future parallel scheduler preserve or deliberately relax canonical
+  ordering guarantees?
+- What state belongs in snapshots, and how should opaque resources participate?
+- Should optional resource/query parameters or wider query arity come next once
+  a concrete game needs them?
 
 ## Reflection and serialization
 
@@ -40,29 +40,23 @@ change.
 - How are component schemas exposed compactly enough for an agent context
   window without inventing a mandatory game manifest?
 
-## Runtime protocol and safety
+## Runtime protocol evolution
 
-- HTTP, WebSocket, both, or a different initial transport?
-- How are running games discovered and selected when several exist?
-- What enables development mutation, and how is it prevented in release builds?
-- At which simulation safe points are reads, mutations, and commands applied?
-- How are protocol requests correlated with the precise frame they observed or
-  changed?
-- What authentication or origin protection is required for local and browser
-  use?
+- Should browser hosts export diagnostic bundles automatically, and through which
+  download/development-host mechanism?
+- When is an outgoing browser-to-native development connection needed?
+- Which workloads require interruptible or worker-isolated execution beyond
+  cooperative native tick deadlines and browser frame limits?
 
 ## Crates and dependencies
 
-- What is the smallest useful initial crate/workspace structure?
-- Which parts should be custom immediately and which mature crates should be
-  adopted for windowing, WebAssembly glue, serialization, image formats, and
-  transport?
 - What dependency maintenance and licensing criteria are mandatory?
 - Which `wgpu` abstractions should be exposed or hidden by the first renderer?
 
 ## Quality policy
 
-- Which Clippy lint level is enforced, beyond denying warnings?
+- Which additional Clippy lint policies, beyond the current denied warnings,
+  would catch demonstrated engine-specific defects?
 - What are the initial build-time, test-time, and runtime performance budgets?
 - Should performance assertions become part of CI, and on which stable runners
   can they be meaningful?
