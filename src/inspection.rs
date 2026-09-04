@@ -2,10 +2,11 @@
 
 use std::collections::BTreeMap;
 
+use serde::de::DeserializeOwned;
 use titan_protocol::{
-    Capabilities, EntityDetails, EntityId, EntityPage, EntitySummary, ErrorCode, Operation,
-    ProtocolError, Request, RequestEnvelope, Response, ResponseEnvelope, RunMode, RuntimeStatus,
-    SCHEMA_VERSION,
+    Capabilities, CaptureResult, CommandMetadata, EntityDetails, EntityId, EntityPage,
+    EntitySummary, ErrorCode, InputValue, Operation, ProtocolError, Request, RequestEnvelope,
+    Response, ResponseEnvelope, RunMode, RuntimeStatus, SCHEMA_VERSION,
 };
 
 use crate::{App, FixedTime, Name};
@@ -32,6 +33,18 @@ impl InspectionConfig {
     }
 }
 
+type CommandHandler =
+    Box<dyn FnMut(&mut App, serde_json::Value) -> Result<(), ProtocolError> + Send>;
+type InputHandler = Box<
+    dyn FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError> + Send,
+>;
+type CaptureHandler = Box<dyn FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send>;
+
+struct RegisteredCommand {
+    metadata: CommandMetadata,
+    handler: CommandHandler,
+}
+
 /// Executes typed inspection requests at a caller-controlled safe point.
 ///
 /// A transport adapter should enqueue requests and call [`handle`](Self::handle)
@@ -40,6 +53,9 @@ impl InspectionConfig {
 pub struct Inspector {
     config: InspectionConfig,
     state_revision: u64,
+    commands: BTreeMap<String, RegisteredCommand>,
+    input_handler: Option<InputHandler>,
+    capture_handler: Option<CaptureHandler>,
 }
 
 impl Inspector {
@@ -47,7 +63,66 @@ impl Inspector {
         Self {
             config,
             state_revision: 0,
+            commands: BTreeMap::new(),
+            input_handler: None,
+            capture_handler: None,
         }
+    }
+
+    /// Registers a game command with typed JSON-object arguments.
+    ///
+    /// Handlers run with exclusive application access. Validate before mutating:
+    /// failed handlers and deferred operations are reported but are not rolled back.
+    /// Use `#[serde(deny_unknown_fields)]` on argument types to reject extra fields.
+    /// Duplicate or blank names are rejected without replacing an existing command.
+    pub fn register_command<A: DeserializeOwned + 'static>(
+        &mut self,
+        metadata: CommandMetadata,
+        mut handler: impl FnMut(&mut App, A) -> Result<(), ProtocolError> + Send + 'static,
+    ) -> Result<&mut Self, ProtocolError> {
+        if metadata.name.trim().is_empty() || self.commands.contains_key(&metadata.name) {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "command name must be nonempty and unique",
+            ));
+        }
+        self.commands.insert(
+            metadata.name.clone(),
+            RegisteredCommand {
+                metadata,
+                handler: Box::new(move |app, value| {
+                    let arguments = serde_json::from_value(value).map_err(|error| {
+                        ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            format!("invalid command arguments: {error}"),
+                        )
+                    })?;
+                    handler(app, arguments)
+                }),
+            },
+        );
+        Ok(self)
+    }
+
+    /// Installs the game's deterministic input adapter, replacing any prior hook.
+    /// The adapter validates actions and queues them for the requested future frame.
+    pub fn register_input_handler(
+        &mut self,
+        handler: impl FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError>
+        + Send
+        + 'static,
+    ) -> &mut Self {
+        self.input_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Installs a read-only capture adapter, replacing any prior hook.
+    pub fn register_capture_handler(
+        &mut self,
+        handler: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
+    ) -> &mut Self {
+        self.capture_handler = Some(Box::new(handler));
+        self
     }
 
     pub fn handle(&mut self, app: &mut App, request: &RequestEnvelope) -> ResponseEnvelope {
@@ -170,7 +245,7 @@ impl Inspector {
                         "the runtime clock is not controlled by the inspector",
                     ));
                 }
-                app.advance_fixed(*frames);
+                app.try_advance_fixed(*frames).map_err(deferred_failure)?;
                 self.state_revision = self.state_revision.wrapping_add(1);
                 Ok(Response::Stepped {
                     frames: *frames,
@@ -186,13 +261,60 @@ impl Inspector {
                 "this component does not expose writable reflected fields",
             )),
             Request::Commands => Ok(Response::Commands {
-                commands: Vec::new(),
+                commands: self
+                    .commands
+                    .values()
+                    .map(|command| command.metadata.clone())
+                    .collect(),
             }),
-            Request::Invoke { .. } | Request::InjectInput { .. } | Request::Capture => {
-                Err(ProtocolError::new(
-                    ErrorCode::Unsupported,
-                    "this operation has not been registered by the game",
-                ))
+            Request::Invoke { name, arguments } => {
+                let command = self.commands.get_mut(name).ok_or_else(|| {
+                    ProtocolError::new(ErrorCode::NotFound, format!("unknown game command: {name}"))
+                })?;
+                app.apply_deferred().map_err(deferred_failure)?;
+                let outcome = (command.handler)(
+                    app,
+                    serde_json::Value::Object(arguments.clone().into_iter().collect()),
+                );
+                // Always drain this invocation's deferred writes, even when the
+                // handler rejects after enqueueing them. Commands are not transactional.
+                let deferred = app.apply_deferred().map_err(deferred_failure);
+                deferred?;
+                outcome?;
+                self.state_revision = self.state_revision.wrapping_add(1);
+                Ok(Response::Applied {
+                    applied_frame: current_frame(app),
+                })
+            }
+            Request::InjectInput { frame, actions } => {
+                let handler = self
+                    .input_handler
+                    .as_mut()
+                    .ok_or_else(unregistered_operation)?;
+                if !self.config.controlled {
+                    return Err(ProtocolError::new(
+                        ErrorCode::NotControlled,
+                        "input injection requires a controlled runtime",
+                    ));
+                }
+                if *frame <= current_frame(app) {
+                    return Err(ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "input must target a future frame",
+                    ));
+                }
+                handler(app, *frame, actions)?;
+                self.state_revision = self.state_revision.wrapping_add(1);
+                Ok(Response::Applied {
+                    applied_frame: *frame,
+                })
+            }
+            Request::Capture => {
+                let handler = self
+                    .capture_handler
+                    .as_mut()
+                    .ok_or_else(unregistered_operation)?;
+                handler(app).map(Response::Capture)
             }
         }
     }
@@ -204,6 +326,15 @@ impl Inspector {
         }
         if self.config.mutation_enabled {
             operations.push(Operation::Mutate);
+        }
+        if !self.commands.is_empty() {
+            operations.push(Operation::Invoke);
+        }
+        if self.config.controlled && self.input_handler.is_some() {
+            operations.push(Operation::InjectInput);
+        }
+        if self.capture_handler.is_some() {
+            operations.push(Operation::Capture);
         }
         Capabilities {
             schema_version: SCHEMA_VERSION,
@@ -228,6 +359,33 @@ impl Inspector {
             error,
         )
     }
+}
+
+fn unregistered_operation() -> ProtocolError {
+    ProtocolError::new(
+        ErrorCode::Unsupported,
+        "this operation has not been registered by the game",
+    )
+}
+
+fn deferred_failure(errors: Vec<crate::DeferredCommandError>) -> ProtocolError {
+    let mut error = ProtocolError::new(ErrorCode::Internal, "deferred ECS commands failed");
+    error.details.insert(
+        "deferred_errors".to_owned(),
+        serde_json::Value::Array(
+            errors
+                .into_iter()
+                .map(|error| {
+                    serde_json::json!({
+                        "entity": to_protocol_entity(error.entity()),
+                        "operation": format!("{:?}", error.operation()).to_lowercase(),
+                        "message": error.to_string(),
+                    })
+                })
+                .collect(),
+        ),
+    );
+    error
 }
 
 fn current_frame(app: &App) -> u64 {
@@ -346,6 +504,297 @@ mod tests {
             ResponseOutcome::Failure {
                 error: titan_protocol::ProtocolError {
                     code: ErrorCode::MutationDisabled,
+                    ..
+                }
+            }
+        ));
+    }
+    fn metadata(name: &str) -> titan_protocol::CommandMetadata {
+        titan_protocol::CommandMetadata {
+            name: name.to_owned(),
+            description: String::new(),
+            arguments: Default::default(),
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct MoveArgs {
+        amount: i32,
+    }
+
+    #[test]
+    fn commands_are_typed_sorted_and_only_success_advances_revision() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector
+            .register_command::<MoveArgs>(metadata("move"), |app, args| {
+                if args.amount < 0 {
+                    return Err(titan_protocol::ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "amount must be positive",
+                    ));
+                }
+                app.world_mut().iter_mut::<Position>().next().unwrap().1.0 += args.amount;
+                Ok(())
+            })
+            .unwrap();
+        inspector
+            .register_command::<MoveArgs>(metadata("alpha"), |_, _| Ok(()))
+            .unwrap();
+        assert!(
+            inspector
+                .register_command::<MoveArgs>(metadata("move"), |_, _| Ok(()))
+                .is_err()
+        );
+        let response = inspector.handle(&mut app, &RequestEnvelope::new("list", Request::Commands));
+        let ResponseOutcome::Success {
+            response: Response::Commands { commands },
+        } = response.outcome
+        else {
+            panic!("expected command list")
+        };
+        assert_eq!(
+            commands
+                .iter()
+                .map(|command| command.name.as_str())
+                .collect::<Vec<_>>(),
+            ["alpha", "move"]
+        );
+        for arguments in [
+            serde_json::json!({}),
+            serde_json::json!({"amount": "bad"}),
+            serde_json::json!({"amount": -1}),
+            serde_json::json!({"amount": 2, "extra": true}),
+        ] {
+            let response = inspector.handle(
+                &mut app,
+                &RequestEnvelope::new(
+                    "bad",
+                    Request::Invoke {
+                        name: "move".into(),
+                        arguments: serde_json::from_value(arguments).unwrap(),
+                    },
+                ),
+            );
+            assert_eq!(response.state_revision, 0);
+            assert!(matches!(
+                response.outcome,
+                ResponseOutcome::Failure {
+                    error: titan_protocol::ProtocolError {
+                        code: ErrorCode::InvalidValue,
+                        ..
+                    }
+                }
+            ));
+            assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 0);
+        }
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "valid",
+                Request::Invoke {
+                    name: "move".into(),
+                    arguments: [("amount".into(), 5.into())].into(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 1);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Success {
+                response: Response::Applied { applied_frame: 0 }
+            }
+        ));
+        assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 5);
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "missing",
+                Request::Invoke {
+                    name: "missing".into(),
+                    arguments: Default::default(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 1);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::NotFound,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn hooks_advertise_capabilities_and_capture_does_not_mutate_revision() {
+        let (mut app, mut inspector) = inspected_app();
+        assert_eq!(
+            inspector.capabilities().operations,
+            [
+                titan_protocol::Operation::Inspect,
+                titan_protocol::Operation::Step
+            ]
+        );
+        let unsupported =
+            inspector.handle(&mut app, &RequestEnvelope::new("capture", Request::Capture));
+        assert!(matches!(
+            unsupported.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::Unsupported,
+                    ..
+                }
+            }
+        ));
+        inspector.register_input_handler(|app, frame, actions| {
+            app.world_mut().insert_resource((frame, actions.clone()));
+            Ok(())
+        });
+        inspector.register_capture_handler(|_| {
+            Ok(titan_protocol::CaptureResult {
+                width: 1,
+                height: 1,
+                format: "ppm".into(),
+                artifact: "capture.ppm".into(),
+                checksum: "abc".into(),
+            })
+        });
+        assert!(
+            inspector
+                .capabilities()
+                .operations
+                .contains(&titan_protocol::Operation::InjectInput)
+        );
+        assert!(
+            inspector
+                .capabilities()
+                .operations
+                .contains(&titan_protocol::Operation::Capture)
+        );
+        let stale = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "stale",
+                Request::InjectInput {
+                    frame: 0,
+                    actions: Default::default(),
+                },
+            ),
+        );
+        assert_eq!(stale.state_revision, 0);
+        assert!(matches!(stale.outcome, ResponseOutcome::Failure { .. }));
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "input",
+                Request::InjectInput {
+                    frame: 3,
+                    actions: [("jump".into(), titan_protocol::InputValue::Button(true))].into(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 1);
+        assert_eq!(response.observed_frame, 0);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Success {
+                response: Response::Applied { applied_frame: 3 }
+            }
+        ));
+        let response =
+            inspector.handle(&mut app, &RequestEnvelope::new("capture", Request::Capture));
+        assert_eq!(response.state_revision, 1);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Success {
+                response: Response::Capture(_)
+            }
+        ));
+    }
+
+    #[test]
+    fn deferred_command_failures_are_structured_and_do_not_advance_revision() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector
+            .register_command::<MoveArgs>(metadata("remove_twice"), |app, _| {
+                let entity = app.world().entities().next().unwrap();
+                let mut commands = app.world_mut().commands();
+                commands.despawn(entity);
+                commands.despawn(entity);
+                Ok(())
+            })
+            .unwrap();
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "bad",
+                Request::Invoke {
+                    name: "remove_twice".into(),
+                    arguments: [("amount".into(), 1.into())].into(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 0);
+        let ResponseOutcome::Failure { error } = response.outcome else {
+            panic!("expected failure")
+        };
+        assert_eq!(error.code, ErrorCode::Internal);
+        assert_eq!(error.details["deferred_errors"][0]["operation"], "despawn");
+        assert_eq!(app.world().entity_count(), 0);
+        assert!(app.take_deferred_errors().is_empty());
+    }
+    #[test]
+    fn failed_handlers_drain_their_deferred_writes() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector
+            .register_command::<MoveArgs>(metadata("reject"), |app, _| {
+                app.world_mut().commands().spawn_with(Position(20));
+                Err(titan_protocol::ProtocolError::new(
+                    ErrorCode::InvalidValue,
+                    "rejected after queueing",
+                ))
+            })
+            .unwrap();
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "reject",
+                Request::Invoke {
+                    name: "reject".into(),
+                    arguments: [("amount".into(), 1.into())].into(),
+                },
+            ),
+        );
+        assert!(matches!(response.outcome, ResponseOutcome::Failure { .. }));
+        assert_eq!(response.state_revision, 0);
+        assert_eq!(app.world().entity_count(), 2);
+        assert!(app.apply_deferred().is_ok());
+        assert_eq!(app.world().entity_count(), 2);
+    }
+
+    #[test]
+    fn failed_step_reports_partial_progress_without_success_revision() {
+        let (mut app, mut inspector) = inspected_app();
+        app.add_systems(FixedUpdate, |world| {
+            let entity = world.entities().next().unwrap();
+            let mut commands = world.commands();
+            commands.despawn(entity);
+            commands.despawn(entity);
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new("step", Request::Step { frames: 3 }),
+        );
+        assert_eq!(response.observed_frame, 1);
+        assert_eq!(response.state_revision, 0);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::Internal,
                     ..
                 }
             }
