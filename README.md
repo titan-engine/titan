@@ -15,4 +15,5 @@ work without depending on a graphical editor.
 - [Open design questions](docs/open-questions.md)
 - [CLI workflow](docs/cli.md)
 - [In-process inspection](docs/inspection.md)
+- [Browser inspection](docs/browser.md)
 - [Implementation plan](docs/implementation-plan.md)
