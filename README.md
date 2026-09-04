@@ -13,4 +13,4 @@ work without depending on a graphical editor.
 - [Vision and principles](docs/vision.md)
 - [First milestone](docs/first-milestone.md)
 - [Open design questions](docs/open-questions.md)
-
+- [CLI workflow](docs/cli.md)
