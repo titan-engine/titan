@@ -4,10 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/titan-cli", "crates/titan-macros", "crates/titan-protocol"]
+members = ["crates/titan-cli", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 titan-macros = { path = "crates/titan-macros" }
 titan-protocol = { path = "crates/titan-protocol" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+ctrlc = { version = "3", features = ["termination"] }
+titan-remote = { path = "crates/titan-remote" }
