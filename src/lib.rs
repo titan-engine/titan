@@ -7,6 +7,7 @@ extern crate self as titan;
 
 pub mod app;
 pub mod ecs;
+pub mod input;
 pub mod inspection;
 pub mod render;
 pub mod time;

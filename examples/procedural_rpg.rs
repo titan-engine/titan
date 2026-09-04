@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use titan::input::{ActionValue, InputFrame, InputRecording, InputTracker, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
@@ -25,10 +26,12 @@ struct Shard;
 #[derive(Component)]
 struct Shrine;
 
-#[derive(Clone, Copy, Default)]
-struct Input {
-    x: i32,
-    y: i32,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Action {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
 #[derive(Default)]
@@ -51,9 +54,7 @@ struct ExtractedFrame(RenderFrame);
 fn main() {
     let mut app = build_game();
 
-    walk(&mut app, 1, 0, 2);
-    walk(&mut app, 0, 1, 3);
-    walk(&mut app, 1, 0, 6);
+    replay(&mut app, &recorded_walk());
 
     let frame = &app
         .world()
@@ -77,7 +78,8 @@ fn main() {
 
 fn build_game() -> App {
     let mut app = App::new();
-    app.world_mut().insert_resource(Input::default());
+    app.world_mut()
+        .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(QuestState::default());
     app.add_systems(Startup, setup);
     app.add_systems(FixedUpdate, move_player);
@@ -106,15 +108,17 @@ fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T) {
 }
 
 fn move_player(world: &mut World) {
-    let input = *world.resource::<Input>().unwrap();
+    let input = world.resource::<InputFrame<Action>>().unwrap();
+    let x = i32::from(input.is_active(&Action::Right)) - i32::from(input.is_active(&Action::Left));
+    let y = i32::from(input.is_active(&Action::Down)) - i32::from(input.is_active(&Action::Up));
     let player = world
         .iter::<Player>()
         .next()
         .map(|(entity, _)| entity)
         .unwrap();
     let position = world.get_mut::<Position>(player).unwrap();
-    position.x = (position.x + input.x).clamp(0, MAP_WIDTH - 1);
-    position.y = (position.y + input.y).clamp(0, MAP_HEIGHT - 1);
+    position.x = (position.x + x).clamp(0, MAP_WIDTH - 1);
+    position.y = (position.y + y).clamp(0, MAP_HEIGHT - 1);
 }
 
 fn collect_shards(world: &mut World) {
@@ -261,9 +265,28 @@ fn terrain_variation(seed: u64, x: i32, y: i32) -> u32 {
     (value ^ (value >> 31)) as u32 & 1
 }
 
-fn walk(app: &mut App, x: i32, y: i32, ticks: u64) {
-    *app.world_mut().resource_mut::<Input>().unwrap() = Input { x, y };
-    app.advance_fixed(ticks);
+fn recorded_walk() -> InputRecording<Action> {
+    let mut tracker = InputTracker::new();
+    let mut recording = InputRecording::new(RecordingHeader::new(
+        16_666_667,
+        0x0054_4954_414e,
+        0x5250_475f_5631,
+    ));
+    for (action, ticks) in [(Action::Right, 2), (Action::Down, 3), (Action::Right, 6)] {
+        for _ in 0..ticks {
+            recording.push(tracker.sample([(action, ActionValue::PRESSED)]));
+        }
+    }
+    recording
+}
+
+fn replay(app: &mut App, recording: &InputRecording<Action>) {
+    for frame in recording.frames() {
+        *app.world_mut()
+            .resource_mut::<InputFrame<Action>>()
+            .unwrap() = frame.clone();
+        app.advance_fixed(1);
+    }
 }
 
 fn write_ppm(path: &Path, image: &Image) {
@@ -290,19 +313,19 @@ fn image_checksum(image: &Image) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{QuestState, build_game, image_checksum, walk};
+    use super::{QuestState, build_game, image_checksum, recorded_walk, replay};
     use titan::render::{ImageAssets, SoftwareRenderer};
 
     #[test]
     fn recorded_walk_collects_every_shard_and_activates_the_shrine() {
         let mut app = build_game();
-        walk(&mut app, 1, 0, 2);
-        walk(&mut app, 0, 1, 3);
-        walk(&mut app, 1, 0, 6);
+        let recording = recorded_walk();
+        replay(&mut app, &recording);
 
         let quest = app.world().resource::<QuestState>().unwrap();
         assert_eq!(quest.collected_shards, 3);
         assert!(quest.shrine_active);
+        assert_eq!(recording.len(), 11);
 
         let frame = &app.world().resource::<super::ExtractedFrame>().unwrap().0;
         let image = SoftwareRenderer::render(frame, app.world().resource::<ImageAssets>().unwrap())
