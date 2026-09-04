@@ -24,7 +24,8 @@ logical action names and values and queues them for a future frame. Injection
 requires a controlled runtime. Frame 1 is the first fixed tick; a request for
 frame N must arrive before N has completed. The hook decides whether duplicate
 frame submissions replace or reject existing input, and should document that
-choice. An input response's `applied_frame` identifies the scheduled frame;
+choice. Deferred writes are flushed before and after each input hook, including
+a rejected hook; these writes are not transactional. An input response's `applied_frame` identifies the scheduled frame;
 `observed_frame` is the runtime's current completed tick.
 
 Register a capture hook with `register_capture_handler`. It receives shared

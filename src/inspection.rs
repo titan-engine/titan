@@ -106,6 +106,8 @@ impl Inspector {
 
     /// Installs the game's deterministic input adapter, replacing any prior hook.
     /// The adapter validates actions and queues them for the requested future frame.
+    /// Deferred writes are applied before and after the hook, including on failure.
+    /// Like commands, hooks are not transactional; validate before mutating.
     pub fn register_input_handler(
         &mut self,
         handler: impl FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError>
@@ -177,6 +179,12 @@ impl Inspector {
                 paused: self.config.controlled,
             })),
             Request::Entities { query, page } => {
+                if page.limit == 0 {
+                    return Err(ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "entity page limit must be positive",
+                    ));
+                }
                 let start = match page.cursor.as_deref() {
                     Some(cursor) => cursor.parse::<usize>().map_err(|_| {
                         ProtocolError::new(ErrorCode::InvalidValue, "invalid entity page cursor")
@@ -303,7 +311,10 @@ impl Inspector {
                         "input must target a future frame",
                     ));
                 }
-                handler(app, *frame, actions)?;
+                app.apply_deferred().map_err(deferred_failure)?;
+                let outcome = handler(app, *frame, actions);
+                app.apply_deferred().map_err(deferred_failure)?;
+                outcome?;
                 self.state_revision = self.state_revision.wrapping_add(1);
                 Ok(Response::Applied {
                     applied_frame: *frame,
@@ -789,6 +800,129 @@ mod tests {
             &RequestEnvelope::new("step", Request::Step { frames: 3 }),
         );
         assert_eq!(response.observed_frame, 1);
+        assert_eq!(response.state_revision, 0);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::Internal,
+                    ..
+                }
+            }
+        ));
+    }
+    #[test]
+    fn zero_page_limit_is_rejected_instead_of_repeating_cursor() {
+        let (mut app, mut inspector) = inspected_app();
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "page",
+                Request::Entities {
+                    query: EntityQuery::default(),
+                    page: PageRequest {
+                        cursor: None,
+                        limit: 0,
+                    },
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 0);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::InvalidValue,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn input_hooks_flush_deferred_failures_before_reporting_success() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector.register_input_handler(|app, _, _| {
+            let entity = app.world().entities().next().unwrap();
+            let mut commands = app.world_mut().commands();
+            commands.despawn(entity);
+            commands.despawn(entity);
+            Ok(())
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "input",
+                Request::InjectInput {
+                    frame: 1,
+                    actions: Default::default(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 0);
+        let ResponseOutcome::Failure { error } = response.outcome else {
+            panic!("expected deferred failure")
+        };
+        assert_eq!(error.code, ErrorCode::Internal);
+        assert_eq!(error.details["deferred_errors"][0]["operation"], "despawn");
+        assert_eq!(app.world().entity_count(), 0);
+        assert!(app.apply_deferred().is_ok());
+    }
+
+    #[test]
+    fn rejected_input_hooks_drain_deferred_writes() {
+        let (mut app, mut inspector) = inspected_app();
+        inspector.register_input_handler(|app, _, _| {
+            app.world_mut().commands().spawn_with(Position(20));
+            Err(titan_protocol::ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "rejected after queueing",
+            ))
+        });
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "input",
+                Request::InjectInput {
+                    frame: 1,
+                    actions: Default::default(),
+                },
+            ),
+        );
+        assert_eq!(response.state_revision, 0);
+        assert!(matches!(
+            response.outcome,
+            ResponseOutcome::Failure {
+                error: titan_protocol::ProtocolError {
+                    code: ErrorCode::InvalidValue,
+                    ..
+                }
+            }
+        ));
+        assert_eq!(app.world().entity_count(), 2);
+        assert!(app.apply_deferred().is_ok());
+        assert_eq!(app.world().entity_count(), 2);
+    }
+
+    #[test]
+    fn input_hooks_do_not_run_with_outstanding_deferred_errors() {
+        let (mut app, mut inspector) = inspected_app();
+        let entity = app.world().entities().next().unwrap();
+        let mut commands = app.world_mut().commands();
+        commands.despawn(entity);
+        commands.despawn(entity);
+        inspector
+            .register_input_handler(|_, _, _| panic!("hook ran before old failure was reported"));
+        let response = inspector.handle(
+            &mut app,
+            &RequestEnvelope::new(
+                "input",
+                Request::InjectInput {
+                    frame: 1,
+                    actions: Default::default(),
+                },
+            ),
+        );
         assert_eq!(response.state_revision, 0);
         assert!(matches!(
             response.outcome,
