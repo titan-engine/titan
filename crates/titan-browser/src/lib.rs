@@ -307,3 +307,8 @@ mod tests {
         assert_ne!(changed.checksum, capture.checksum);
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+mod player;
+#[cfg(target_arch = "wasm32")]
+pub use player::BrowserPlayer;
