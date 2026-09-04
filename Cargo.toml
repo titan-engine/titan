@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/titan-macros"]
+members = ["crates/titan-macros", "crates/titan-protocol"]
 
 [dependencies]
 titan-macros = { path = "crates/titan-macros" }
