@@ -20,7 +20,7 @@ if not TARGET.is_absolute():
     TARGET = REPO / TARGET
 
 
-def png_from_ppm(source, destination):
+def png_from_ppm(source, destination, scale=1):
     magic, dimensions, maximum, pixels = source.read_bytes().split(b"\n", 3)
     width, height = map(int, dimensions.split())
     if magic != b"P6" or maximum != b"255" or len(pixels) != width * height * 3:
@@ -29,7 +29,15 @@ def png_from_ppm(source, destination):
     def chunk(kind, payload):
         return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
 
-    rows = b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height))
+    if scale < 1:
+        raise ValueError("scale must be positive")
+    rows = bytearray()
+    for y in range(height):
+        row = pixels[y * width * 3:(y + 1) * width * 3]
+        enlarged = b"".join(row[x:x + 3] * scale for x in range(0, len(row), 3))
+        rows.extend((b"\0" + enlarged) * scale)
+    width *= scale
+    height *= scale
     destination.write_bytes(
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
@@ -72,6 +80,10 @@ def main():
                 result = call("capture")
                 capture = result["response"]
                 png_from_ppm(Path(capture["artifact"]), args.output / (label + ".png"))
+                if label == "startup":
+                    # GitHub strips image-rendering CSS. Bake in nearest-neighbor
+                    # scaling; 8x stays crisp at 640 CSS pixels on a 2x display.
+                    png_from_ppm(Path(capture["artifact"]), args.output / "startup-preview.png", scale=8)
                 return {"frame": result["observed_frame"], "checksum": capture["checksum"],
                         "width": capture["width"], "height": capture["height"], "image": label + ".png"}
 

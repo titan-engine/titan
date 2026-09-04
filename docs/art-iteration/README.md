@@ -59,7 +59,9 @@ python3 scripts/capture-rpg-evidence.py target/titan/new-art-evidence
 The capture script launches a bounded paused runtime, requests startup and
 replay captures, converts RGB PPM losslessly to PNG, records assertions, and
 shuts down the runtime. It does not rebuild: build the revision being evaluated
-first. Historical baseline images stay unchanged when the reference changes.
+first. Historical baseline images stay unchanged when the reference changes. The script
+also writes `startup-preview.png` at 8× nearest-neighbor scale for the README;
+the original-resolution images remain the checksum reference.
 
 For the GPU comparison:
 

@@ -9,7 +9,7 @@ graphical editor.
 Titan is not production-ready. Pin a Git revision when depending on it; packages
 are not distributed through crates.io.
 
-<img src="docs/art-iteration/after/startup.png" alt="Titan's procedural sunlit-meadow RPG, with a player, three cyan shards, and a mossy shrine" width="640" style="image-rendering: pixelated;">
+<img src="docs/art-iteration/after/startup-preview.png" alt="Titan's procedural sunlit-meadow RPG, with a player, three cyan shards, and a mossy shrine" width="640" height="448">
 
 *The example RPG uses generated pixel art and the same game code for native,
 browser, and headless runs. [Before/after evidence](docs/art-iteration/README.md).*
