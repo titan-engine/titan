@@ -14,6 +14,17 @@ fn parse_and_payload_failures_are_single_json_results() {
         vec!["step", "1", "--format=json", "--timeout-ms", "0"],
         vec!["--format", "json", "invoke", "reset", "--arguments", "{"],
         vec!["--format", "json", "input", "1", "--actions", "[]"],
+        vec![
+            "--format",
+            "json",
+            "set-field",
+            "0",
+            "1",
+            "Position",
+            "x",
+            "--value",
+            "{",
+        ],
     ] {
         let mut arguments = arguments;
         arguments.extend(["--diagnostics", "never"]);

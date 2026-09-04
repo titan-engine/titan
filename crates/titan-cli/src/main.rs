@@ -74,6 +74,16 @@ enum CliCommand {
         index: u32,
         generation: u32,
     },
+    /// Sets an explicitly registered writable component field.
+    SetField {
+        index: u32,
+        generation: u32,
+        component: String,
+        field: String,
+        /// A JSON value, validated against the field type by the runtime.
+        #[arg(long, allow_hyphen_values = true)]
+        value: String,
+    },
     Commands,
     Step {
         frames: u64,
@@ -235,6 +245,26 @@ fn request_for(command: &CliCommand) -> Result<Request, LocalError> {
                 index: *index,
                 generation: *generation,
             },
+        },
+        CliCommand::SetField {
+            index,
+            generation,
+            component,
+            field,
+            value,
+        } => Request::SetField {
+            entity: EntityId {
+                index: *index,
+                generation: *generation,
+            },
+            component: component.clone(),
+            field: field.clone(),
+            value: serde_json::from_str(value).map_err(|error| {
+                (
+                    "invalid_value".into(),
+                    format!("expected a JSON value: {error}"),
+                )
+            })?,
         },
         CliCommand::Commands => Request::Commands,
         CliCommand::Step { frames } => Request::Step { frames: *frames },
@@ -608,6 +638,61 @@ mod tests {
         ));
         assert!(Cli::try_parse_from(["titan", "status", "--timeout-ms", "0"]).is_err());
         assert!(Cli::try_parse_from(["titan", "entities", "--limit", "0"]).is_err());
+    }
+
+    #[test]
+    fn set_field_preserves_json_value_types_and_entity_identity() {
+        for value in [
+            "true",
+            "false",
+            "42",
+            "-3.5",
+            r#""hello""#,
+            "null",
+            "[1,2]",
+            r#"{"nested":true}"#,
+        ] {
+            let cli = Cli::try_parse_from([
+                "titan",
+                "set-field",
+                "7",
+                "3",
+                "Position",
+                "x",
+                "--value",
+                value,
+            ])
+            .unwrap();
+            assert_eq!(
+                super::request_for(&cli.command).unwrap(),
+                titan_protocol::Request::SetField {
+                    entity: titan_protocol::EntityId {
+                        index: 7,
+                        generation: 3
+                    },
+                    component: "Position".into(),
+                    field: "x".into(),
+                    value: serde_json::from_str(value).unwrap(),
+                }
+            );
+        }
+        for value in ["", "{", "undefined", "NaN", "1 2"] {
+            let cli = Cli::try_parse_from([
+                "titan",
+                "set-field",
+                "7",
+                "3",
+                "Position",
+                "x",
+                "--value",
+                value,
+            ])
+            .unwrap();
+            assert_eq!(
+                super::request_for(&cli.command).unwrap_err().0,
+                "invalid_value"
+            );
+        }
     }
 
     #[test]

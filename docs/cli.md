@@ -52,8 +52,26 @@ commands. `--timeout-ms N` bounds an inspection request and defaults to 5000.
 
 `status` reports the clock and run mode. `entities` supports `--name`, repeated
 `--component`, `--cursor`, and `--limit`. Use `entity INDEX GENERATION` to inspect
-one returned entity ID. Component values are currently opaque, but type names
-and the RPG's `ActiveShrine` marker expose semantic state.
+one returned entity ID. Explicitly registered component fields expose typed
+values and field metadata; other components remain opaque. The RPG's
+`ActiveShrine` marker also exposes semantic state.
+
+Use `set-field INDEX GENERATION COMPONENT FIELD --value JSON` to change a
+registered writable field. Use the entity ID, component name, and field name
+returned by inspection. For example, after starting the RPG with
+`--serve --allow-mutation`, copy a Position component name from `entity` and run:
+
+```sh
+cargo run -p titan-cli -- set-field 0 0 'COMPONENT_NAME_FROM_INSPECTION' x --value -3.5
+```
+
+Replace the example entity index/generation with the inspected ID. `--value`
+accepts any valid JSON value; strings need JSON quotes (for example,
+`--value '"hello"'`) and booleans use `--value true`. The runtime validates the
+registered field type, entity generation, field permissions, and mutation
+policy. Malformed JSON fails locally before discovery. Mutation is disabled by
+default in the RPG and must be explicitly enabled with `--allow-mutation`.
+Unregistered fields cannot be changed through this command.
 
 Input is a complete snapshot for one future fixed tick. The RPG accepts button
 values for `up`, `down`, `left`, and `right`; unspecified frames release all
