@@ -6,12 +6,34 @@ use std::fmt;
 use super::entity::Entity;
 use super::storage::{ComponentStorage, ErasedStorage};
 
+/// Basic information available for every registered component type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ComponentMetadata {
+    /// The fully qualified Rust type name.
+    pub type_name: &'static str,
+    /// The size of the component in bytes.
+    pub size: usize,
+    /// The alignment of the component in bytes.
+    pub align: usize,
+}
+
 /// A type that can be attached to an entity.
 ///
-/// A derive macro will replace manual implementations as reflection support is
-/// introduced. Keeping this trait explicit avoids making every Rust type an
-/// inspectable Titan component by accident.
-pub trait Component: Send + Sync + 'static {}
+/// Implement this with `#[derive(Component)]` in normal game code. Value
+/// reflection and serialization will remain separate opt-in capabilities.
+pub trait Component: Send + Sync + 'static {
+    /// Returns the metadata that is always available for this component.
+    fn metadata() -> ComponentMetadata
+    where
+        Self: Sized,
+    {
+        ComponentMetadata {
+            type_name: std::any::type_name::<Self>(),
+            size: std::mem::size_of::<Self>(),
+            align: std::mem::align_of::<Self>(),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 struct EntitySlot {

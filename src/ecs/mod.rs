@@ -5,4 +5,4 @@ mod storage;
 mod world;
 
 pub use entity::Entity;
-pub use world::{Component, InsertError, World};
+pub use world::{Component, ComponentMetadata, InsertError, World};
