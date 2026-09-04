@@ -64,6 +64,31 @@ impl fmt::Display for InsertError {
 
 impl Error for InsertError {}
 
+/// An invalid combination of component accesses in a query.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QueryAccessError {
+    type_name: &'static str,
+}
+
+impl QueryAccessError {
+    /// Returns the component type requested through conflicting accesses.
+    pub const fn type_name(self) -> &'static str {
+        self.type_name
+    }
+}
+
+impl fmt::Display for QueryAccessError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "component {} cannot be borrowed mutably and immutably by one query",
+            self.type_name
+        )
+    }
+}
+
+impl Error for QueryAccessError {}
+
 /// Owns entities and all component storage for one ECS world.
 ///
 /// Component iteration follows sparse-set dense order. That order is
@@ -263,6 +288,57 @@ impl World {
             .flat_map(ComponentStorage::iter_mut)
     }
 
+    /// Iterates over entities carrying both component types.
+    pub fn iter2<A: Component, B: Component>(&self) -> impl Iterator<Item = (Entity, &A, &B)> {
+        let second = self.storage::<B>();
+        self.storage::<A>().into_iter().flat_map(move |first| {
+            first.iter().filter_map(move |(entity, first_value)| {
+                second?
+                    .get(entity)
+                    .map(|second_value| (entity, first_value, second_value))
+            })
+        })
+    }
+
+    /// Applies a function to entities carrying mutable `A` and shared `B`.
+    ///
+    /// Returns the number of matching entities. Asking for two forms of access
+    /// to the same component type returns an error before any values are
+    /// visited.
+    pub fn for_each_mut_with<A: Component, B: Component>(
+        &mut self,
+        mut visit: impl FnMut(Entity, &mut A, &B),
+    ) -> Result<usize, QueryAccessError> {
+        if TypeId::of::<A>() == TypeId::of::<B>() {
+            return Err(QueryAccessError {
+                type_name: std::any::type_name::<A>(),
+            });
+        }
+
+        let [first, second] = self
+            .components
+            .get_disjoint_mut([&TypeId::of::<A>(), &TypeId::of::<B>()]);
+        let (Some(first), Some(second)) = (first, second) else {
+            return Ok(0);
+        };
+        let first = first
+            .as_any_mut()
+            .downcast_mut::<ComponentStorage<A>>()
+            .expect("component TypeId must map to its component storage");
+        let second = second
+            .as_any()
+            .downcast_ref::<ComponentStorage<B>>()
+            .expect("component TypeId must map to its component storage");
+        let mut visited = 0;
+        for (entity, first_value) in first.iter_mut() {
+            if let Some(second_value) = second.get(entity) {
+                visit(entity, first_value, second_value);
+                visited += 1;
+            }
+        }
+        Ok(visited)
+    }
+
     fn storage<T: Component>(&self) -> Option<&ComponentStorage<T>> {
         self.components
             .get(&TypeId::of::<T>())?
@@ -294,6 +370,9 @@ mod tests {
     #[derive(Debug, PartialEq)]
     struct Health(u32);
     impl Component for Health {}
+
+    struct Damage(u32);
+    impl Component for Damage {}
 
     #[test]
     fn component_lifecycle() {
@@ -401,5 +480,40 @@ mod tests {
         assert_eq!(errors[0].entity(), stale);
         assert_eq!(errors[0].operation(), crate::ecs::DeferredOperation::Insert);
         assert_eq!(world.get::<Health>(valid), Some(&Health(2)));
+    }
+
+    #[test]
+    fn two_component_queries_join_and_mutate_matching_entities() {
+        let mut world = World::new();
+        let complete = world.spawn();
+        let incomplete = world.spawn();
+        world.insert(complete, Health(100)).unwrap();
+        world.insert(complete, Damage(25)).unwrap();
+        world.insert(incomplete, Health(50)).unwrap();
+
+        let values: Vec<_> = world
+            .iter2::<Health, Damage>()
+            .map(|(entity, health, damage)| (entity, health.0, damage.0))
+            .collect();
+        assert_eq!(values, vec![(complete, 100, 25)]);
+
+        let visited = world
+            .for_each_mut_with::<Health, Damage>(|_, health, damage| {
+                health.0 -= damage.0;
+            })
+            .unwrap();
+        assert_eq!(visited, 1);
+        assert_eq!(world.get::<Health>(complete), Some(&Health(75)));
+        assert_eq!(world.get::<Health>(incomplete), Some(&Health(50)));
+    }
+
+    #[test]
+    fn conflicting_query_access_is_rejected_before_iteration() {
+        let mut world = World::new();
+        let error = world
+            .for_each_mut_with::<Health, Health>(|_, _, _| unreachable!())
+            .unwrap_err();
+
+        assert_eq!(error.type_name(), std::any::type_name::<Health>());
     }
 }

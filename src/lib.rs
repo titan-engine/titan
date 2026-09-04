@@ -13,7 +13,7 @@ pub mod time;
 pub use app::{App, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
 pub use ecs::{
     Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation, Entity,
-    InsertError, World,
+    FindNameError, InsertError, Name, QueryAccessError, World,
 };
 pub use time::FixedTime;
 pub use titan_macros::Component;
