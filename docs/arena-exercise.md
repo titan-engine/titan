@@ -77,3 +77,20 @@ checksums or gameplay assertions. [Verification summary](milestone-2/verificatio
 A [fresh independent verifier](arena-verification.md) reproduced native and WASM
 checks using local guidance. No engine expansion was needed. User review of the
 playable result is still pending.
+
+## Reusable macOS host gap
+
+The native executable initially rendered correctly but was absent from Computer
+Use's app list and could not be selected by executable path. At the user's
+suggestion, the starter gained a reusable `scripts/build-macos-app.py` step,
+carried into the arena copy. It packages Cargo's reported executable and a
+standard Info.plist as an unsigned local `.app`, with configurable name and
+bundle ID. This changes host packaging, not simulation or rendering.
+
+Computer Use then selected `Titan Arena.app`, exposed the native window,
+produced [a native screenshot](milestone-2/arena-native-app.png), and exercised
+R restart and the window close button. The process exited after closing.
+`scripts/test-macos-bundles.py` independently copied both projects outside the
+checkout, built distinct bundles, relocated/renamed them, and ran their embedded
+executables with `--help`. A macOS CI job runs that check. This is a development
+bundle, not a signed/notarized distribution package.

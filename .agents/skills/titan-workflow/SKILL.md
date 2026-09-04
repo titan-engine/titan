@@ -17,6 +17,10 @@ Start with `starters/minimal/README.md`: copy the standalone package, configure
 its Titan path dependencies, and put game definitions in `src/game.rs`. The
 starter has its own native controlled runner, GPU player, browser adapters and
 portable build script. It does not import RPG support code.
+For native macOS visual verification, use the package's
+`scripts/build-macos-app.py --name "My Game" --bundle-id dev.example.my-game`.
+The README documents this unsigned local app bundle; select its printed absolute
+path in Computer Use to launch and inspect the native player.
 
 `python3 scripts/test-starter.py` verifies a copy outside the repository.
 `python3 starters/minimal/scripts/build-browser.py` and

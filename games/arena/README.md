@@ -87,3 +87,20 @@ are also checked in focused Rust tests.
 Art is generated in `src/game.rs` (pixel sprites, arena grid and tiny bitmap HUD
 font). Hosts share this module; no RPG source or assets are imported. See
 `../../docs/arena-exercise.md` for the independent exercise and diagnosed failure.
+
+## macOS application bundle
+
+From this package directory, build an app that Finder or Computer Use can open:
+
+```sh
+python3 scripts/build-macos-app.py --name "Titan Arena" --bundle-id dev.titan.arena
+```
+
+The script prints the absolute `.app` path under Cargo's target directory and
+respects `CARGO_TARGET_DIR`. Open that path with Finder or select it in Computer
+Use. It defaults to the `play` binary and a debug build; use `--bin NAME` or
+`--release` when needed. Use distinct names and bundle IDs for separate games.
+This is an unsigned local-development bundle, with no signing, notarization,
+installation or security-setting changes. Bundling requires macOS; the game
+itself still supports native Linux. The script follows Apple's
+[macOS bundle layout](https://developer.apple.com/documentation/bundleresources/placing-content-in-a-bundle).

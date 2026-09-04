@@ -80,3 +80,18 @@ jobs:
           python3 games/arena/scripts/build-browser.py
           node games/arena/scripts/test-browser.mjs
           node --test games/arena/web/inspector/bridge.test.mjs
+
+  macos-bundles:
+    name: macOS development app bundles
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build and run relocated bundles from copied games
+        run: python3 scripts/test-macos-bundles.py
