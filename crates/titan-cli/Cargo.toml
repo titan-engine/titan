@@ -15,3 +15,8 @@ serde_json = "1"
 titan-protocol = { path = "../titan-protocol" }
 
 titan-remote = { path = "../titan-remote" }
+
+titan-diagnostics = { path = "../titan-diagnostics" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
