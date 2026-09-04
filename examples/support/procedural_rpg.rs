@@ -127,6 +127,31 @@ pub fn inspector_with_capture(
     capture: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
 ) -> Inspector {
     let mut inspector = Inspector::new(config);
+    for (field, maximum) in [("x", MAP_WIDTH - 1), ("y", MAP_HEIGHT - 1)] {
+        inspector
+            .register_field::<Position, i32>(
+                field,
+                FieldMetadata {
+                    type_name: "i32".into(),
+                    description: "Map tile coordinate".into(),
+                    writable: true,
+                    minimum: Some(0.0),
+                    maximum: Some(f64::from(maximum)),
+                    unit: Some("tile".into()),
+                },
+                move |position| if field == "x" { position.x } else { position.y },
+                |_, _| Ok(()),
+                move |position, value| {
+                    if field == "x" {
+                        position.x = value;
+                    } else {
+                        position.y = value;
+                    }
+                },
+            )
+            .expect("unique position field");
+    }
+
     inspector
         .register_command(
             CommandMetadata {
@@ -480,6 +505,53 @@ pub fn image_checksum(image: &Image) -> u64 {
 mod tests {
     use super::{QuestState, build_game, image_checksum, recorded_walk, replay};
     use titan::render::{ImageAssets, SoftwareRenderer};
+
+    #[test]
+    fn position_fields_require_opt_in_and_validate_before_mutation() {
+        use titan::inspection::InspectionConfig;
+        use titan_protocol::{ErrorCode, Request, Response, ResponseOutcome};
+        let mut app = build_game();
+        app.update_schedule(titan::Startup);
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        let entity = titan_protocol::EntityId {
+            index: player.index(),
+            generation: player.generation(),
+        };
+        let component = std::any::type_name::<super::Position>().to_owned();
+        let edit = |value| Request::SetField {
+            entity,
+            component: component.clone(),
+            field: "x".into(),
+            value,
+        };
+        let mut inspector = super::build_inspector("unused.ppm".into());
+        let denied = request(&mut app, &mut inspector, edit(3.into()));
+        assert!(
+            matches!(denied.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::MutationDisabled)
+        );
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 2);
+        let mut config = InspectionConfig::controlled("editable-rpg", "test");
+        config.mutation_enabled = true;
+        let mut inspector = super::configured_inspector("unused.ppm".into(), config);
+        success(request(&mut app, &mut inspector, edit(3.into())));
+        for value in [20.into(), (-1).into(), "3".into()] {
+            let rejected = request(&mut app, &mut inspector, edit(value));
+            assert_eq!(rejected.state_revision, 1);
+            assert_eq!(rejected.observed_frame, 0);
+            assert!(
+                matches!(rejected.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
+            );
+        }
+        let Response::Entity(details) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entity { entity },
+        )) else {
+            panic!("expected entity")
+        };
+        assert_eq!(details.components[&component]["x"], 3);
+        assert!(details.component_fields[&component]["x"].writable);
+    }
 
     #[test]
     fn overlapping_shards_are_collected_once_at_the_schedule_boundary() {

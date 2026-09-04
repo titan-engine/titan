@@ -27,7 +27,7 @@ def main():
         project = Path(directory).resolve()
         with tempfile.TemporaryFile(mode="w+") as log:
             game = subprocess.Popen(
-                [str(GAME), "--serve", "--project", str(project), "--instance", "acceptance", "--run-for-ms", "30000"],
+                [str(GAME), "--serve", "--project", str(project), "--instance", "acceptance", "--allow-mutation", "--run-for-ms", "30000"],
                 cwd=REPO,
                 stdout=log,
                 stderr=log,
@@ -99,6 +99,19 @@ def main():
                 assert cli("capture")["response"]["checksum"] != capture["checksum"]
                 assert cli("status")["observed_frame"] == 11
                 assert cli("input", "12", "--actions", "[]", success=False)["error"]["code"] == "invalid_value"
+                player = next(entity["id"] for entity in entities if entity["name"] == "player")
+                player_details = cli("entity", str(player["index"]), str(player["generation"]))["response"]
+                position_type = next(name for name in player_details["components"] if name.endswith("::Position"))
+                assert player_details["components"][position_type] == {"x": 10, "y": 5}
+                assert player_details["component_fields"][position_type]["x"]["maximum"] == 19
+                changed = cli("set-field", str(player["index"]), str(player["generation"]), position_type, "x", "--value", "9")
+                assert changed["observed_frame"] == 11
+                assert cli("entity", str(player["index"]), str(player["generation"]))["response"]["components"][position_type]["x"] == 9
+                for value in ["20", '"9"']:
+                    invalid = cli("set-field", str(player["index"]), str(player["generation"]), position_type, "x", "--value", value, success=False)
+                    assert invalid["error"]["code"] == "invalid_value"
+                    assert invalid["state_revision"] == changed["state_revision"]
+                assert cli("entity", str(player["index"]), str(player["generation"]))["response"]["components"][position_type]["x"] == 9
                 registration_path = next((project / "target/titan/instances").glob("*.json"))
                 registration = json.loads(registration_path.read_text())
                 request = urllib.request.Request(
@@ -122,7 +135,7 @@ def main():
                     except subprocess.TimeoutExpired:
                         game.kill()
                         game.wait()
-    print("Native CLI control loop passed: replay, inspection, command, exact capture, errors, shutdown.")
+    print("Native CLI control loop passed: replay, inspection, commands, fields, exact capture, diagnostics, shutdown.")
 
 
 if __name__ == "__main__":

@@ -61,10 +61,15 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     let mut instance = format!("procedural-rpg-{}", std::process::id());
     let mut duration = None;
     let mut configured = false;
+    let mut allow_mutation = false;
     let mut diagnostic_policy = titan_diagnostics::DiagnosticPolicy::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--serve" => serve = true,
+            "--allow-mutation" => {
+                allow_mutation = true;
+                configured = true;
+            }
             "--project" => {
                 project = args.next().ok_or("--project requires a directory")?.into();
                 configured = true;
@@ -92,7 +97,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "procedural_rpg [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use titan attach and protocol requests to drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "procedural_rpg [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }
@@ -102,7 +107,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     if !serve {
         if configured {
             return Err(
-                "--project, --instance, --run-for-ms, and --diagnostics require --serve".into(),
+                "--project, --instance, --run-for-ms, --diagnostics, and --allow-mutation require --serve".into(),
             );
         }
         return Ok(false);
@@ -128,10 +133,9 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         .join("target/titan")
         .join(format!("{instance}-{}", std::process::id()))
         .join("capture.ppm");
-    let mut inspector = configured_inspector(
-        output,
-        InspectionConfig::controlled(&instance, project.to_string_lossy()),
-    );
+    let mut config = InspectionConfig::controlled(&instance, project.to_string_lossy());
+    config.mutation_enabled = allow_mutation;
+    let mut inspector = configured_inspector(output, config);
     let (mut server, queue) = Server::start(ServerConfig::new(
         &project,
         instance,
