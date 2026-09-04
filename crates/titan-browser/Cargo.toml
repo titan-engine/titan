@@ -1,8 +1,11 @@
 [package]
 name = "titan-browser"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Browser host for the Titan procedural RPG and inspection protocol."
 
 [lib]
 crate-type = ["cdylib", "rlib"]

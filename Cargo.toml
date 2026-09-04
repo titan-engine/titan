@@ -1,10 +1,21 @@
 [package]
 name = "titan"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Experimental Rust game engine for agent-driven development."
 
 [workspace]
 members = ["crates/titan-browser", "crates/titan-cli", "crates/titan-diagnostics", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote", "crates/titan-render-wgpu"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/titan-engine/titan"
+publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

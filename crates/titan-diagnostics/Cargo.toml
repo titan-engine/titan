@@ -1,7 +1,11 @@
 [package]
 name = "titan-diagnostics"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Diagnostic bundles and deterministic image comparisons for Titan."
 
 [dependencies]
 titan = { path = "../.." }

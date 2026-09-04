@@ -1,8 +1,11 @@
 [package]
 name = "titan-protocol"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Transport-neutral inspection messages for Titan games."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

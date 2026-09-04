@@ -1,7 +1,11 @@
 [package]
 name = "titan-render-wgpu"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Native and browser GPU sprite rendering for Titan."
 
 [dependencies]
 titan = { path = "../.." }
