@@ -135,7 +135,8 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         .join("capture.ppm");
     let mut config = InspectionConfig::controlled(&instance, project.to_string_lossy());
     config.mutation_enabled = allow_mutation;
-    let mut inspector = configured_inspector(output, config);
+    let inspector = configured_inspector(output, config);
+    let mut session = game::live::RpgSession::new(app, inspector, true);
     let (mut server, queue) = Server::start(ServerConfig::new(
         &project,
         instance,
@@ -155,29 +156,40 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     {
         // This thread alone owns the game, and fixed time advances only on Step.
         queue.drain(|request| {
-            let result = diagnostics.handle(&mut inspector, &mut app, request, |app, bundle| {
-                bundle.world_state["positions"] = game::diagnostic_positions(app.world());
-                if let Some(quest) = app.world().resource::<QuestState>() {
-                    bundle.world_state["quest"] = serde_json::json!({
-                        "collected_shards": quest.collected_shards,
-                        "shrine_active": quest.shrine_active,
-                    });
-                }
-                match game::render_image(app.world()) {
-                    Ok(image) => Some(image),
-                    Err(error) => {
-                        bundle.logs.push(titan_diagnostics::DiagnosticLog {
-                            level: "warning".into(),
-                            message: format!("diagnostic capture failed: {}", error.message),
-                            frame: bundle
-                                .response
-                                .as_ref()
-                                .map(|response| response.observed_frame),
+            let request_started = Instant::now();
+            let response = session.handle(request);
+            let elapsed_us =
+                u64::try_from(request_started.elapsed().as_micros()).unwrap_or(u64::MAX);
+            let result = diagnostics.record_response(
+                session.inspector(),
+                session.app(),
+                request,
+                response,
+                elapsed_us,
+                |app, bundle| {
+                    bundle.world_state["positions"] = game::diagnostic_positions(app.world());
+                    if let Some(quest) = app.world().resource::<QuestState>() {
+                        bundle.world_state["quest"] = serde_json::json!({
+                            "collected_shards": quest.collected_shards,
+                            "shrine_active": quest.shrine_active,
                         });
-                        None
                     }
-                }
-            });
+                    match game::render_image(app.world()) {
+                        Ok(image) => Some(image),
+                        Err(error) => {
+                            bundle.logs.push(titan_diagnostics::DiagnosticLog {
+                                level: "warning".into(),
+                                message: format!("diagnostic capture failed: {}", error.message),
+                                frame: bundle
+                                    .response
+                                    .as_ref()
+                                    .map(|response| response.observed_frame),
+                            });
+                            None
+                        }
+                    }
+                },
+            );
             for error in result.errors {
                 eprintln!("{error}");
             }
