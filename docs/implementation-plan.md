@@ -31,12 +31,11 @@ semantics. Keep discovery authentication, browser control opt-in, field
 validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
-The next objective does not yet schedule editor, 3D, networking, scene format,
-broader asset pipeline or broad reflection redesign work. Issue #6 selects only
-the bounded opt-in [executor slice](executor.md), retaining sequential defaults.
-This is a scheduling boundary, not a revision of the agreed vision. Use the fixed
-arena view unless the game demonstrates a camera requirement. Keep current
-platform limitations documented rather than expanding platform scope.
+The [3D rendering](rendering.md#3d-rendering-contract) and
+[async capture](inspection.md#asynchronous-capture-contract) contracts describe
+selected design, not shipped functionality or approval of implementation issues.
+Issue status and prerequisites remain on the GitHub board. Existing platform
+limitations remain in effect until the corresponding runtime evidence is added.
 
 Each implementation increment must pass:
 

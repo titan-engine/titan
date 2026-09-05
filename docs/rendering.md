@@ -105,3 +105,91 @@ The return value still reports whether a frame was presented. Zero dimensions
 suspend presentation, sizes are bounded to the device limit, outdated surfaces
 are reconfigured, and lost/invalid surfaces return an error for the host to
 handle. No RPG dependency or game-specific rendering policy enters this API.
+
+## 3D rendering contract
+
+The following is an agreed design, **not an implemented capability**. Execution
+scope and acceptance live in [#42](https://github.com/titan-engine/titan/issues/42)
+and its linked issues. As implementation lands, update this section in place
+with the actual public API and evidence; do not retain a parallel design history.
+
+### Coordinates and data
+
+Use right-handed coordinates, +Y up, and an XZ ground plane. One world unit is
+one metre; camera-local forward is -Z. Mesh front faces wind counterclockwise
+when viewed from outside. Matrices act on column vectors: clip position is
+projection × view × model × position. Perspective uses vertical field of view,
+positive aspect ratio, finite near/far distances with `0 < near < far`, and
+normalized device depth 0 at near and 1 at far. Backend adaptation must preserve
+these conventions, including browser backends.
+
+A local transform contains translation, a normalized rotation quaternion and
+positive nonzero scale on each axis, composed as translation × rotation × scale.
+There is no parent hierarchy in this boundary. Normals use the inverse transpose
+of the model's linear part and are normalized before lighting. Reject nonfinite
+values, degenerate rotations and invalid projections before GPU submission.
+Start with small CPU vector/quaternion/matrix helpers for these operations in the
+engine's rendering module, with convention tests; no new math dependency or
+standalone general math library is selected.
+
+A mesh owns finite positions, nonzero normals and triangle indices. Validate
+matching attribute lengths, index ranges, complete nondegenerate triangles and
+bounded counts/byte sizes with checked arithmetic. Cube and floor generators use
+this same mesh representation. Handles are process-local and scoped to an asset
+collection, with generation checks when slots are reused; replacing a collection
+must never make an old numeric handle resolve to unrelated geometry. No disk
+identity, importer, general asset graph or persistent GPU cache is implied.
+
+An immutable 3D frame owns camera, lighting and ordered draw data (mesh reference,
+transform and opaque base color). Its asset references retain the exact immutable
+mesh versions used by the frame, so later replacement cannot alter an in-flight
+render or capture. Missing/stale handles are errors. Bound draw count and aggregate retained/uploaded
+geometry bytes per frame, not only each mesh in isolation. Extract from `&World` using
+`App`'s existing snapshot boundary; do not put GPU objects, windows or transport
+state in the frame. Fix draw order during extraction, including a stable tie
+break for equal depth. CPU construction, validation and extraction work without
+a GPU. The initial data API belongs beside the existing render data, with GPU
+implementation in `titan-render-wgpu`; no speculative crate split is selected.
+
+### Drawing and presentation
+
+Use opaque triangle rendering, back-face culling, a depth attachment cleared to
+1, depth writes and a strict less comparison. Start with one sample per pixel,
+one directional light and bounded ambient plus Lambert diffuse lighting:
+`base_linear * clamp(ambient + diffuse * max(dot(normal, to_light), 0), 0, 1)`.
+The direction is normalized and colors/intensities are validated. Author base
+colors as sRGB, decode before lighting, and encode once for sRGB display/capture.
+Use an sRGB attachment's conversion or an explicit conversion for a non-sRGB
+output, never both. Do not apply the 2D renderer's byte-space lighting/blending
+convention to 3D.
+
+Reuse the existing entity-based text UI for a small progress/completion overlay.
+Compose it after the scene with depth disabled, accounting explicitly for its
+byte-space color convention at the output boundary. Include that overlay in
+captures. This does not select new widgets, typography or general UI layout.
+Surface/device setup should be shared with 2D where useful. Public APIs may be
+redesigned; migrate current callers and document material changes instead of
+preserving obsolete interfaces. Keep the existing 2D visual references intact.
+
+The validation targets are native Metal on the reference macOS machine and
+actual browser WebGPU and WebGL2 paths. This is a target matrix, not a claim that
+3D support has shipped or has been verified. Probe required color/depth/readback
+formats and limits on each backend; explicitly report unavailable capability,
+with no silent software 3D fallback. Existing 2D WebGL2 requires floating-point
+color attachments; a shared overlay path must account for that requirement.
+Keep adapter/device choice outside simulation. Resize, zero-size suspension,
+surface loss and readback failures must have explicit host behavior.
+
+### Evidence
+
+Keep semantic and geometry/projection assertions GPU-independent. GPU tests must
+exercise perspective size changes, occlusion independent of submission order,
+winding, transformed normals, lighting and both sRGB/non-sRGB output handling.
+Use interior probe regions for exact geometric expectations and declared color
+and edge tolerances for images. Choose and record numeric tolerances with the
+fixtures before accepting results; retain expected/actual/difference images and
+backend details. Never infer portable GPU pixel equality from one adapter.
+Native offscreen rendering, the actual native player and actual browser GPU
+players each supply evidence; Node WASM execution alone proves no GPU behavior.
+Capture state correspondence follows the [asynchronous capture
+contract](inspection.md#asynchronous-capture-contract).

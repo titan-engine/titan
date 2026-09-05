@@ -214,3 +214,78 @@ for local ticks or changes such as restart that did not pass through a request.
 The host must not use a transport timeout as cancellation or let a transport
 worker access the world. Frame identifies completed simulation time; revision
 also distinguishes local changes at the same frame.
+
+## Asynchronous capture contract
+
+This is the agreed design for GPU capture, **not the current synchronous API**.
+Implement it through the linked work in
+[#42](https://github.com/titan-engine/titan/issues/42), then replace the current
+capture usage above and update this section in place. Compatibility across
+versions does not constrain the API: migrate current examples, CLI, transports,
+browser bridges and tests together, with concise migration guidance.
+
+A capture request produces one eventual response. Host dispatch can return an
+immediate response or an owned pending capture internally; browser callers await
+a Promise and native transports retain a deferred response handle. Software
+captures can complete immediately through the same abstraction. ECS operations
+remain synchronous at safe points; do not hold `&mut App`, inspector locks or a
+mutable WASM player borrow across GPU waits. There is no need for a general async
+ECS executor or a public begin/poll job protocol.
+
+At acceptance, validate permissions and size limits, then freeze the current
+committed world's immutable render frame and exact asset versions. Re-extract
+from the current world if needed, including edits since the last tick, without
+running schedules, draining deferred mutations or advancing simulation. Attach
+runtime-instance identity, a session/reset generation, a unique capture ID,
+completed tick, inspection state
+revision and output dimensions to the snapshot. Tick/revision alone are not a
+world checksum: failed operations can partially change state. Every capture
+freezes new data even when those counters match a previous request.
+
+Render and read back that owned snapshot asynchronously. On success, the image
+and response report the captured identity, never the world's identity at GPU
+completion. Live ticks and other requests may proceed after snapshot acceptance;
+responses can arrive out of order and must be matched by request ID. A client
+needing a particular paused state awaits pause/step/edit completion, then requests
+capture; capture itself never pauses or advances the game. Include the captured
+identity in the artifact metadata/result so it survives separately from the
+response envelope. Native files and browser PNG artifacts use the same top-left
+RGBA8 sRGB pixel convention; any checksum identifies bytes, not cross-GPU visual
+equivalence.
+
+Read back on demand from an offscreen target using the same scene/overlay path
+as presentation. No previously presented frame may substitute for the accepted
+snapshot. Resize or a later mutation cannot change that snapshot or its requested
+size. Zero-sized requests fail validation; a suspended window need not prevent a
+positive-sized offscreen capture. A runtime reset/replacement increments the session generation and invalidates
+pending jobs from the old generation, even when the runtime instance ID remains
+unchanged. Do not attach old results to the new session.
+
+Start with a configurable maximum of one outstanding GPU capture per instance,
+2048 pixels per dimension, 16 MiB raw RGBA and a five-second host deadline, further
+restricted by device/transport/artifact limits. Bound snapshot draw count and
+aggregate retained/uploaded geometry bytes before admission as well as image
+output; per-mesh limits alone do not bound a whole frame. Check padded staging sizes,
+encoded artifact and envelope sizes as well as raw pixels before allocating or
+publishing. Reject excess work with an actionable busy/limit error rather than
+an unbounded queue. The deadline includes encoding and response preparation;
+browser waits yield to the event loop and native polling remains bounded.
+Completion and deadline handling run while paused and do not depend on an
+animation-frame callback or another simulation tick.
+
+Cancellation, timeout, shutdown, device loss and failed mapping complete the
+request once with a structured error and release owned resources when safe.
+Submitted GPU work may finish after cancellation: discard late results, do not
+reuse its staging allocation prematurely, and retain admission bounds until
+resources are reclaimed. A client transport timeout only ends its wait; it is
+not proof of host cancellation. Report unsupported GPU capture truthfully in
+capabilities, while retaining headless queries, stepping, replay and extraction.
+No software 3D renderer is required. Missing capture artifacts must not prevent
+bounded semantic failure diagnostics.
+
+Verification covers paused edit/capture without ticking, live advancement during
+readback, same-tick partial-failure changes, reset, resize, overload, deadline,
+cancellation/late completion, device failure and GPU-free operation. Exercise
+native deferred replies and the actual browser Promise/message bridge, including
+response correlation, origin checks and existing control opt-in. Host resources
+and request lifetimes must stay bounded on both success and failure.
