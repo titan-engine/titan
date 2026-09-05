@@ -1,4 +1,6 @@
-//! Renderer-neutral 2D drawing and deterministic software rendering.
+//! Renderer-neutral 2D/3D data and deterministic 2D software rendering.
+
+pub mod three_d;
 
 #[cfg(feature = "image-png")]
 mod png;

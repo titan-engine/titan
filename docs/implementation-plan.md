@@ -32,8 +32,8 @@ validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
 The [3D rendering](rendering.md#3d-rendering-contract) and
-[async capture](inspection.md#asynchronous-capture-contract) contracts describe
-selected design, not shipped functionality or approval of implementation issues.
+[async capture](inspection.md#asynchronous-capture-contract) contracts distinguish implemented CPU 3D primitives from selected GPU/capture
+design; they do not grant approval of implementation issues.
 Issue status and prerequisites remain on the GitHub board. Existing platform
 limitations remain in effect until the corresponding runtime evidence is added.
 
