@@ -26,8 +26,14 @@ impl BrowserRuntime {
         Self::from_app(game::build_game(), enable_control)
     }
 
+    /// Compatibility path: replace the player and generate the reference tree.
     pub fn with_player_png(enable_control: bool, bytes: &[u8]) -> Result<Self, JsValue> {
         Ok(Self::from_app(player_png_app(bytes)?, enable_control))
+    }
+
+    /// Decode the complete pair before creating a world.
+    pub fn with_pngs(enable_control: bool, player: &[u8], tree: &[u8]) -> Result<Self, JsValue> {
+        Ok(Self::from_app(pngs_app(player, tree)?, enable_control))
     }
 
     /// Executes one request at a safe point and returns its JSON response envelope.
@@ -62,9 +68,15 @@ impl BrowserLiveRuntime {
             session: live_session(),
         }
     }
+    /// Compatibility path: replace the player and generate the reference tree.
     pub fn with_player_png(bytes: &[u8]) -> Result<Self, JsValue> {
         Ok(Self {
             session: live_session_from_app(player_png_app(bytes)?),
+        })
+    }
+    pub fn with_pngs(player: &[u8], tree: &[u8]) -> Result<Self, JsValue> {
+        Ok(Self {
+            session: live_session_from_app(pngs_app(player, tree)?),
         })
     }
     pub fn handle(&mut self, request_json: &str) -> String {
@@ -153,7 +165,7 @@ pub fn verify_recording_json(recording_json: &str) -> Result<String, JsValue> {
     result.map_err(|error| JsValue::from_str(&error))
 }
 
-/// Verifies pixels against the exact player asset loaded by this browser page.
+/// Compatibility verifier using a supplied player and the generated reference tree.
 #[wasm_bindgen]
 pub fn verify_recording_json_with_player_png(
     recording_json: &str,
@@ -165,6 +177,27 @@ pub fn verify_recording_json_with_player_png(
     game::live::verify_recording_with_player(recording, image)
         .map(|value| value.to_string())
         .map_err(|error| JsValue::from_str(&error))
+}
+
+/// Verify a fresh replay against both supplied startup sprites.
+#[wasm_bindgen]
+pub fn verify_recording_json_with_pngs(
+    recording_json: &str,
+    player: &[u8],
+    tree: &[u8],
+) -> Result<String, JsValue> {
+    let recording = parse_recording_json(recording_json)?;
+    let images =
+        game::assets::decode_images(player, tree).map_err(|error| JsValue::from_str(&error))?;
+    game::live::verify_recording_with_images(recording, images)
+        .map(|value| value.to_string())
+        .map_err(|error| JsValue::from_str(&error))
+}
+
+fn pngs_app(player: &[u8], tree: &[u8]) -> Result<App, JsValue> {
+    let images =
+        game::assets::decode_images(player, tree).map_err(|error| JsValue::from_str(&error))?;
+    Ok(game::build_game_with_images(images))
 }
 
 fn parse_recording_json(json: &str) -> Result<serde_json::Value, JsValue> {

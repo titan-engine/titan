@@ -44,7 +44,7 @@ Build the native control tools with:
 cargo build -p titan-cli -p titan --bin titan --example procedural_rpg
 ```
 
-The RPG hosts load `assets/player.png` at startup. Use `--assets-dir DIR` for
+The RPG hosts load `assets/player.png` and `assets/tree.png` at startup. Use `--assets-dir DIR` for
 another directory or `--generated-assets` for the procedural comparison. In-game
 restart retains loaded art. See `docs/assets.md` for browser copies, bundle lookup,
 startup diagnostics and image-aware replay verification. Native bundle inspection

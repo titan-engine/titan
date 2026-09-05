@@ -29,7 +29,7 @@ scoped keyboard focus. The RPG and arena exercise
 players, alongside headless verification. Scrubbing and speed controls remain
 future work. The [file-backed sprite exercise](assets.md) verifies shared
 procedural/decoded image consumption, loose-file delivery and bounded startup
-failures. It covers one image path within R2.57–62; broader asset requirements
+failures. It covers two independently replaceable sprite paths within R2.57–62; broader asset requirements
 remain pending.
 
 ## Round one: product and initial scope

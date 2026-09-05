@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    let image = game::assets::load_player(assets_dir.as_deref(), generated)?;
+    let image = game::assets::load_images(assets_dir.as_deref(), generated)?;
     let metadata = std::fs::metadata(Path::new(&path))?;
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return Err("recording must be a regular JSON file no larger than 2 MiB".into());
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("recording exceeds the 2 MiB limit".into());
     }
     let value = serde_json::from_slice(&bytes)?;
-    let result = game::live::verify_recording_with_player(value, image)?;
+    let result = game::live::verify_recording_with_images(value, image)?;
     println!("{}", serde_json::to_string(&result)?);
     Ok(())
 }

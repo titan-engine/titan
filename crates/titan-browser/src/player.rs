@@ -19,11 +19,21 @@ impl BrowserPlayer {
         Self::from_session(canvas, crate::live_session()).await
     }
 
+    /// Compatibility path: replace the player and generate the reference tree.
     pub async fn create_with_player_png(
         canvas: HtmlCanvasElement,
         bytes: Vec<u8>,
     ) -> Result<BrowserPlayer, JsValue> {
         let session = crate::live_session_from_app(crate::player_png_app(&bytes)?);
+        Self::from_session(canvas, session).await
+    }
+
+    pub async fn create_with_pngs(
+        canvas: HtmlCanvasElement,
+        player: Vec<u8>,
+        tree: Vec<u8>,
+    ) -> Result<BrowserPlayer, JsValue> {
+        let session = crate::live_session_from_app(crate::pngs_app(&player, &tree)?);
         Self::from_session(canvas, session).await
     }
 

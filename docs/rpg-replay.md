@@ -1,7 +1,7 @@
 # RPG snapshots and interactive replay
 
-File-backed hosts retain the startup player image through playback and resets.
-Fresh native verification accepts `--assets-dir DIR` and must use the same image;
+File-backed hosts retain the startup player/tree image pair through playback and resets.
+Fresh native verification accepts `--assets-dir DIR` and must use the same images;
 different art fails final pixel verification. Recordings do not embed PNG bytes.
 See [asset loading](assets.md) for default paths and the procedural comparison.
 

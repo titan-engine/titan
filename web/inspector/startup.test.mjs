@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 
-test('inspector asset failure clears stale inspection controls and retry restores a fresh session', async () => {
+for (const failedSprite of ['player.png', 'tree.png']) test('inspector asset failure clears stale inspection controls and retry restores a fresh session', async () => {
   const element = () => ({ handlers: {}, children: [], hidden: false, textContent: '', value: '0', dataset: {},
     addEventListener(type, callback) { this.handlers[type] = callback; },
     replaceChildren(...children) { this.children = children; }, append(...children) { this.children.push(...children); },
@@ -11,7 +11,8 @@ test('inspector asset failure clears stale inspection controls and retry restore
   const ids = new Map();
   const get = id => { if (!ids.has(id)) ids.set(id, element()); return ids.get(id); };
   let failAsset = false, constructed = 0, freed = 0, requests = 0;
-  const wasmModule = { default: async () => {}, BrowserRuntime: { with_player_png(control) {
+  const wasmModule = { default: async () => {}, BrowserRuntime: { with_pngs(control, playerBytes, treeBytes) {
+    assert.deepEqual([...playerBytes], [1]); assert.deepEqual([...treeBytes], [2]);
     constructed++;
     return { free() { freed++; }, handle(json) {
       requests++;
@@ -30,7 +31,7 @@ test('inspector asset failure clears stale inspection controls and retry restore
     } };
   } } };
   const context = vm.createContext({ document: { getElementById: get, createElement: element }, window: { addEventListener() {} }, wasmModule,
-    loadPlayerPng: async () => { if (failAsset) throw new Error('Could not load ../assets/player.png: HTTP 404'); return new Uint8Array(); } });
+    loadRpgPngs: async () => { if (failAsset) throw new Error(`Could not load ../assets/${failedSprite}: HTTP 404`); return { player: new Uint8Array([1]), tree: new Uint8Array([2]) }; } });
   let script = readFileSync(new URL('./inspector.js', import.meta.url), 'utf8').replace(/^import.*\n/gm, '').replace('await import("./pkg/titan_browser.js")', 'wasmModule');
   script = script.replace('if (typeof document !== "undefined") initialize();', 'globalThis.ready = initialize();');
   vm.runInContext(script, context); await context.ready;
@@ -49,7 +50,7 @@ test('inspector asset failure clears stale inspection controls and retry restore
   assert.equal(get('reference-route').hidden, true);
   await settle();
   assert.equal(constructed, 2); assert.equal(freed, 2);
-  assert.match(get('error').textContent, /player.png: HTTP 404/);
+  assert.match(get('error').textContent, new RegExp(`${failedSprite}: HTTP 404`));
   const failure = get('error').textContent, before = requests;
   get('mutation-form').handlers.submit({ preventDefault() {} });
   click('refresh'); click('reference-route');

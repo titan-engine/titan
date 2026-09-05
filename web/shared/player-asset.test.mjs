@@ -32,3 +32,35 @@ test('player asset timeout covers connection and body download', async () => {
   const bodyStall = async (_url, { signal }) => new Response(new ReadableStream({ start(controller) { signal.addEventListener('abort', () => controller.error(new Error('aborted'))); } }));
   await assert.rejects(loadPlayerPng({ timeoutMs: 5, fetch: bodyStall }), /timed out after 5 ms/);
 });
+
+test('pair fetch waits for both sources and applies a separate bound to each', async () => {
+  const { loadRpgPngs } = await import('./player-asset.mjs');
+  const urls = [];
+  const pair = await loadRpgPngs({ maxBytes: 2, fetch: async url => {
+    urls.push(url);
+    return new Response(new Uint8Array(url.endsWith('player.png') ? [1, 2] : [3, 4]));
+  } });
+  assert.deepEqual(urls.sort(), ['../assets/player.png', '../assets/tree.png']);
+  assert.deepEqual(pair, { player: new Uint8Array([1, 2]), tree: new Uint8Array([3, 4]) });
+  for (const failed of ['player.png', 'tree.png']) {
+    await assert.rejects(loadRpgPngs({ maxBytes: 2, fetch: async url => new Response(new Uint8Array(url.endsWith(failed) ? 3 : 2)) }), new RegExp(`${failed}: PNG exceeds 2 bytes`));
+    await assert.rejects(loadRpgPngs({ fetch: async url => new Response('', { status: url.endsWith(failed) ? 404 : 200 }) }), new RegExp(`${failed}: HTTP 404`));
+  }
+});
+
+test('a ready player never exposes a partial pair while tree is pending or timed out', async () => {
+  const { loadRpgPngs } = await import('./player-asset.mjs');
+  let releaseTree, ready = false;
+  const pending = loadRpgPngs({ fetch: async url => url.endsWith('player.png')
+    ? new Response(new Uint8Array([1]))
+    : new Promise(resolve => { releaseTree = () => resolve(new Response(new Uint8Array([2]))); }) });
+  pending.then(() => { ready = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ready, false);
+  releaseTree();
+  assert.deepEqual((await pending).tree, new Uint8Array([2]));
+  await assert.rejects(loadRpgPngs({ timeoutMs: 5, fetch: async (url, { signal }) => {
+    if (url.endsWith('player.png')) return new Response(new Uint8Array([1]));
+    return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  } }), /tree.png: timed out after 5 ms/);
+});
