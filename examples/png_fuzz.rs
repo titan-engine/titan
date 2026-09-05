@@ -56,7 +56,12 @@ fn exercise(case: &Case, artifact: &Path, counts: &mut [usize; 2]) {
     assert!(case.bytes.len() <= MAX_BYTES);
     // Commit the exact input and limits before entering the decoder, including on
     // abort, signal, timeout or allocation failure (not merely unwind panics).
-    fs::write(artifact, serde_json::to_vec(case).unwrap()).unwrap();
+    // A timeout during serialization/write leaves the preceding complete case,
+    // rather than a truncated JSON file. The temporary file shares its directory
+    // with the destination so rename is atomic on supported local filesystems.
+    let temporary = artifact.with_extension("json.tmp");
+    fs::write(&temporary, serde_json::to_vec(case).unwrap()).unwrap();
+    fs::rename(&temporary, artifact).unwrap();
     let result = Image::from_png(&case.bytes, case.limits.decode());
     if let Some(expected) = case.expected_success {
         assert_eq!(result.is_ok(), expected, "{}: {result:?}", case.label);
