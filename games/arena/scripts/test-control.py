@@ -9,7 +9,9 @@ import time
 
 GAME = Path(__file__).resolve().parents[1]
 REPO = GAME.parents[1]
+started=time.monotonic()
 subprocess.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game'], check=True)
+build_seconds=time.monotonic()-started
 subprocess.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True)
 def target(manifest):
     return Path(json.loads(subprocess.check_output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)]))['target_directory'])
@@ -32,12 +34,14 @@ def wait_ready(process):
         assert time.monotonic()<deadline, 'Arena did not register within 10 seconds'
         time.sleep(.05)
 try:
+    startup_started=time.monotonic()
     wait_ready(p)
+    startup_seconds=time.monotonic()-startup_started
     assert call('capabilities')['response']['mutation_enabled']
     entities=call('entities')['response']['entities']; player=next(e['id'] for e in entities if e['name']=='player')
     idx,gen=player['index'],player['generation']
     detail=call('entity',idx,gen)['response']; component=next(c for c in detail['components'] if c.endswith('::Position'))
-    initial=call('capture')['response']; assert initial['checksum']=='1e5d05f547d53435'; shutil.copy(initial['artifact'],evidence/'initial.ppm')
+    initial=call('capture')['response']; assert initial['checksum']=='e096abf94fd12c24'; shutil.copy(initial['artifact'],evidence/'initial.ppm')
     call('input',1,'--actions','{"right":{"kind":"button","value":true}}');call('step',1)
     assert call('entity',idx,gen)['response']['components'][component]['x']==81
     call('set-field',idx,gen,component,'x','--value',20)
@@ -47,15 +51,38 @@ try:
     assert data['world_state']['positions']['run']['health']==3
     assert data['history']['accepted_inputs']
     call('invoke','restart'); assert call('capture')['response']['checksum']==initial['checksum']
+    dash_started=time.monotonic()
+    clock=call('status')['response']['current_frame']
+    for tick in range(1,122):
+        call('input',clock+tick,'--actions',json.dumps({'dash':{'kind':'button','value':True}}))
+    call('step',1)
+    assert call('entity',idx,gen)['response']['components'][component]=={'x':84,'y':65}
+    active=call('capture')['response']; shutil.copy(active['artifact'],evidence/'dash-active.ppm')
+    diagnostic=call('invoke','verify_survival',error='invalid_value')
+    dash=json.loads(Path(diagnostic['error']['details']['diagnostic_bundle']).read_text())['world_state']['positions']['run']
+    assert (dash['dash_remaining'],dash['dash_cooldown'],dash['dash_ready'])==(5,120,False),dash
+    call('step',5)
+    assert call('entity',idx,gen)['response']['components'][component]=={'x':104,'y':65}
+    cooldown=call('capture')['response']; shutil.copy(cooldown['artifact'],evidence/'dash-cooldown.ppm')
+    call('step',115)
+    assert call('entity',idx,gen)['response']['components'][component]=={'x':104,'y':65},'held dash must not retrigger'
+    call('input',clock+122,'--actions','{"left":{"kind":"button","value":true}}');call('step',1)
+    call('input',clock+123,'--actions','{"dash":{"kind":"button","value":true}}');call('step',1)
+    assert call('entity',idx,gen)['response']['components'][component]=={'x':99,'y':65},'released dash uses last direction'
+    call('input',clock+124,'--actions','{"dash":{"kind":"button","value":true}}')
+    call('invoke','restart');call('step',1)
+    assert call('entity',idx,gen)['response']['components'][component]=={'x':80,'y':65},'restart clears pending dash'
+    dash_seconds=time.monotonic()-dash_started
+    call('invoke','restart')
     clock=call('status')['response']['current_frame']
     for tick in range(1200):
         t=(tick-90)%360
         action='up' if tick<30 else 'right' if tick<90 else 'down' if t<60 else 'left' if t<180 else 'up' if t<240 else 'right'
         call('input',clock+tick+1,'--actions',json.dumps({action:{'kind':'button','value':True}}))
     call('step',1200);call('invoke','verify_survival')
-    won=call('capture')['response']; assert won['checksum']=='be61b1c710b101b6',won
+    won=call('capture')['response']; assert won['checksum']=='b5cf61da6f50efd7',won
     shutil.copy(won['artifact'],evidence/'won.ppm')
-    (evidence/'verified.json').write_text(json.dumps({'initial_checksum':initial['checksum'],'won':won,'seed':41700,'ticks':1200},indent=2))
+    (evidence/'verified.json').write_text(json.dumps({'initial_checksum':initial['checksum'],'won':won,'seed':41700,'ticks':1200,'dash_active_checksum':active['checksum'],'dash_cooldown_checksum':cooldown['checksum'],'timings_seconds':{'arena_debug_build':build_seconds,'registration_poll':startup_seconds,'dash_cli_scenario':dash_seconds}},indent=2))
     call('invoke','restart');call('step',310)
     lost=call('invoke','verify_survival',error='invalid_value')
     data=json.loads(Path(lost['error']['details']['diagnostic_bundle']).read_text())
@@ -70,4 +97,4 @@ try:
     call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
 finally:
     p.terminate();p.wait(timeout=5)
-print('Arena native discovery, fields, input, survival, loss, restart, capture and bounded diagnostics passed.')
+print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, capture and bounded diagnostics passed.')

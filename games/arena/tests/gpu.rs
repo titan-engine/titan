@@ -108,10 +108,21 @@ fn arena_frames_match_software_pixels() {
             .unwrap();
         let mut app = game::build_game();
         app.update_schedule(Startup);
-        // Initial art/HUD, active pursuit/contact, and settled loss cover distinct
-        // scene compositions. Simulation assertions belong to the game tests.
-        for ticks in [0, 120, 1200] {
-            app.advance_fixed(ticks);
+        // Initial/active/cooldown/ready dash HUD and settled pursuit/loss scenes.
+        for (ticks, dash) in [
+            (0, false),
+            (1, true),
+            (6, true),
+            (121, true),
+            (120, false),
+            (1200, false),
+        ] {
+            game::restart(&mut app);
+            let mut input = game::InteractiveInput::default();
+            input.set_action("dash", dash).unwrap();
+            for _ in 0..ticks {
+                input.tick(&mut app);
+            }
             let frame = app.extracted::<RenderFrame>().unwrap();
             let assets = app.world().resource::<ImageAssets>().unwrap();
             let reference = game::render_image(app.world()).unwrap();

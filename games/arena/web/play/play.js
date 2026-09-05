@@ -6,8 +6,8 @@ const replay = document.querySelector('#restart');
 const status = document.querySelector('#status');
 const result = document.querySelector('#result');
 const errorPanel = document.querySelector('#error');
-const actions = ['up', 'down', 'left', 'right'];
-const keys = new Map([['ArrowUp', 'up'], ['w', 'up'], ['W', 'up'], ['ArrowDown', 'down'], ['s', 'down'], ['S', 'down'], ['ArrowLeft', 'left'], ['a', 'left'], ['A', 'left'], ['ArrowRight', 'right'], ['d', 'right'], ['D', 'right']]);
+const actions = ['up', 'down', 'left', 'right', 'dash'];
+const keys = new Map([['ArrowUp', 'up'], ['w', 'up'], ['W', 'up'], ['ArrowDown', 'down'], ['s', 'down'], ['S', 'down'], ['ArrowLeft', 'left'], ['a', 'left'], ['A', 'left'], ['ArrowRight', 'right'], ['d', 'right'], ['D', 'right'], [' ', 'dash']]);
 let player;
 let running = false;
 let lastTime;
@@ -22,10 +22,10 @@ function failure(error) {
   heldKeys.clear(); heldPointers.clear(); player?.free(); player = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
-function updateStatus() { const {run} = JSON.parse(player.status()); status.textContent = `Health ${run.health}/3 · ${(run.elapsed/60).toFixed(1)} / 20 s`; result.textContent = run.outcome === 'Won' ? 'You survived! Restart for another run.' : run.outcome === 'Lost' ? 'Caught! Restart and keep moving.' : 'Stay clear of the pursuers.'; }
+function updateStatus() { const {run} = JSON.parse(player.status()); status.textContent = `Health ${run.health}/3 · ${(run.elapsed/60).toFixed(1)} / 20 s · ${run.dash_ready ? 'Dash ready' : `Dash ${(Math.ceil(run.dash_cooldown/6)/10).toFixed(1)} s`}`; result.textContent = run.outcome === 'Won' ? 'You survived! Restart for another run.' : run.outcome === 'Lost' ? 'Caught! Restart and keep moving.' : 'Stay clear of the pursuers.'; }
 function resize() { if (!player) return; const scale = window.devicePixelRatio || 1; player.resize(Math.max(1, Math.round(canvas.clientWidth * scale)), Math.max(1, Math.round(canvas.clientHeight * scale))); if (!running) { player.frame(0); updateStatus(); } }
 function syncInputs() { if (player) for (const action of actions) player.set_action(action, [...heldKeys.values(), ...heldPointers.values()].includes(action)); }
-function releaseInputs() { heldKeys.clear(); heldPointers.clear(); syncInputs(); }
+function releaseInputs() { heldKeys.clear(); heldPointers.clear(); player?.clear_input(); }
 function loop(time) { try { if (running) { player.frame(lastTime === undefined ? 0 : Math.min(250, time - lastTime)); updateStatus(); } lastTime = time; animation = requestAnimationFrame(loop); } catch (error) { failure(error); } }
 start.addEventListener('click', async () => {
   start.disabled = true; errorPanel.hidden = true;
@@ -40,8 +40,15 @@ window.addEventListener('blur', releaseInputs);
 document.addEventListener('focusin', event => { if (event.target !== canvas) releaseInputs(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseInputs(); lastTime = undefined; } });
 for (const button of document.querySelectorAll('[data-action]')) {
-  button.addEventListener('pointerdown', event => { if (!running) return; button.setPointerCapture(event.pointerId); heldPointers.set(event.pointerId, button.dataset.action); syncInputs(); });
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, event => { heldPointers.delete(event.pointerId); syncInputs(); });
+  button.addEventListener('pointerdown', event => { if (!running) return; event.preventDefault(); canvas.focus(); button.setPointerCapture(event.pointerId); heldPointers.set(event.pointerId, button.dataset.action); syncInputs(); });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, event => {
+    const action = heldPointers.get(event.pointerId);
+    heldPointers.delete(event.pointerId);
+    // A canceled gesture must not leave a buffered dash. The capture-loss event
+    // following a normal pointerup has no held entry and preserves a valid tap.
+    if (type !== 'pointerup' && action === 'dash' && ![...heldKeys.values(), ...heldPointers.values()].includes('dash')) player?.clear_input();
+    syncInputs();
+  });
 }
 new ResizeObserver(() => { try { resize(); } catch (error) { failure(error); } }).observe(canvas);
 window.addEventListener('pagehide', () => { cancelAnimationFrame(animation); player?.free(); player = undefined; });

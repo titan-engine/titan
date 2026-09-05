@@ -21,6 +21,9 @@ pub const HEIGHT: i32 = 112;
 const DOT_SIZE: i32 = 7;
 pub const SEED: u32 = 0xA2E4;
 pub const SURVIVAL_TICKS: u32 = 1200;
+pub const DASH_TICKS: u32 = 6;
+pub const DASH_COOLDOWN_TICKS: u32 = 120;
+const DASH_SPEED: i32 = 4;
 #[derive(Component, Clone, Copy)]
 struct Enemy {
     active: bool,
@@ -38,6 +41,10 @@ pub struct Run {
     pub spawned: u32,
     pub outcome: Outcome,
     cooldown: u32,
+    dash_remaining: u32,
+    dash_cooldown: u32,
+    facing: (i32, i32),
+    dash_direction: (i32, i32),
     random: u32,
 }
 impl Default for Run {
@@ -48,6 +55,10 @@ impl Default for Run {
             spawned: 0,
             outcome: Outcome::Running,
             cooldown: 0,
+            dash_remaining: 0,
+            dash_cooldown: 0,
+            facing: (1, 0),
+            dash_direction: (1, 0),
             random: SEED,
         }
     }
@@ -66,6 +77,7 @@ pub enum Action {
     Down,
     Left,
     Right,
+    Dash,
 }
 #[derive(Default)]
 struct ScheduledInput {
@@ -226,6 +238,7 @@ pub fn inspector_with_capture(
                     "down" => Action::Down,
                     "left" => Action::Left,
                     "right" => Action::Right,
+                    "dash" => Action::Dash,
                     _ => {
                         return Err(ProtocolError::new(
                             ErrorCode::InvalidValue,
@@ -239,7 +252,7 @@ pub fn inspector_with_capture(
                     InputValue::Axis(_) => {
                         return Err(ProtocolError::new(
                             ErrorCode::InvalidValue,
-                            "movement actions require button values",
+                            "arena actions require button values",
                         ));
                     }
                 };
@@ -364,6 +377,9 @@ fn setup(world: &mut World) {
         ('S', [7, 4, 7, 1, 7]),
         ('R', [6, 5, 6, 5, 5]),
         ('A', [2, 5, 7, 5, 5]),
+        ('D', [6, 5, 5, 5, 6]),
+        ('Y', [5, 5, 2, 2, 2]),
+        ('.', [0, 0, 0, 0, 2]),
         ('/', [1, 1, 2, 4, 4]),
     ] {
         glyphs.insert(
@@ -407,6 +423,26 @@ fn simulate(world: &mut World) {
     let input = world.resource::<InputFrame<Action>>().unwrap();
     let dx = i32::from(input.is_active(&Action::Right)) - i32::from(input.is_active(&Action::Left));
     let dy = i32::from(input.is_active(&Action::Down)) - i32::from(input.is_active(&Action::Up));
+    run.dash_cooldown = run.dash_cooldown.saturating_sub(1);
+    if dx != 0 || dy != 0 {
+        run.facing = (dx, dy);
+    }
+    // Cooldown counts from the activation tick. A held button never queues
+    // another dash, and movement cannot steer an already active dash.
+    if input.just_pressed(&Action::Dash) && run.dash_cooldown == 0 {
+        run.dash_direction = run.facing;
+        run.dash_remaining = DASH_TICKS;
+        run.dash_cooldown = DASH_COOLDOWN_TICKS;
+    }
+    let (dx, dy) = if run.dash_remaining > 0 {
+        run.dash_remaining -= 1;
+        (
+            run.dash_direction.0 * DASH_SPEED,
+            run.dash_direction.1 * DASH_SPEED,
+        )
+    } else {
+        (dx, dy)
+    };
     let player = world.iter::<Player>().next().unwrap().0;
     let position = world.get_mut::<Position>(player).unwrap();
     position.x = (position.x + dx).clamp(0, WIDTH - DOT_SIZE);
@@ -487,10 +523,20 @@ fn render_frame(world: &World) -> RenderFrame {
             Outcome::Won => "WON R RESTART",
             Outcome::Lost => "LOST R RESTART",
         };
-        for (line, y) in [(hud.as_str(), 3), (outcome, 10)] {
+        let dash = if run.dash_cooldown == 0 {
+            "DASH READY".to_owned()
+        } else {
+            let tenths = run.dash_cooldown.div_ceil(6);
+            format!("DASH {}.{}S", tenths / 10, tenths % 10)
+        };
+        for (line, x, y) in [
+            (hud.as_str(), 4, 3),
+            (outcome, 4, 10),
+            (dash.as_str(), 112, 10),
+        ] {
             for (i, c) in line.chars().enumerate() {
                 if let Some(id) = art.glyphs.get(&c) {
-                    frame.push(SpriteDraw::new(*id, 4 + i as i32 * 4, y));
+                    frame.push(SpriteDraw::new(*id, x + i as i32 * 4, y));
                 }
             }
         }
@@ -498,11 +544,28 @@ fn render_frame(world: &World) -> RenderFrame {
     frame
 }
 fn run_status(world: &World) -> serde_json::Value {
-    world.resource::<Run>().map(|run| serde_json::json!({"seed":SEED,"elapsed":run.elapsed,"duration":SURVIVAL_TICKS,"health":run.health,"spawned":run.spawned,"outcome":format!("{:?}",run.outcome)})).unwrap_or_default()
+    world
+        .resource::<Run>()
+        .map(|run| {
+            serde_json::json!({
+                "seed": SEED,
+                "elapsed": run.elapsed,
+                "duration": SURVIVAL_TICKS,
+                "health": run.health,
+                "spawned": run.spawned,
+                "dash_remaining": run.dash_remaining,
+                "dash_cooldown": run.dash_cooldown,
+                "dash_ready": run.dash_cooldown == 0,
+                "dash_direction": {"x": run.dash_direction.0, "y": run.dash_direction.1},
+                "outcome": format!("{:?}", run.outcome),
+            })
+        })
+        .unwrap_or_default()
 }
 #[derive(Default)]
 pub struct InteractiveInput {
     held: BTreeSet<Action>,
+    pending_dash: bool,
     tracker: InputTracker<Action>,
 }
 impl InteractiveInput {
@@ -512,9 +575,13 @@ impl InteractiveInput {
             "down" => Action::Down,
             "left" => Action::Left,
             "right" => Action::Right,
+            "dash" => Action::Dash,
             _ => return Err(format!("unknown action: {name}")),
         };
         if pressed {
+            if action == Action::Dash && !self.held.contains(&action) {
+                self.pending_dash = true;
+            }
             self.held.insert(action);
         } else {
             self.held.remove(&action);
@@ -522,11 +589,23 @@ impl InteractiveInput {
         Ok(())
     }
     pub fn tick(&mut self, app: &mut App) {
-        app.world_mut().insert_resource(
+        let mut actions = self.held.clone();
+        if std::mem::take(&mut self.pending_dash) {
+            // A physical release/repress may happen between fixed ticks.
+            // Prime the sampler with Dash released so that edge is retained.
             self.tracker.sample(
-                self.held
+                actions
                     .iter()
                     .copied()
+                    .filter(|action| *action != Action::Dash)
+                    .map(|action| (action, ActionValue::PRESSED)),
+            );
+            actions.insert(Action::Dash);
+        }
+        app.world_mut().insert_resource(
+            self.tracker.sample(
+                actions
+                    .into_iter()
                     .map(|action| (action, ActionValue::PRESSED)),
             ),
         );
@@ -572,12 +651,132 @@ mod tests {
         a.update_schedule(Startup);
         a
     }
+    fn player_position(a: &App) -> (i32, i32) {
+        let entity = a.world().iter::<Player>().next().unwrap().0;
+        let p = a.world().get::<Position>(entity).unwrap();
+        (p.x, p.y)
+    }
+    #[test]
+    fn dash_locks_direction_and_counts_exact_cooldown() {
+        let mut a = ready();
+        let mut input = InteractiveInput::default();
+        input.set_action("dash", true).unwrap();
+        input.tick(&mut a);
+        assert_eq!(player_position(&a), (84, 65));
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_remaining, 5);
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 120);
+        input.set_action("up", true).unwrap();
+        for _ in 0..5 {
+            input.tick(&mut a);
+        }
+        assert_eq!(player_position(&a), (104, 65));
+        input.set_action("up", false).unwrap();
+        for _ in 0..115 {
+            input.tick(&mut a);
+        }
+        assert_eq!(player_position(&a), (104, 65));
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 0);
+        // Holding through readiness does not retrigger. Releasing then pressing
+        // uses the last nonzero movement direction, even while stationary.
+        input.set_action("dash", false).unwrap();
+        input.tick(&mut a);
+        input.set_action("dash", true).unwrap();
+        input.tick(&mut a);
+        assert_eq!(player_position(&a), (104, 61));
+    }
+    #[test]
+    fn dash_rejects_early_press_and_accepts_exact_ready_tick() {
+        let mut a = ready();
+        let mut input = InteractiveInput::default();
+        for tick in 1..=121 {
+            input
+                .set_action("dash", matches!(tick, 1 | 119 | 121))
+                .unwrap();
+            input.tick(&mut a);
+            if tick == 120 {
+                assert_eq!(player_position(&a), (104, 65));
+                assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 1);
+            }
+        }
+        assert_eq!(player_position(&a), (108, 65));
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 120);
+    }
+    #[test]
+    fn dash_diagonal_bounds_tap_restart_and_frozen_outcome() {
+        let mut a = ready();
+        let mut input = InteractiveInput::default();
+        input.set_action("up", true).unwrap();
+        input.set_action("left", true).unwrap();
+        input.set_action("dash", true).unwrap();
+        input.set_action("dash", false).unwrap();
+        for _ in 0..6 {
+            input.tick(&mut a);
+        }
+        assert_eq!(player_position(&a), (56, 41), "short tap is sampled once");
+        for _ in 0..115 {
+            input.tick(&mut a);
+        }
+        input.set_action("dash", true).unwrap();
+        for _ in 0..6 {
+            input.tick(&mut a);
+        }
+        assert_eq!(player_position(&a), (0, 18));
+        restart(&mut a);
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 0);
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_remaining, 0);
+        assert_eq!(a.world().resource::<Run>().unwrap().facing, (1, 0));
+        input = InteractiveInput::default();
+        input.set_action("dash", true).unwrap();
+        input.tick(&mut a);
+        for outcome in [Outcome::Won, Outcome::Lost] {
+            a.world_mut().resource_mut::<Run>().unwrap().outcome = outcome;
+            let before = status(&a);
+            let position = player_position(&a);
+            a.advance_fixed(10);
+            assert_eq!(player_position(&a), position);
+            let old: serde_json::Value = serde_json::from_str(&before).unwrap();
+            let new: serde_json::Value = serde_json::from_str(&status(&a)).unwrap();
+            assert_eq!(old["run"], new["run"]);
+        }
+    }
+    #[test]
+    fn dash_keeps_release_repress_between_ticks_and_has_no_immunity() {
+        let mut a = ready();
+        let mut input = InteractiveInput::default();
+        input.set_action("dash", true).unwrap();
+        for _ in 0..121 {
+            input.tick(&mut a);
+        }
+        input.set_action("dash", false).unwrap();
+        input.set_action("dash", true).unwrap();
+        // Contact on the first dash tick still hurts.
+        let enemy = a.world().iter::<Enemy>().find(|(_, e)| e.active).unwrap().0;
+        *a.world_mut().get_mut::<Position>(enemy).unwrap() = Position { x: 108, y: 65 };
+        let health = a.world().resource::<Run>().unwrap().health;
+        input.tick(&mut a);
+        assert_eq!(player_position(&a), (108, 65));
+        let run = a.world().resource::<Run>().unwrap();
+        assert_eq!(run.dash_cooldown, 120);
+        assert_eq!(run.health, health - 1);
+    }
+    #[test]
+    fn resetting_interactive_input_cancels_pending_dash() {
+        let mut a = ready();
+        let mut input = InteractiveInput::default();
+        input.set_action("dash", true).unwrap();
+        input.set_action("dash", false).unwrap();
+        // Hosts reset their input on focus loss, pause and restart.
+        input = InteractiveInput::default();
+        input.tick(&mut a);
+        assert_eq!(player_position(&a), (80, 65));
+        assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 0);
+    }
     #[test]
     fn idle_contact_loss_and_restart() {
         let mut a = ready();
         assert_eq!(
             image_checksum(&render_image(a.world()).unwrap()),
-            0x1e5d_05f5_47d5_3435
+            0xe096abf94fd12c24
         );
         a.advance_fixed(1);
         assert_eq!(a.world().resource::<Run>().unwrap().spawned, 1);
@@ -666,7 +865,7 @@ mod tests {
         );
         assert_eq!(
             image_checksum(&render_image(a.world()).unwrap()),
-            0xbe61_b1c7_10b1_01b6
+            0xb5cf61da6f50efd7
         );
         assert_eq!(a.world().resource::<Run>().unwrap().outcome, Outcome::Won);
         assert_eq!(status(&a), status(&b));

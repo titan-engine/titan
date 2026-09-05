@@ -2,7 +2,12 @@
 
 A standalone Titan game copied from `starters/minimal`, using only public Titan
 crates. Move the cyan player with arrows/WASD, avoid coral pursuers, and survive
-20 seconds. Three contacts lose; contacts have a one-second cooldown. Press R
+20 seconds. Press Space to dash in your current movement direction (or your last
+direction when standing still; initially right). The dash lasts six fixed ticks
+(0.1 seconds), moves four pixels per tick on each active axis and locks its
+direction. It has no invulnerability. A two-second cooldown starts on activation;
+release and press Space again once ready. The HUD shows readiness and cooldown.
+Three contacts lose; contacts have a one-second cooldown. Press R
 or the browser Restart button to reset. Browser restart pauses: press Resume.
 
 From this directory (stable Rust, Python 3, Node.js):
@@ -53,7 +58,14 @@ above IDs are stable for a fresh arena. Valid development coordinates are
 x=0..153, y=18..105. Invalid values fail before assignment. Fields require native
 `--allow-mutation`; it is disabled by default. Input is a complete future-tick
 snapshot; absent frames release all actions. Restart clears enemies, health,
-elapsed time, RNG, pending input and outcome; protocol frame remains monotonic.
+elapsed time, RNG, pending input, dash direction/cooldown and outcome; protocol frame remains monotonic.
+The deterministic `dash` action accepts a button just like movement. For example,
+`input 1 --actions '{"right":{"kind":"button","value":true},"dash":{"kind":"button","value":true}}'`
+starts a rightward dash. Held input never automatically repeats or queues a dash;
+presses during cooldown are discarded. Dash motion respects arena bounds, and
+finished runs freeze all simulation including dash timers. Diagonal movement
+retains the arena's existing per-axis speed convention.
+
 `verify_survival` is a diagnostic assertion command: it succeeds only after a win.
 A failed command returns a bounded diagnostic bundle with run state and input.
 No token-bearing discovery files are retained as evidence.
@@ -69,6 +81,7 @@ python3 scripts/test-control.py
 python3 scripts/build-browser.py
 node scripts/test-browser.mjs
 node --test web/inspector/bridge.test.mjs
+node --test web/play/*.test.mjs
 cargo test --test gpu -- --ignored
 ```
 
@@ -80,7 +93,7 @@ needs a GPU; all other semantic tests work headlessly.
 Pinned seed: 41700 (`0xA2E4`). Initial spawn is (124,105), idle loss occurs at
 game tick 310. The winning route is up30, right60, then repeat down60, left120,
 up60, right120 until tick1200. It ends at (140,65), health2, spawned5, Won;
-software RGBA checksum `be61b1c710b101b6`. Both native CLI and actual WASM verify
+software RGBA checksum `b5cf61da6f50efd7`. Both native CLI and actual WASM verify
 this route. Exact contact cooldown, pursuit, bounds, frozen outcome and restart
 are also checked in focused Rust tests.
 

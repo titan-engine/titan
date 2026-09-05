@@ -29,7 +29,7 @@ readonly.free();
 const game = new BrowserRuntime(true);
 assert.equal(ok(game, { type: 'capabilities' }).mutation_enabled, true);
 const initial = ok(game, { type: 'capture' });
-assert.equal(initial.checksum,'1e5d05f547d53435');
+assert.equal(initial.checksum,'e096abf94fd12c24');
 assert.ok(initial.artifact.startsWith('data:image/png;base64,'));
 assert.deepEqual([...Buffer.from(initial.artifact.split(',')[1], 'base64').subarray(0, 8)], [137,80,78,71,13,10,26,10]);
 const entity = ok(game, { type: 'entities', query: {}, page: { limit: 100 } }).entities.find(entity => entity.name === 'player').id;
@@ -54,6 +54,31 @@ assert.equal(ok(game, { type: 'status' }).current_frame, 1);
 assert.equal(ok(game, { type: 'capture' }).checksum, initial.checksum);
 ok(game, { type: 'step', frames: 1 });
 assert.deepEqual(position(), before);
+// Native and actual WASM share this exact dash trajectory and complete snapshots.
+ok(game, { type: 'invoke', name: 'restart', arguments: {} });
+const clock = ok(game, { type: 'status' }).current_frame;
+for (let tick = 1; tick <= 121; tick++) {
+  ok(game, { type: 'inject_input', frame: clock + tick, actions: { dash: { kind: 'button', value: true } } });
+}
+ok(game, { type: 'step', frames: 1 });
+assert.deepEqual(position(), { x: 84, y: 65 });
+const dashActive = ok(game, { type: 'capture' }).checksum;
+assert.notEqual(dashActive, initial.checksum);
+ok(game, { type: 'step', frames: 5 });
+assert.deepEqual(position(), { x: 104, y: 65 });
+const dashCooldown = ok(game, { type: 'capture' }).checksum;
+assert.notEqual(dashCooldown, dashActive);
+ok(game, { type: 'step', frames: 115 });
+assert.deepEqual(position(), { x: 104, y: 65 }, 'held dash does not retrigger');
+ok(game, { type: 'inject_input', frame: clock + 122, actions: { left: { kind: 'button', value: true } } });
+ok(game, { type: 'step', frames: 1 });
+ok(game, { type: 'inject_input', frame: clock + 123, actions: { dash: { kind: 'button', value: true } } });
+ok(game, { type: 'step', frames: 1 });
+assert.deepEqual(position(), { x: 99, y: 65 }, 'rearmed dash uses last movement');
+ok(game, { type: 'inject_input', frame: clock + 124, actions: { dash: { kind: 'button', value: true } } });
+ok(game, { type: 'invoke', name: 'restart', arguments: {} });
+ok(game, { type: 'step', frames: 1 });
+assert.deepEqual(position(), before, 'restart clears pending dash');
 game.free();
 const arena = new BrowserRuntime(true);
 for (let tick=0; tick<1200; tick++) {
@@ -63,9 +88,9 @@ for (let tick=0; tick<1200; tick++) {
 }
 ok(arena,{type:'step',frames:1200});
 ok(arena,{type:'invoke',name:'verify_survival',arguments:{}});
-assert.equal(ok(arena,{type:'capture'}).checksum,'be61b1c710b101b6');
+assert.equal(ok(arena,{type:'capture'}).checksum,'b5cf61da6f50efd7');
 ok(arena,{type:'invoke',name:'restart',arguments:{}});
 ok(arena,{type:'step',frames:310});
 fail(arena,{type:'invoke',name:'verify_survival',arguments:{}},'invalid_value');
 arena.free();
-console.log('Arena actual-WASM policy, deterministic survival/loss, input, capture, fields and restart checks passed.');
+console.log('Arena actual-WASM policy, deterministic survival/loss, input, dash/cooldown/held/rearm, capture, fields and restart checks passed.');

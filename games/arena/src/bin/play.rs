@@ -62,7 +62,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--frames N] \nMove with arrow keys or WASD; R restarts; Escape exits.\n--frames exits after N presented GPU frames."
+                        "play [--frames N] \nMove with arrow keys or WASD; Space dashes; R restarts; Escape exits.\n--frames exits after N presented GPU frames."
                     );
                     return Ok(());
                 }
@@ -170,7 +170,7 @@ mod native {
                     ) {
                         self.input
                             .set_action(action, pressed)
-                            .expect("known movement action");
+                            .expect("known game action");
                     }
                 }
                 WindowEvent::RedrawRequested => {
@@ -221,6 +221,7 @@ mod native {
             KeyCode::ArrowDown | KeyCode::KeyS => Some("down"),
             KeyCode::ArrowLeft | KeyCode::KeyA => Some("left"),
             KeyCode::ArrowRight | KeyCode::KeyD => Some("right"),
+            KeyCode::Space => Some("dash"),
             _ => None,
         }
     }
@@ -236,6 +237,24 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn space_tracks_dash_press_repeat_and_release() {
+            let mut held = HashSet::new();
+            assert_eq!(
+                update_key(&mut held, KeyCode::Space, true),
+                Some(("dash", true))
+            );
+            assert_eq!(
+                update_key(&mut held, KeyCode::Space, true),
+                Some(("dash", true))
+            );
+            assert_eq!(
+                update_key(&mut held, KeyCode::Space, false),
+                Some(("dash", false))
+            );
+            assert!(held.is_empty());
+        }
 
         #[test]
         fn releasing_one_keyboard_alias_keeps_the_other_held() {
@@ -256,7 +275,7 @@ mod native {
                 update_key(&mut held, KeyCode::ArrowUp, false),
                 Some(("up", false))
             );
-            assert_eq!(update_key(&mut held, KeyCode::Space, true), None);
+            assert_eq!(update_key(&mut held, KeyCode::KeyQ, true), None);
             assert!(held.is_empty());
         }
     }

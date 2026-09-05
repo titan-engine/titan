@@ -4,12 +4,13 @@
 <title>Arena GPU replay verification</title>
 <style>
 body {margin:24px; background:#101519; color:#e6edf0; font:16px system-ui,sans-serif}
-canvas {width:640px; height:448px; image-rendering:pixelated; display:block; margin:16px 0}
+canvas {width:640px; max-width:100%; height:auto; image-rendering:pixelated; display:block; margin:16px 0}
 button {font:inherit; padding:8px 12px; margin-right:8px} pre {white-space:pre-wrap}
 </style>
 <h1>Arena GPU replay verification</h1>
 <p>Bounded integration fixture. Every run starts from the game’s restart operation.</p>
 <button id="initial">Initial scene</button><button id="active">Pursuit at tick 240</button><button id="win">Replay survival</button><button id="loss">Idle loss</button>
+<button id="dash">Dash active</button><button id="cooldown">Dash cooldown</button><button id="ready">Dash ready after held input</button>
 <canvas id="canvas" width="640" height="448" aria-label="Arena GPU replay result"></canvas>
 <pre id="result" role="status">Choose a scenario.</pre>
 <script type="module">
@@ -17,7 +18,7 @@ import init, {BrowserPlayer} from '../inspector/pkg/titan_game.js';
 const canvas = document.querySelector('canvas');
 const result = document.querySelector('#result');
 const buttons = [...document.querySelectorAll('button')];
-const actions = ['up', 'down', 'left', 'right'];
+const actions = ['up', 'down', 'left', 'right', 'dash'];
 let player;
 function route(tick) {
   if (tick < 30) return 'up';
@@ -25,7 +26,7 @@ function route(tick) {
   const phase = (tick - 90) % 360;
   return phase < 60 ? 'down' : phase < 180 ? 'left' : phase < 240 ? 'up' : 'right';
 }
-async function run(ticks, moving, expected) {
+async function run(ticks, moving, expected, dash = false) {
   buttons.forEach(button => button.disabled = true);
   try {
     await init();
@@ -34,7 +35,7 @@ async function run(ticks, moving, expected) {
     player.restart();
     if (JSON.parse(player.status()).frame !== previous) throw new Error('Restart reset host clock');
     for (let tick=0; tick<ticks; tick++) {
-      for (const action of actions) player.set_action(action, moving && action === route(tick));
+      for (const action of actions) player.set_action(action, dash ? action === 'dash' : moving && action === route(tick));
       player.frame(1000/60);
     }
     for (const action of actions) player.set_action(action, false);
@@ -44,6 +45,7 @@ async function run(ticks, moving, expected) {
     for (const [key, value] of Object.entries(expected)) {
       if (state.run[key] !== value) throw new Error(`${key}: expected ${value}, got ${state.run[key]}`);
     }
+    if (dash && (state.position.x !== (ticks === 1 ? 84 : 104) || state.position.y !== 65)) throw new Error('Dash trajectory mismatch');
     result.textContent = 'PASS\n' + JSON.stringify(state, null, 2);
   } catch (error) {
     result.textContent = 'FAIL: ' + (error.stack ?? error);
@@ -53,6 +55,9 @@ document.querySelector('#initial').onclick = () => run(0, false, {outcome:'Runni
 document.querySelector('#active').onclick = () => run(240, true, {outcome:'Running',elapsed:240});
 document.querySelector('#win').onclick = () => run(1200, true, {outcome:'Won',health:2,elapsed:1200,spawned:5});
 document.querySelector('#loss').onclick = () => run(1200, false, {outcome:'Lost',health:0,elapsed:310});
+document.querySelector('#dash').onclick = () => run(1, false, {dash_remaining:5,dash_cooldown:120,dash_ready:false}, true);
+document.querySelector('#cooldown').onclick = () => run(6, false, {dash_remaining:0,dash_cooldown:115,dash_ready:false}, true);
+document.querySelector('#ready').onclick = () => run(121, false, {dash_remaining:0,dash_cooldown:0,dash_ready:true}, true);
 window.addEventListener('pagehide', () => player?.free());
 </script>
 </html>
