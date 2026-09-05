@@ -66,9 +66,14 @@ Software images are exact references; GPU comparisons are integration evidence.
 Commit small coherent increments, keep current examples compiling, and document
 material API migrations alongside the affected usage guide.
 
+The core native RPG/arena acceptance harnesses retain bounded failure evidence;
+see [local retrieval, CI artifacts and controlled-failure verification](acceptance-evidence.md).
+
 Standalone and tooling gates:
 
 ```sh
+python3 scripts/test-acceptance-evidence.py
+python3 scripts/test-acceptance-failure-integration.py
 python3 scripts/test-build-tools.py
 python3 scripts/test-generated-assets.py
 python3 scripts/test-starter.py --browser
