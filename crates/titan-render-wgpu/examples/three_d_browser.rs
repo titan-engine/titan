@@ -34,6 +34,7 @@ pub async fn verify_three_d(
         })
         .await
         .map_err(|error| JsValue::from_str(&format!("{backend} unavailable: {error}")))?;
+    let formats = fixture::validate_adapter(&adapter).map_err(|e| JsValue::from_str(&e))?;
     let info = format!("{:?}", adapter.get_info());
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
@@ -42,12 +43,18 @@ pub async fn verify_three_d(
         })
         .await
         .map_err(|error| JsValue::from_str(&format!("{backend} device: {error}")))?;
-    let evidence = fixture::run(&device, &queue)
-        .await
-        .map_err(|error| JsValue::from_str(&error))?;
+    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let result = fixture::run(&device, &queue).await;
+    if let Some(error) = validation.pop().await {
+        return Err(JsValue::from_str(&format!(
+            "{backend} GPU validation: {error}"
+        )));
+    }
+    let evidence = result.map_err(|error| JsValue::from_str(&error))?;
     serde_json::to_string(&serde_json::json!({
         "backend": backend,
         "adapter": info,
+        "formats": formats,
         "evidence": evidence,
     }))
     .map_err(|error| JsValue::from_str(&error.to_string()))

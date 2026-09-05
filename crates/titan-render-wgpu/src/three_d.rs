@@ -396,7 +396,7 @@ fn validate_limits(limits: &wgpu::Limits) -> Result<u64, Gpu3dError> {
     let alignment = u64::from(limits.min_uniform_buffer_offset_alignment).max(1);
     let stride = bytes.div_ceil(alignment) * alignment;
     if limits.max_color_attachments < 1
-        || limits.max_color_attachment_bytes_per_sample < 4
+        || limits.max_color_attachment_bytes_per_sample < 8
         || limits.max_inter_stage_shader_variables < 1
         || limits.max_bind_groups < 1
         || limits.max_bindings_per_bind_group < 1
@@ -509,6 +509,13 @@ mod tests {
         assert_eq!(
             upload_size(1, limits.max_buffer_size + 1, &limits),
             Err(Gpu3dError::TooMuchGeometry)
+        );
+        assert_eq!(
+            validate_limits(&wgpu::Limits {
+                max_color_attachment_bytes_per_sample: 4,
+                ..limits.clone()
+            }),
+            Err(Gpu3dError::UnsupportedLimits)
         );
         assert_eq!(
             validate_limits(&wgpu::Limits {

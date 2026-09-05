@@ -289,5 +289,14 @@ The fixtures declare interior probe regions and color tolerances before
 comparison. Expected images mark only asserted regions; unasserted edges do not
 establish portable rasterization equality. Native artifacts and browser downloads
 retain actual, expected and difference pixels plus adapter and comparison details.
-CI runs native readback on macOS and compiles the actual browser fixture; browser
-GPU execution remains an explicit local verification step.
+CI runs native readback on macOS, uploads its JSON/PNG triples for seven days,
+and compiles the actual browser fixture. Browser GPU execution remains an
+explicit local verification step. Fixture hosts probe the required format usages
+and collect wgpu validation errors before accepting evidence.
+
+The fixture has been verified on Apple M5 Pro native Metal, browser WebGPU and
+browser WebGL2 (Chromium ANGLE Metal). Each backend passed 36 image cases with
+50 interior probes at a declared per-channel tolerance of 2. These results cover
+the low-level offscreen renderer, not a native/browser 3D game player. Native
+artifacts default to the system temporary directory's `titan-3d-evidence` folder;
+set `TITAN_3D_EVIDENCE_DIR` to retain them elsewhere.

@@ -4,6 +4,40 @@ use serde::Serialize;
 use titan::render::three_d::*;
 use titan_render_wgpu::{Gpu3dError, GpuRenderer3d, wgpu};
 
+/// Fail before GPU resource creation when the chosen backend cannot supply the
+/// exact color, depth and readback usages exercised by this fixture.
+pub fn validate_adapter(adapter: &wgpu::Adapter) -> Result<Vec<String>, String> {
+    let mut details = Vec::new();
+    for (format, required) in [
+        (
+            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+        ),
+        (
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+        ),
+        (
+            wgpu::TextureFormat::Depth24Plus,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        ),
+    ] {
+        let features = adapter.get_texture_format_features(format);
+        if !features.allowed_usages.contains(required) {
+            return Err(format!(
+                "{format:?} requires {required:?}; backend supports {:?}",
+                features.allowed_usages
+            ));
+        }
+        details.push(format!("{format:?}: {features:?}"));
+    }
+    Ok(details)
+}
+
 pub const TOLERANCE: u8 = 2;
 const CLEAR: BaseColor = BaseColor::rgb(13, 29, 47);
 const RED: BaseColor = BaseColor::rgb(201, 43, 71);
@@ -190,7 +224,6 @@ fn cases() -> Vec<Case> {
             )],
         );
     }
-    drop(add);
     let near = assets
         .insert(quad(
             vec![
@@ -341,7 +374,7 @@ async fn readback(
         },
     );
     let submission = queue.submit([encoder.finish()]);
-    let (sender, receiver) = futures_channel::oneshot::channel();
+    let (sender, mut receiver) = futures_channel::oneshot::channel();
     buffer
         .slice(..)
         .map_async(wgpu::MapMode::Read, move |result| {
@@ -355,10 +388,40 @@ async fn readback(
         })
         .map_err(|e| e.to_string())?;
     #[cfg(target_arch = "wasm32")]
-    let _ = submission;
+    {
+        let _ = submission;
+        // WebGL fences cannot complete until control returns to the browser.
+        // WebGPU polls itself, while wgpu-core WebGL needs explicit polling.
+        let deadline = js_sys::Date::now() + 10_000.0;
+        loop {
+            device
+                .poll(wgpu::PollType::Poll)
+                .map_err(|e| e.to_string())?;
+            if let Some(result) = receiver.try_recv().map_err(|e| e.to_string())? {
+                result.map_err(|e| e.to_string())?;
+                break;
+            }
+            if js_sys::Date::now() >= deadline {
+                return Err("GPU buffer mapping exceeded 10 seconds".into());
+            }
+            let promise = js_sys::Promise::new(&mut |resolve, reject| {
+                if let Err(error) = web_sys::window()
+                    .unwrap()
+                    .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 1)
+                {
+                    let _ = reject.call1(&wasm_bindgen::JsValue::NULL, &error);
+                }
+            });
+            wasm_bindgen_futures::JsFuture::from(promise)
+                .await
+                .map_err(|e| format!("browser readback timer: {e:?}"))?;
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     receiver
-        .await
+        .try_recv()
         .map_err(|e| e.to_string())?
+        .ok_or("GPU buffer mapping callback did not complete after poll")?
         .map_err(|e| e.to_string())?;
     let mapped = buffer
         .slice(..)

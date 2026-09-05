@@ -13,6 +13,7 @@ fn opaque_3d_projection_clipping_depth_lighting_and_resize() {
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
             .expect("native GPU adapter required");
+        let formats = fixture::validate_adapter(&adapter).expect("required GPU formats/usages");
         let info = adapter.get_info();
         eprintln!("3D evidence adapter: {info:?}");
         let (device, queue) = adapter
@@ -22,8 +23,11 @@ fn opaque_3d_projection_clipping_depth_lighting_and_resize() {
             })
             .await
             .unwrap();
-        let evidence = fixture::run(&device, &queue).await.unwrap();
-        let report = serde_json::json!({ "adapter": format!("{info:?}"), "evidence": evidence });
+        let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = fixture::run(&device, &queue).await;
+        assert!(validation.pop().await.is_none(), "GPU validation failed");
+        let evidence = result.unwrap();
+        let report = serde_json::json!({ "adapter": format!("{info:?}"), "formats": formats, "evidence": evidence });
         let directory = std::env::var_os("TITAN_3D_EVIDENCE_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("titan-3d-evidence"));
