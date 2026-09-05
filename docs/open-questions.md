@@ -10,7 +10,8 @@ collision helper or reflection expansion was justified.
 
 Host setup consolidation is complete, including remote CI. The arena dash
 was accepted by the user. Difficulty settings remain a future possibility;
-current work is input cancellation consistency followed by live-player inspection.
+input cancellation consolidation and live-player inspection are now locally
+verified. See the [live-player evidence](live-player.md).
 The [implementation plan](implementation-plan.md) tracks execution; the
 [host setup audit](host-setup-audit.md) records completed consolidation evidence.
 Keep broader framework, camera and platform features demand-driven.
@@ -23,5 +24,6 @@ Remaining questions require evidence from future game iteration:
   measurements](arena-dash.md) put browser packaging/rebuild first among measured
   stages (1.227s with cached dependencies), with inspection around 6ms. This small
   workload does not establish clean-build costs or justify engine optimization.
-- Does a future game need live inspection of the player instance or browser
-  diagnostic bundle export enough to justify changing the current host model?
+- Will a second game need different live-host customization? Arena now proves
+  same-instance inspection and consumed-input export/replay. A generic live app
+  framework or automatic browser diagnostic bundles remain unselected.

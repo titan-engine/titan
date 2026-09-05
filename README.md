@@ -65,6 +65,8 @@ Avoid the coral pursuers for 20 seconds. Move with arrows/WASD; R restarts.
 For a macOS app bundle, browser play and deterministic replay commands, see the
 [arena README](games/arena/README.md). The [independent exercise](docs/arena-exercise.md)
 records a failed run, diagnosis, tuning fix and native/browser evidence.
+The arena also supports [live-player inspection and recording replay](docs/live-player.md)
+in its native window and browser canvas.
 
 ## Inspect and control a running game
 

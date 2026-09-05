@@ -7,34 +7,24 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Current objective: consistent input and live-player inspection
+## Input and live-player inspection: complete
 
-Authorized on 2026-09-05 after the user accepted arena dash playability. Keep the
-current cooldown; difficulty settings are a possible future game feature, not
-part of this objective. Dash evidence lives in [arena-dash.md](arena-dash.md).
+The authorized input consolidation and actual-player inspection work is complete
+in local commits. [Verification](live-player.md) records 23 passing checks,
+independent reviews, real native/browser diagnosis and retained recordings.
+The browser loss recording also replayed in a new native headless process with
+identical state and pixels. Existing RPG/arena reference checksums are unchanged.
 
-Execution order:
+Public APIs now cover buffered buttons, shared browser input cancellation,
+registered read-only queries and borrowed request policy. Arena owns its live
+session, clock transitions and bounded consumed-input recording/replay. The
+starter remains externally copyable. No broader application framework was needed.
 
-1. Reproduce and fix browser buffered-input cancellation across pause/focus loss.
-   Consolidate demonstrated browser keyboard/pointer lifecycle and optional
-   event-to-tick button accumulation. Keep bindings, buffering choices, RPG pulse
-   cadence and game rules local. Preserve externally copied starter/game builds.
-2. Attach inspection to the actual arena native/browser player. Pause at a fixed
-   tick boundary, inspect entities and run state, and capture that same state.
-   Keep inspection read-only by default and make remote control explicit.
-3. Record consumed live input from restart, export a bounded reproducible run,
-   and replay it headlessly to verify a suspicious contact, including dash edges.
-   Report unsupported or incomplete recordings explicitly; do not claim replay
-   fidelity when external mutations or missing history make it impossible.
-4. Verify native/actual-WASM behavior, live host safe points, frame/revision
-   correlation, controls, capture and replay. Run quality gates and independent
-   review. Document APIs and a concrete playable diagnosis workflow.
-
-Use subagents for implementation and verification; commit small coherent
-increments. No broad application framework, rollback system, new game genre or
-difficulty setting is implied. Local commits have not been pushed; inspect remote
-CI if increments are subsequently pushed. No crate publication, visibility
-changes or new tags are authorized. Engine crate versions remain 0.1.0.
+The user accepted dash playability; its cooldown remains unchanged. Difficulty
+settings are a possible future feature, not selected work. No further engine
+objective is selected. Remote CI remains a gate if these local commits are pushed.
+No crate publication, visibility changes or new tags are authorized. Engine crate
+versions remain 0.1.0.
 
 ## Completed host consolidation
 
