@@ -426,7 +426,7 @@ mod tests {
             session,
             Request::Query {
                 name: "state".into(),
-                arguments: serde_json::json!({}),
+                arguments: Default::default(),
             },
         );
         match response.outcome {
