@@ -5,6 +5,8 @@ with configurable counts of unnamed moving entities and periodic weapon firing.
 It supplies a reproducible game-driven baseline for evaluating future execution
 changes. Sequential execution remains the default; `--threads 2` opts into the
 [parallel executor](executor.md). It does not establish a capacity guarantee.
+The [sparse component churn experiment](sparse-churn.md) measures structural
+operations and retained vector capacity separately.
 
 ```sh
 cargo run --release --example swarm -- --entities 10000 --steps 120

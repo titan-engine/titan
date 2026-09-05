@@ -8,8 +8,51 @@ pub(crate) trait ErasedStorage: Send + Sync {
     fn contains(&self, entity: Entity) -> bool;
     fn type_name(&self) -> &'static str;
     fn metadata(&self) -> ComponentMetadata;
+    fn storage_stats(&self) -> ComponentStorageStats;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+/// Actual vector lengths and capacities, excluding allocation bookkeeping and
+/// heap allocations owned by elements. Zero-sized elements retain zero bytes.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct VectorStorageStats {
+    pub len: usize,
+    pub capacity: usize,
+    pub element_size: usize,
+    pub capacity_bytes: usize,
+}
+
+impl VectorStorageStats {
+    pub(crate) fn of<T>(values: &Vec<T>) -> Self {
+        Self {
+            len: values.len(),
+            capacity: values.capacity(),
+            element_size: std::mem::size_of::<T>(),
+            capacity_bytes: values.capacity() * std::mem::size_of::<T>(),
+        }
+    }
+}
+
+/// Retained sparse-set vector storage for one registered component type.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ComponentStorageStats {
+    pub type_name: &'static str,
+    pub sparse: VectorStorageStats,
+    pub entities: VectorStorageStats,
+    pub values: VectorStorageStats,
+}
+
+/// Read-only storage accounting, not total world or process memory.
+///
+/// Excludes vector headers, hash maps, boxed storage headers, resources, deferred
+/// commands, allocations owned by component values, and allocator overhead.
+/// Capacities and element layouts depend on target and Rust implementation.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct WorldStorageStats {
+    pub entity_slots: VectorStorageStats,
+    pub free_entities: VectorStorageStats,
+    pub components: Vec<ComponentStorageStats>,
 }
 
 #[derive(Clone, Copy)]
@@ -103,6 +146,15 @@ impl<T> ComponentStorage<T> {
 }
 
 impl<T: Component> ErasedStorage for ComponentStorage<T> {
+    fn storage_stats(&self) -> ComponentStorageStats {
+        ComponentStorageStats {
+            type_name: std::any::type_name::<T>(),
+            sparse: VectorStorageStats::of(&self.sparse),
+            entities: VectorStorageStats::of(&self.entities),
+            values: VectorStorageStats::of(&self.values),
+        }
+    }
+
     fn remove_entity(&mut self, entity: Entity) {
         self.remove(entity);
     }
@@ -132,6 +184,15 @@ impl<T: Component> ErasedStorage for ComponentStorage<T> {
 mod tests {
     use super::ComponentStorage;
     use crate::ecs::Entity;
+
+    #[test]
+    fn vector_stats_account_for_zero_sized_elements() {
+        let values = vec![(); 3];
+        let stats = super::VectorStorageStats::of(&values);
+        assert_eq!(stats.len, 3);
+        assert_eq!(stats.element_size, 0);
+        assert_eq!(stats.capacity_bytes, 0);
+    }
 
     #[test]
     fn removing_an_item_keeps_the_moved_sparse_entry_valid() {
