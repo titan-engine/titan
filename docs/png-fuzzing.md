@@ -45,12 +45,14 @@ memory ceiling. The decoder harness does not spawn children. These limits apply
 to the decoder process, not Cargo. The API allocation budget remains a separate,
 best-effort accounting boundary and does not limit all process memory.
 
-Before decoding, the harness writes the complete current case (bytes, limits,
-and label) to `current.json`. A failed run retains that file, `run.log`, and
+Before decoding, the harness atomically replaces `current.json` with the complete
+current case (bytes, limits, and label). A failed run retains that file, `run.log`, and
 `run.json` under `target/png-fuzz/run-*`. The wrapper reports nonzero exits,
 signals, invariant failures, wall timeouts and sampled RSS violations as failures;
 its owned-process helper terminates and reaps the group. Failure before the first
-case may have no `current.json`; inspect the log and run configuration. CI uploads
+case may have no `current.json`; an interruption while preparing a case can retain
+the preceding case. Replay the artifact to establish whether it reproduces a decoder
+failure, and inspect the log and run configuration. CI uploads
 this evidence for seven days. Successful run directories are removed. Local
 failed runs remain until explicitly removed, so repeated failing campaigns can
 accumulate evidence on disk.
