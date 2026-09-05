@@ -9,7 +9,8 @@ graphical editor.
 Titan is not production-ready. Pin a Git revision when depending on it; packages
 are not distributed through crates.io.
 
-<img src="docs/ui/rpg-after.png" alt="Titan's procedural sunlit-meadow RPG with the completed quest displayed by an ECS UI entity" width="640" height="448">
+<!-- Use the 8x nearest-neighbor preview: GitHub strips pixelated image CSS. -->
+<img src="docs/ui/rpg-preview.png" alt="Titan's procedural sunlit-meadow RPG with the completed quest displayed by an ECS UI entity" width="640" height="448">
 
 *The example RPG uses generated pixel art and the same game code for native,
 browser, and headless runs. [Before/after evidence](docs/art-iteration/README.md).*
