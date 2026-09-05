@@ -15,9 +15,59 @@ remain `0.1.0`. All three tracked lockfiles reflect the local engine versions,
 without third-party dependency updates. Publishing remains disabled, and protocol,
 save and recording format versions are unchanged.
 
-Push the release commit, verify CI for that exact revision, then create and push
-its annotated `v0.4.0` tag. See [release notes](releases/v0.4.0.md) and
-[next-task context](handoff.md). No next feature has been selected.
+The release commit `cebefc3` passed all three jobs in
+[CI run 33952161952](https://github.com/titan-engine/titan/actions/runs/33952161952).
+Remote `main` and the pushed annotated `v0.4.0` tag resolve to that revision.
+See [release notes](releases/v0.4.0.md) and [next-task context](handoff.md).
+No next feature has been selected.
+
+## Recommended next exercise: RPG quest journal (not approved)
+
+Add a closed-by-default journal for the existing shard/shrine quest. Open it
+from the quest label or a key, select between two objective rows using keyboard
+or pointer, read bounded detail text, and close it with Escape or a button.
+Progress remains derived from existing gameplay state. This is a recommendation,
+not authorization to implement a feature.
+
+The current UI has absolute bounds, bitmap text and pointer buttons, but no
+layout or keyboard focus (`src/ui.rs`). This exercise should establish the
+smallest shared column layout, text measurement/wrapping and focus/input routing
+needed by a real panel. Keep objective content, selection meaning and modal
+pause policy game-owned. Do not expand this into an inventory economy, general
+widget framework, scrolling, font import or scene hierarchy.
+
+Acceptance should cover:
+
+- Native, actual-browser and headless keyboard/pointer interaction with
+  inspectable visibility, selected objective, focus and resolved bounds.
+- A narrow panel and longer objective description that exercise layout and
+  bounded text rather than another set of individually positioned labels.
+- No movement leaking through modal navigation or after closing; held keys,
+  canceled gestures, hidden/disabled targets, focus loss, resize, pause and
+  load/restart must have explicit behavior. Closing must respect prior pause state.
+- UI rebuilt from quest state after load/restart, with no transient focus or
+  pointer state added to gameplay snapshots.
+- Unchanged eleven-tick closed-journal RPG reference and both arena checksums;
+  separate open-journal captures and native GPU/browser evidence. Preserve the
+  committed README preview. Run the applicable gates below and retain starter
+  and both-game CI coverage.
+
+Resolve the replay image boundary in the first implementation slice: current RPG
+recordings hash the full rendered image, while UI gestures are not recorded.
+The recommended policy is a canonical closed-journal image for gameplay replay
+verification, preserving the existing HUD and historical checksums; live capture
+must still show the actual journal. Test export with the journal open, fresh
+headless/native/browser playback, and independent journal visuals. Do not silently
+ignore this mismatch or expand the recording schema to serialize transient UI.
+
+The runner-up is loading one existing RPG sprite from a PNG with identical
+pixels. Embedded bytes would mainly exercise decoding into the existing `Image`
+interface; loose-file delivery would additionally require native bundle/browser
+packaging, readiness and failure policy. Consult the asset commitments in
+[vision](vision.md#rendering-and-assets) and requirements R2.57–62 before selecting
+that work. Parallel scheduling needs a representative workload and measurements;
+replay scrubbing/speed controls remain deferred. Broader rendering, networking
+and persistence commitments remain unscheduled.
 
 ## Shared replay through the RPG: complete
 

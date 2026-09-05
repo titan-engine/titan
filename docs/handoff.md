@@ -17,12 +17,14 @@ and native/browser/headless playback verification. Read `docs/replay.md`,
 `docs/rpg-replay.md` and `docs/arena-replay.md` for the exact boundary and evidence.
 Both pushed implementation revisions passed CI before the release bump.
 
-No next feature has been approved. Recommend a concrete exercise from the
-remaining plan before implementation. A useful candidate is a small RPG quest or
-inventory panel that exposes shared UI layout and keyboard-focus requirements.
-Another is file-backed assets across native/browser; consult the documented
-asset design first. These are suggestions, not selected work. Difficulty settings,
-replay scrubbing and speed controls remain deferred.
+No next feature has been approved. The reviewed recommendation in the
+[implementation plan](implementation-plan.md#recommended-next-exercise-rpg-quest-journal-not-approved)
+is a small RPG quest journal exercising layout, keyboard focus and modal input
+isolation. It also needs an explicit replay image policy because transient UI
+gestures are not recorded. File-backed assets across native/browser remain the
+runner-up; consult the vision's asset design and requirements R2.57–62 first.
+These are suggestions, not selected work. Difficulty settings, replay scrubbing
+and speed controls remain deferred.
 
 Working preferences: use subagents for substantial independent work, keep the
 main context compact, make frequent coherent commits, and continue autonomously
