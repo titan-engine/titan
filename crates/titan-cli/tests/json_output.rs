@@ -310,3 +310,41 @@ fn image_comparison_rejects_invalid_bounded_inputs_and_write_failures() {
     assert_eq!(result["error_code"], "artifact_write_failed");
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn image_comparison_rejects_non_utf8_paths_without_panicking_or_writing() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let root = temporary_path("image-non-utf8");
+    std::fs::create_dir_all(&root).unwrap();
+    let valid = root.join("valid.png");
+    let reports = root.join("reports");
+    write_png(&valid, 1, 1, vec![0, 0, 0, 255]);
+    let invalid = std::ffi::OsString::from_vec(b"invalid-\xff.png".to_vec());
+    let output = Command::new(env!("CARGO_BIN_EXE_titan"))
+        .arg("--format")
+        .arg("json")
+        .arg("--diagnostics")
+        .arg("never")
+        .arg("compare-images")
+        .arg(invalid)
+        .arg(&valid)
+        .arg("--output")
+        .arg(&reports)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["error_code"], "invalid_value");
+    assert!(
+        result["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("representable as UTF-8")
+    );
+    assert!(!reports.exists());
+    std::fs::remove_dir_all(root).unwrap();
+}

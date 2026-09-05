@@ -52,6 +52,8 @@ limits: each must be a regular file of at most 8 MiB, dimensions are limited to
 4096×4096, decoded RGBA data to 64 MiB, and decoder allocation accounting to
 160 MiB. Malformed, animated, truncated, unsupported, oversized, and unequal-size
 inputs are rejected before a report is written.
+Input and output paths must be representable as UTF-8 so the same usable paths
+can be returned in structured JSON on every supported platform.
 
 The output argument names a report root, not a file to overwrite. Each completed
 comparison creates a unique owner-only directory below it containing lossless

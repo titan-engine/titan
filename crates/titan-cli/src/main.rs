@@ -191,8 +191,8 @@ enum CommandData {
         arguments: Vec<String>,
     },
     ImageComparison {
-        expected: PathBuf,
-        actual: PathBuf,
+        expected: String,
+        actual: String,
         width: u32,
         height: u32,
         options: ComparisonOptions,
@@ -203,11 +203,11 @@ enum CommandData {
 
 #[derive(Serialize)]
 struct ComparisonArtifacts {
-    directory: PathBuf,
-    manifest: PathBuf,
-    expected: PathBuf,
-    actual: PathBuf,
-    difference: PathBuf,
+    directory: String,
+    manifest: String,
+    expected: String,
+    actual: String,
+    difference: String,
 }
 
 fn main() -> ExitCode {
@@ -570,16 +570,6 @@ fn compare_image_files(
     maximum_linear_rmse: Option<f64>,
 ) -> CommandResult {
     let started = std::time::Instant::now();
-    let options = if exact {
-        ComparisonOptions::exact()
-    } else {
-        let defaults = ComparisonOptions::default();
-        ComparisonOptions {
-            maximum_channel_error,
-            minimum_ssim: minimum_ssim.unwrap_or(defaults.minimum_ssim),
-            maximum_linear_rmse: maximum_linear_rmse.unwrap_or(defaults.maximum_linear_rmse),
-        }
-    };
     let failure = |code, message: String| CommandResult {
         command: "compare_images",
         success: false,
@@ -591,6 +581,27 @@ fn compare_image_files(
         diagnostic_error: None,
         error_code: Some(code),
         elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+    };
+    let expected_text = match utf8_path(expected_path, "expected PNG") {
+        Ok(path) => path.to_owned(),
+        Err(error) => return failure("invalid_value", error),
+    };
+    let actual_text = match utf8_path(actual_path, "actual PNG") {
+        Ok(path) => path.to_owned(),
+        Err(error) => return failure("invalid_value", error),
+    };
+    if let Err(error) = utf8_path(output, "output directory") {
+        return failure("invalid_value", error);
+    }
+    let options = if exact {
+        ComparisonOptions::exact()
+    } else {
+        let defaults = ComparisonOptions::default();
+        ComparisonOptions {
+            maximum_channel_error,
+            minimum_ssim: minimum_ssim.unwrap_or(defaults.minimum_ssim),
+            maximum_linear_rmse: maximum_linear_rmse.unwrap_or(defaults.maximum_linear_rmse),
+        }
     };
     let expected = match read_png(expected_path) {
         Ok(image) => image,
@@ -604,12 +615,61 @@ fn compare_image_files(
         Ok(comparison) => comparison,
         Err(error) => return failure("invalid_value", error.to_string()),
     };
-    let written = match write_comparison_report(output, &expected, &actual, options) {
+    if let Err(error) = std::fs::create_dir_all(output) {
+        return failure(
+            "artifact_write_failed",
+            format!("cannot create report root `{}`: {error}", output.display()),
+        );
+    }
+    let output = match output.canonicalize() {
+        Ok(path) => path,
+        Err(error) => {
+            return failure(
+                "artifact_write_failed",
+                format!("cannot resolve report root `{}`: {error}", output.display()),
+            );
+        }
+    };
+    if utf8_path(&output, "resolved output directory").is_err() {
+        return failure(
+            "invalid_value",
+            "resolved output directory must be representable as UTF-8".into(),
+        );
+    }
+    let written = match write_comparison_report(&output, &expected, &actual, options) {
         Ok(written) => written,
         Err(ComparisonReportError::Comparison(error)) => {
             return failure("invalid_value", error.to_string());
         }
         Err(error) => return failure("artifact_write_failed", error.to_string()),
+    };
+    let artifact_path = |path: &Path| {
+        path.to_str()
+            .map(str::to_owned)
+            .ok_or_else(|| "written report path is not representable as UTF-8".to_owned())
+    };
+    let artifacts = match (
+        artifact_path(&written.directory),
+        artifact_path(&written.manifest),
+        artifact_path(&written.expected),
+        artifact_path(&written.actual),
+        artifact_path(&written.difference),
+    ) {
+        (Ok(directory), Ok(manifest), Ok(expected), Ok(actual), Ok(difference)) => {
+            ComparisonArtifacts {
+                directory,
+                manifest,
+                expected,
+                actual,
+                difference,
+            }
+        }
+        _ => {
+            return failure(
+                "artifact_write_failed",
+                "written report paths are not representable as UTF-8".into(),
+            );
+        }
     };
     let success = comparison.passes;
     CommandResult {
@@ -619,25 +679,24 @@ fn compare_image_files(
         stdout: String::new(),
         stderr: String::new(),
         data: Some(CommandData::ImageComparison {
-            expected: expected_path.to_path_buf(),
-            actual: actual_path.to_path_buf(),
+            expected: expected_text,
+            actual: actual_text,
             width: expected.width(),
             height: expected.height(),
             options,
             comparison,
-            artifacts: ComparisonArtifacts {
-                directory: written.directory,
-                manifest: written.manifest,
-                expected: written.expected,
-                actual: written.actual,
-                difference: written.difference,
-            },
+            artifacts,
         }),
         diagnostic_bundle: None,
         diagnostic_error: None,
         error_code: (!success).then_some("visual_mismatch"),
         elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
     }
+}
+
+fn utf8_path<'a>(path: &'a Path, label: &str) -> Result<&'a str, String> {
+    path.to_str()
+        .ok_or_else(|| format!("{label} must be representable as UTF-8"))
 }
 
 fn read_png(path: &Path) -> Result<Image, String> {
@@ -857,8 +916,8 @@ fn render_human(result: &CommandResult) {
         if let Some(maximum) = options.maximum_channel_error {
             println!("Maximum channel error threshold: {maximum}");
         }
-        println!("Report: {}", artifacts.manifest.display());
-        println!("Difference image: {}", artifacts.difference.display());
+        println!("Report: {}", artifacts.manifest);
+        println!("Difference image: {}", artifacts.difference);
         return;
     }
 
