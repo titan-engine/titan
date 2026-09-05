@@ -1,5 +1,6 @@
 [package]
 name = "titan-collection-room"
+default-run = "titan-collection-room"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
