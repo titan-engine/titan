@@ -131,7 +131,7 @@ fn label_text(
                 if shards >= 3 {
                     "ALL THREE SHARDS FOUND. VISIT THE SHRINE."
                 } else {
-                    "FIND THREE GOLDEN SHARDS IN THE MEADOW."
+                    "FIND THREE GLOWING SHARDS IN THE MEADOW."
                 }
             } else if active {
                 "THE SHRINE IS AWAKE. YOUR QUEST IS COMPLETE."
