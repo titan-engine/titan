@@ -143,7 +143,7 @@ mod native {
                     .into(),
             );
         }
-        let image = game::assets::load_player(assets_dir.as_deref(), generated_assets)?;
+        let image = game::assets::load_images(assets_dir.as_deref(), generated_assets)?;
         let recording = recording_path
             .as_deref()
             .map(|path| read_recording(Path::new(path)))
@@ -169,7 +169,7 @@ mod native {
         } else {
             (None, None)
         };
-        let mut app = game::build_game_with_player(image);
+        let mut app = game::build_game_with_images(image);
         app.update_schedule(Startup);
         if reference {
             game::replay(&mut app, &game::recorded_walk());

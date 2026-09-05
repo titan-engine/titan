@@ -94,19 +94,42 @@ struct Art {
     shrine_active: ImageId,
 }
 
-struct PlayerImage(Image);
+/// Game-local sprite slots. Hosts resolve sources before handing over owned pixels.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RpgImages {
+    pub player: Image,
+    pub tree: Image,
+}
+
+pub fn generated_images() -> RpgImages {
+    RpgImages {
+        player: generated_player(),
+        tree: generated_tree(),
+    }
+}
+
+pub fn images(world: &World) -> &RpgImages {
+    world.resource::<RpgImages>().expect("RPG startup images")
+}
 
 pub fn player_image(world: &World) -> &Image {
-    &world.resource::<PlayerImage>().expect("RPG player image").0
+    &images(world).player
 }
 
 pub fn build_game() -> App {
-    build_game_with_player(generated_player())
+    build_game_with_images(generated_images())
 }
 
 pub fn build_game_with_player(image: Image) -> App {
+    build_game_with_images(RpgImages {
+        player: image,
+        tree: generated_tree(),
+    })
+}
+
+pub fn build_game_with_images(images: RpgImages) -> App {
     let mut app = App::new();
-    app.world_mut().insert_resource(PlayerImage(image));
+    app.world_mut().insert_resource(images);
     app.world_mut()
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(QuestState::default());
@@ -328,7 +351,7 @@ fn apply_scheduled_input(
 
 fn setup(world: &mut World) {
     let mut assets = ImageAssets::new();
-    let art = generate_art(&mut assets, player_image(world));
+    let art = generate_art(&mut assets, images(world));
     let font = BitmapFont::tiny(&mut assets);
     world.insert_resource(assets);
     world.insert_resource(font);
@@ -494,7 +517,7 @@ fn render_frame_view(world: &World, show_journal: bool) -> RenderFrame {
     frame
 }
 
-fn generate_art(assets: &mut ImageAssets, player_image: &Image) -> Art {
+fn generate_art(assets: &mut ImageAssets, images: &RpgImages) -> Art {
     let meadow = assets.insert(
         Image::from_fn(
             (MAP_WIDTH * TILE_SIZE) as u32,
@@ -530,36 +553,7 @@ fn generate_art(assets: &mut ImageAssets, player_image: &Image) -> Art {
         )
         .unwrap(),
     );
-    let tree = pixel_art(
-        assets,
-        &[
-            "......dddddd......",
-            "....ddlllllldd....",
-            "...dllhhhhhllld...",
-            "..dllhhhllllllld..",
-            ".dllhhhlllllllldd.",
-            ".dllhhlllllhhllld.",
-            "dlllhlllllhhhlllld",
-            "dlllhllllllhllllld",
-            "dlllllllllllllllld",
-            ".dlllsllllllsllld.",
-            ".dllsssllllsssld..",
-            "..dllsssssssslld..",
-            "...ddllsssllldd...",
-            ".....dddddddd.....",
-            ".......dbd........",
-            ".......dbd........",
-            ".......dbd........",
-            "....ssssssssss....",
-        ],
-        &[
-            ('d', Color::rgb(38, 62, 59)),
-            ('l', Color::rgb(57, 123, 80)),
-            ('h', Color::rgb(142, 188, 101)),
-            ('s', Color::rgb(70, 110, 73)),
-            ('b', Color::rgb(151, 133, 93)),
-        ],
-    );
+    let tree = assets.insert(images.tree.clone());
     let flowers = pixel_art(
         assets,
         &[".y....", "yyy...", ".hl.y.", ".l.yyy", "....l."],
@@ -578,7 +572,7 @@ fn generate_art(assets: &mut ImageAssets, player_image: &Image) -> Art {
             ('d', Color::rgb(70, 110, 73)),
         ],
     );
-    let player = assets.insert(player_image.clone());
+    let player = assets.insert(images.player.clone());
     let shard = pixel_art(
         assets,
         &[
@@ -656,6 +650,38 @@ fn meadow_path(x: i32, y: i32) -> bool {
         || ((36..=90).contains(&x) && (39..=49).contains(&y))
         || ((76..=92).contains(&x) && (28..=49).contains(&y))
         || ((78..=90).contains(&x) && (26..=51).contains(&y))
+}
+
+pub fn generated_tree() -> Image {
+    pixel_image(
+        &[
+            "......dddddd......",
+            "....ddlllllldd....",
+            "...dllhhhhhllld...",
+            "..dllhhhllllllld..",
+            ".dllhhhlllllllldd.",
+            ".dllhhlllllhhllld.",
+            "dlllhlllllhhhlllld",
+            "dlllhllllllhllllld",
+            "dlllllllllllllllld",
+            ".dlllsllllllsllld.",
+            ".dllsssllllsssld..",
+            "..dllsssssssslld..",
+            "...ddllsssllldd...",
+            ".....dddddddd.....",
+            ".......dbd........",
+            ".......dbd........",
+            ".......dbd........",
+            "....ssssssssss....",
+        ],
+        &[
+            ('d', Color::rgb(38, 62, 59)),
+            ('l', Color::rgb(57, 123, 80)),
+            ('h', Color::rgb(142, 188, 101)),
+            ('s', Color::rgb(70, 110, 73)),
+            ('b', Color::rgb(151, 133, 93)),
+        ],
+    )
 }
 
 pub fn generated_player() -> Image {

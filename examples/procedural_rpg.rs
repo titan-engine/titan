@@ -62,6 +62,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     let mut assets_dir: Option<PathBuf> = None;
     let mut generated_assets = false;
     let mut export_png: Option<PathBuf> = None;
+    let mut export_tree = false;
     let mut project = std::env::current_dir()?;
     let mut instance = format!("procedural-rpg-{}", std::process::id());
     let mut duration = None;
@@ -79,12 +80,12 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
                 )
             }
             "--generated-assets" => generated_assets = true,
-            "--export-player-png" => {
-                export_png = Some(
-                    args.next()
-                        .ok_or("--export-player-png requires a path")?
-                        .into(),
-                )
+            "--export-player-png" | "--export-tree-png" => {
+                if export_png.is_some() {
+                    return Err("only one export option is allowed".into());
+                }
+                export_tree = arg == "--export-tree-png";
+                export_png = Some(args.next().ok_or("PNG export requires a path")?.into())
             }
             "--allow-mutation" => {
                 allow_mutation = true;
@@ -117,7 +118,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "procedural_rpg [--assets-dir DIR | --generated-assets] [--export-player-png PATH] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "procedural_rpg [--assets-dir DIR | --generated-assets] [--export-player-png PATH | --export-tree-png PATH] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }
@@ -126,20 +127,25 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     }
     if let Some(path) = export_png {
         if serve || configured || assets_dir.is_some() || generated_assets {
-            return Err("--export-player-png must be used alone".into());
+            return Err("PNG export must be used alone".into());
         }
-        titan_diagnostics::write_png(&game::generated_player(), std::fs::File::create(&path)?)?;
-        println!("exported procedural player to {}", path.display());
+        let image = if export_tree {
+            game::generated_tree()
+        } else {
+            game::generated_player()
+        };
+        titan_diagnostics::write_png(&image, std::fs::File::create(&path)?)?;
+        println!("exported procedural sprite to {}", path.display());
         return Ok(true);
     }
-    let image = game::assets::load_player(assets_dir.as_deref(), generated_assets)?;
+    let image = game::assets::load_images(assets_dir.as_deref(), generated_assets)?;
     if !serve {
         if configured {
             return Err(
                 "--project, --instance, --run-for-ms, --diagnostics, and --allow-mutation require --serve".into(),
             );
         }
-        render_reference(game::build_game_with_player(image));
+        render_reference(game::build_game_with_images(image));
         return Ok(true);
     }
     if instance.is_empty()
@@ -157,7 +163,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     let stop_signal = stopped.clone();
     ctrlc::set_handler(move || stop_signal.store(true, Ordering::Release))?;
 
-    let mut app = game::build_game_with_player(image);
+    let mut app = game::build_game_with_images(image);
     app.update_schedule(Startup);
     let output = project
         .join("target/titan")
