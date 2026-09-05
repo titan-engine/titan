@@ -30,7 +30,7 @@ mod native {
     use titan_render_wgpu::{SurfaceRenderer3d, wgpu};
     use winit::{
         application::ApplicationHandler,
-        dpi::LogicalSize,
+        dpi::{LogicalSize, PhysicalSize},
         event::{ElementState, WindowEvent},
         event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
@@ -50,9 +50,13 @@ mod native {
         accumulated: Duration,
         epoch: u64,
         error: Option<String>,
+        verify_surface_lifecycle: bool,
+        lifecycle_resize_observed: bool,
+        lifecycle_verified: bool,
     }
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
+        let mut verify_surface_lifecycle = false;
         let (mut limit, mut duration, mut recording) = (None, None, None);
         let (mut inspect, mut allow_control, mut configured, mut start_paused) =
             (false, false, false, false);
@@ -73,6 +77,7 @@ mod native {
                     recording = Some(args.next().ok_or("--recording requires a JSON path")?);
                 }
                 "--paused" => start_paused = true,
+                "--verify-surface-lifecycle" => verify_surface_lifecycle = true,
                 "--inspect" => inspect = true,
                 "--allow-control" => {
                     allow_control = true;
@@ -88,7 +93,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--paused] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Capture remains unavailable.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Capture remains unavailable.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -158,6 +163,9 @@ mod native {
             accumulated: Duration::ZERO,
             epoch,
             error: None,
+            verify_surface_lifecycle,
+            lifecycle_resize_observed: false,
+            lifecycle_verified: false,
         };
         let result = EventLoop::new()?.run_app(&mut player);
         if let Some(server) = &mut server {
@@ -166,6 +174,9 @@ mod native {
         result?;
         if let Some(error) = player.error {
             return Err(error.into());
+        }
+        if player.verify_surface_lifecycle && !player.lifecycle_verified {
+            return Err("surface lifecycle verification did not finish before shutdown".into());
         }
         println!(
             "rendered {} GPU frames; {}",
@@ -199,6 +210,25 @@ mod native {
         Ok(serde_json::from_slice(&bytes)?)
     }
     impl Player {
+        fn present(&mut self) -> Result<bool, String> {
+            let app = self.session.app();
+            let scene = app
+                .extracted::<Result<RenderFrame3d, Frame3dError>>()
+                .ok_or("missing scene extraction")?
+                .as_ref()
+                .map_err(|e| e.to_string())?;
+            let overlay = app
+                .extracted::<RenderFrame>()
+                .ok_or("missing overlay extraction")?;
+            let assets = app
+                .world()
+                .resource::<ImageAssets>()
+                .ok_or("missing overlay assets")?;
+            self.renderer
+                .as_mut()
+                .ok_or("GPU renderer unavailable")?
+                .render(scene, BaseColor::rgb(17, 28, 41), overlay, assets)
+        }
         fn reset_clock(&mut self) {
             self.accumulated = Duration::ZERO;
             self.previous = Instant::now();
@@ -266,7 +296,36 @@ mod native {
                     size.width,
                     size.height,
                 ))?);
+                eprintln!(
+                    "native GPU adapter: {:?}",
+                    self.renderer.as_ref().unwrap().adapter_info()
+                );
                 self.window = Some(window);
+                if self.verify_surface_lifecycle && !self.lifecycle_verified {
+                    let before = game::status(self.session.app());
+                    self.renderer.as_mut().unwrap().resize(0, 0);
+                    if !self.renderer.as_ref().unwrap().suspended() || self.present()? {
+                        return Err("zero-size surface must suspend and skip presentation".into());
+                    }
+                    self.renderer
+                        .as_mut()
+                        .unwrap()
+                        .resize(size.width, size.height);
+                    if self.renderer.as_ref().unwrap().suspended() {
+                        return Err("nonzero surface did not resume".into());
+                    }
+                    if game::status(self.session.app()) != before {
+                        return Err("surface lifecycle changed simulation state".into());
+                    }
+                    eprintln!(
+                        "surface lifecycle: zero-size presentation skipped; nonzero restored; simulation unchanged"
+                    );
+                    let _ = self
+                        .window
+                        .as_ref()
+                        .unwrap()
+                        .request_inner_size(PhysicalSize::new(800, 500));
+                }
                 self.reset_clock();
                 Ok(())
             })();
@@ -315,6 +374,9 @@ mod native {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::Resized(size) => {
+                    if self.verify_surface_lifecycle && size.width == 800 && size.height == 500 {
+                        self.lifecycle_resize_observed = true;
+                    }
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }
@@ -393,29 +455,20 @@ mod native {
                     if self.session.paused() {
                         self.accumulated = Duration::ZERO;
                     }
-                    let result = (|| -> Result<bool, String> {
-                        let app = self.session.app();
-                        let scene = app
-                            .extracted::<Result<RenderFrame3d, Frame3dError>>()
-                            .ok_or("missing scene extraction")?
-                            .as_ref()
-                            .map_err(|e| e.to_string())?;
-                        let overlay = app
-                            .extracted::<RenderFrame>()
-                            .ok_or("missing overlay extraction")?;
-                        let assets = app
-                            .world()
-                            .resource::<ImageAssets>()
-                            .ok_or("missing overlay assets")?;
-                        self.renderer.as_mut().unwrap().render(
-                            scene,
-                            BaseColor::rgb(17, 28, 41),
-                            overlay,
-                            assets,
-                        )
-                    })();
+                    let result = self.present();
                     match result {
-                        Ok(true) => self.rendered += 1,
+                        Ok(true) => {
+                            self.rendered += 1;
+                            if self.verify_surface_lifecycle
+                                && self.lifecycle_resize_observed
+                                && !self.lifecycle_verified
+                            {
+                                self.lifecycle_verified = true;
+                                eprintln!(
+                                    "surface lifecycle verified: OS resize 800x500 presented successfully"
+                                );
+                            }
+                        }
                         Ok(false) => {}
                         Err(e) => {
                             self.fail(

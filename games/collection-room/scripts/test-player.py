@@ -51,7 +51,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='collection-player-') as directory:
         log_path = Path(directory) / 'player.log'
         with log_path.open('w') as log:
-            process = processes.Popen([str(binary), '--paused', '--inspect', '--allow-control',
+            process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
                                        '--run-for-ms', '30000'], project=GAME, instance=instance,
                                       cwd=GAME, stdout=log, stderr=log)
@@ -93,11 +93,13 @@ def main():
                 processes.terminate(process)
         output = log_path.read_text()
         print(output)
+        assert 'surface lifecycle verified:' in output, output
+        assert 'native GPU adapter:' in output, output
         assert 'GPU frames;' in output, 'native player did not finish GPU presentation normally'
         rendered = int(output.split('rendered ')[-1].split(' GPU frames;')[0])
         assert rendered > 0, output
         print(json.dumps({'native_gpu_frames': rendered, 'replay_ticks': 44,
-                          'semantic_equivalence': True, 'capture_registered': False}))
+                          'semantic_equivalence': True, 'capture_registered': False, 'surface_lifecycle_verified': True}))
 
 
 if __name__ == '__main__':
