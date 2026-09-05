@@ -20,7 +20,9 @@ Closing restores the pause state that preceded opening. An explicit pause/resume
 request while open changes that restored policy while the panel remains modal;
 completed playback always stays paused. Native and browser hosts consume game
 keys while the panel is open. Focus loss and resize cancel gestures/focus and
-movement; a new key press or pointer gesture is required afterward.
+movement; a new key press or pointer gesture is required afterward. Repeated
+pause/resume requests also cancel held sources. Native Escape auto-repeat cannot
+exit the player immediately after closing the panel.
 
 The existing authenticated/opt-in inspection boundary applies to journal commands:
 

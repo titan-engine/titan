@@ -1,6 +1,6 @@
 {
   "date": "2026-09-05",
-  "code_revision": "6bc3e22707302bad03555b78c248e806f9cf1599",
+  "code_revision": "a5172827f638cf9a212801b81ead68ffb3355a99",
   "engine_ui_revision": "26e7dc7",
   "journal_integration_revision": "9cce38f",
   "checks": [
@@ -109,5 +109,9 @@
     "journal_initial_open": "189f600ebd82feea"
   },
   "readme_preview": "Committed 1280x896 nearest-neighbor preview unchanged.",
-  "ci": "Existing GitHub Actions jobs cover the extended journal acceptance; consult the exact pushed revision for remote results."
+  "ci": "Existing GitHub Actions jobs cover the extended journal acceptance; consult the exact pushed revision for remote results.",
+  "additional_regressions": [
+    "Native Escape ignores repeats after closing the journal.",
+    "Idempotent pause/resume advances input epoch so native/browser hosts drop held pointer sources."
+  ]
 }
