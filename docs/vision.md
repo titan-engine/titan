@@ -192,7 +192,10 @@ open and does not change the entity-based UI commitment.
 
 Derive-generated reflection metadata is the preferred approach for inspection
 and tooling, subject to further design. The current Component derive does not
-yet generate complete field reflection. Types that do not participate may remain
+yet generate complete field reflection. A separate opt-in `Inspect` derive now
+replaces the RPG Position's manual coordinate registration; its bounded surface
+and manual escape hatch are documented in [inspection](inspection.md#explicit-component-fields).
+Types that do not participate may remain
 opaque. Basic field metadata
 can be automatic; descriptions, valid ranges, units, editability, and editor
 hints are optional enrichments.
