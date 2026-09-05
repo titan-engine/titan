@@ -121,6 +121,8 @@ for (let tick=0; tick<1200; tick++) {
 ok(arena,{type:'step',frames:1200});
 ok(arena,{type:'invoke',name:'verify_survival',arguments:{}});
 assert.equal(ok(arena,{type:'capture'}).checksum,'b5cf61da6f50efd7');
+const survivalRecording = ok(arena,{type:'query',name:'recording'}).value;
+const survivalSave = ok(arena,{type:'query',name:'save'}).value;
 ok(arena,{type:'invoke',name:'restart',arguments:{}});
 ok(arena,{type:'step',frames:310});
 fail(arena,{type:'invoke',name:'verify_survival',arguments:{}},'invalid_value');
@@ -327,3 +329,67 @@ assert.deepEqual(ok(playback,{type:'query',name:'save'}).value,legacyVerificatio
 assert.equal(ok(playback,{type:'capture'}).checksum,legacyVerification.checksum);
 playback.free(); replaySource.free();
 console.log('actual-WASM snapshot/v1 replay: full-state verification, local playback, isolated inputs, pause/step/restart, monotonic clock and EOF auto-pause passed');
+
+// Seeking replays only recorded inputs and spreads long reconstruction over updates.
+const seeking = new BrowserLiveRuntime();
+seeking.load_recording(JSON.stringify(survivalRecording));
+const seekState = () => ok(seeking, {type:'query',name:'arena_state'}).value.replay;
+const seekSave = () => ok(seeking, {type:'query',name:'save'}).value;
+function finishSeek(position) {
+  let updates = 0;
+  while (seekState().position !== position) {
+    const before = seekState().position;
+    seeking.update_playback();
+    const after = seekState().position;
+    assert.ok(after > before && after - before <= 120, 'each seek update has a fixed tick budget');
+    assert.ok(++updates <= 10, 'seek must finish within its bounded number of updates');
+  }
+  assert.equal(ok(seeking,{type:'status'}).paused, true, 'seek completion remains paused');
+}
+fail(seeking,replayCommand('seek_replay',{position:600}), 'mutation_disabled');
+fail(seeking,replayCommand('replay_speed',{speed:2}), 'mutation_disabled');
+seeking.set_control_enabled(true);
+for (const speed of [0, -1, 0.1, 8, NaN, Infinity]) {
+  const before = seekState();
+  assert.throws(() => seeking.set_playback_speed(speed));
+  assert.deepEqual(seekState(),before, 'invalid speed is transactional');
+}
+for (const position of [-1, 1201, 1.5]) {
+  const before = seekState();
+  fail(seeking,replayCommand('seek_replay',{position}),'invalid_value');
+  assert.deepEqual(seekState(),before, 'invalid seek is transactional');
+}
+seeking.set_playback_speed(4);
+seeking.seek_playback(600);
+assert.equal(seekState().position,0,'request does not synchronously reconstruct a large seek');
+for (const action of ['left','right','up','down','dash']) seeking.set_action(action,true);
+seeking.pointer(8,12,true); seeking.pointer(8,12,false);
+seeking.update_playback();
+assert.equal(seekState().position,120,'one update processes only 120 recorded ticks');
+finishSeek(600);
+const midwaySave = seekSave();
+const midwayImage = ok(seeking,{type:'capture'}).checksum;
+seeking.seek_playback(0);
+finishSeek(0);
+assert.equal(ok(seeking,{type:'capture'}).checksum,'e096abf94fd12c24');
+seeking.set_playback_speed(0.5);
+ok(seeking,{type:'step',frames:600});
+assert.deepEqual(seekSave(),midwaySave,'seek equals sequential replay at the same position');
+assert.equal(ok(seeking,{type:'capture'}).checksum,midwayImage);
+ok(seeking,replayCommand('seek_replay',{position:50}));
+finishSeek(50);
+ok(seeking,replayCommand('replay_speed',{speed:2}));
+ok(seeking,replayCommand('seek_replay',{position:1200}));
+finishSeek(1200);
+assert.equal(seekState().verified,true);
+assert.deepEqual(seekSave(),survivalSave);
+assert.equal(ok(seeking,{type:'capture'}).checksum,'b5cf61da6f50efd7');
+seeking.seek_playback(0); finishSeek(0);
+seeking.set_playback_speed(1);
+seeking.resume();
+for (let tick=0;tick<1200;tick++) seeking.tick();
+assert.equal(seekState().verified,true,'playback after seeking still isolates held live input');
+assert.deepEqual(seekSave(),survivalSave);
+assert.equal(ok(seeking,{type:'capture'}).checksum,'b5cf61da6f50efd7');
+seeking.free();
+console.log('actual-WASM bounded forward/backward seeking, speed validation, live input isolation and exact canonical final snapshot/pixels passed');

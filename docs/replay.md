@@ -49,7 +49,9 @@ The public `titan::replay` module provides:
   Legacy v1 acceptance is an explicit option used by the arena only.
 - `Playback`: retain the validated source artifact and expected snapshot, yield
   each frame once, expose remaining ticks/status and accept one completion
-  result after the cursor reaches EOF.
+  result after the cursor reaches EOF. `seek`/`seek_budget` track bounded target
+  progression; games restore the origin before `rewind`. Discrete `set_speed`
+  values inform host timing without changing recorded ticks.
 
 The primitives never advance an `App`, restore a world or grant mutation
 permission. Install recorded input before the game's fixed simulation; compare
@@ -75,5 +77,6 @@ host frame and entity allocation history.
 
 See [RPG playback](rpg-replay.md) for the shard/shrine scenario and
 [arena playback](arena-replay.md) for its file controls and retained v1/v2
-compatibility. Scrubbing, speed controls, rollback and a general ECS serializer
-remain outside this increment.
+compatibility. Arena now exercises [bounded seeking and speed controls](arena-replay.md).
+Rollback, general replay editing and a general ECS serializer remain outside
+this increment.

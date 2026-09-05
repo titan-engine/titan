@@ -217,3 +217,6 @@ bundle IDs and browser binding names in the game entrypoints. The helper support
 path and Git dependencies containing the tooling file; older Titan revisions
 without that file require their original scripts. See `docs/host-tooling.md` in
 the Titan checkout for the helper API and verification commands.
+
+Paused playback also supports exact-tick seeking and ¼×–4× speed selection.
+See [replay controls and bounded update semantics](../../docs/arena-replay.md).

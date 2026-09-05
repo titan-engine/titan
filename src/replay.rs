@@ -305,6 +305,8 @@ pub struct Playback {
     position: usize,
     verified: Option<bool>,
     error: Option<String>,
+    seek_target: Option<usize>,
+    speed_quarters: u8,
 }
 impl Playback {
     pub fn new(recording: SnapshotRecording, expected_snapshot: Value) -> Self {
@@ -314,7 +316,46 @@ impl Playback {
             position: 0,
             verified: None,
             error: None,
+            seek_target: None,
+            speed_quarters: 4,
         }
+    }
+    /// Request a target in consumed ticks. The game must restore its origin
+    /// before requesting a target behind the current cursor (see `rewind`).
+    pub fn seek(&mut self, target: usize) -> Result<(), String> {
+        if target < self.position || target > self.recording.frames.len() {
+            return Err("seek target requires origin restoration or exceeds recording".into());
+        }
+        self.seek_target = (target != self.position).then_some(target);
+        Ok(())
+    }
+    /// Reset the cursor after the game restores its validated origin. Speed is retained.
+    pub fn rewind(&mut self) {
+        self.position = 0;
+        self.verified = None;
+        self.error = None;
+        self.seek_target = None;
+    }
+    pub fn seeking(&self) -> bool {
+        self.seek_target.is_some()
+    }
+    pub fn seek_budget(&self, maximum: usize) -> usize {
+        self.seek_target
+            .map_or(0, |target| (target - self.position).min(maximum))
+    }
+    pub fn speed(&self) -> f64 {
+        f64::from(self.speed_quarters) / 4.0
+    }
+    pub fn set_speed(&mut self, speed: f64) -> Result<(), String> {
+        self.speed_quarters = match speed {
+            0.25 => 1,
+            0.5 => 2,
+            1.0 => 4,
+            2.0 => 8,
+            4.0 => 16,
+            _ => return Err("replay speed must be 0.25, 0.5, 1, 2 or 4".into()),
+        };
+        Ok(())
     }
     pub fn recording(&self) -> &SnapshotRecording {
         &self.recording
@@ -337,6 +378,9 @@ impl Playback {
     pub fn next_frame(&mut self) -> Option<&RecordedButtons> {
         let frame = self.recording.frames.get(self.position)?;
         self.position += 1;
+        if self.seek_target == Some(self.position) {
+            self.seek_target = None;
+        }
         Some(frame)
     }
     /// Record the game's full-state/pixel comparison, only after the final tick.
@@ -352,10 +396,10 @@ impl Playback {
         Ok(())
     }
     pub fn status(&self) -> Value {
-        serde_json::json!({"active":true,"position":self.position,"total":self.recording.frames.len(),"complete":self.complete(),"verified":self.verified,"error":self.error})
+        serde_json::json!({"active":true,"position":self.position,"total":self.recording.frames.len(),"complete":self.complete(),"verified":self.verified,"error":self.error,"seeking":self.seeking(),"target":self.seek_target,"speed":self.speed()})
     }
     pub fn inactive_status() -> Value {
-        serde_json::json!({"active":false,"position":0,"total":0,"complete":false,"verified":null,"error":null})
+        serde_json::json!({"active":false,"position":0,"total":0,"complete":false,"verified":null,"error":null,"seeking":false,"target":null,"speed":1.0})
     }
 }
 
@@ -391,6 +435,32 @@ mod tests {
             )
             .unwrap()
     }
+    #[test]
+    fn seek_budget_and_speed_are_bounded_and_rewind_clears_verification() {
+        let mut playback = Playback::new(recording(), serde_json::json!({}));
+        assert_eq!(playback.speed(), 1.0);
+        for invalid in [0.0, -1.0, 0.3, 8.0, f64::NAN, f64::INFINITY] {
+            assert!(playback.set_speed(invalid).is_err());
+            assert_eq!(playback.speed(), 1.0);
+        }
+        playback.set_speed(0.25).unwrap();
+        assert!(playback.seek(3).is_err());
+        playback.seek(2).unwrap();
+        assert_eq!(playback.seek_budget(1), 1);
+        playback.next_frame().unwrap();
+        assert!(playback.seeking());
+        assert!(playback.seek(0).is_err());
+        playback.next_frame().unwrap();
+        assert!(!playback.seeking());
+        playback.finish(Ok(())).unwrap();
+        playback.rewind();
+        assert_eq!(playback.position(), 0);
+        assert_eq!(playback.verified(), None);
+        assert_eq!(playback.speed(), 0.25);
+        playback.seek(0).unwrap();
+        assert_eq!(playback.seek_budget(120), 0);
+    }
+
     #[test]
     fn independent_consumed_edges_roundtrip_without_inventing_start_press() {
         for frame in [

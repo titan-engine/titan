@@ -107,7 +107,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; Space dashes; P pauses/resumes; R restarts; Escape exits.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; Space dashes; P pauses/resumes; R restarts; Escape exits.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game; paused Left/Right seek 60 ticks; Home/End seek bounds; -/+ change speed.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -245,6 +245,7 @@ mod native {
             if let Some(queue) = &self.queue {
                 queue.drain(|request| self.session.handle(request));
             }
+            self.session.update_replay_seek();
             self.sync_clock();
             self.update_title();
             if self.stopped.load(Ordering::Acquire)
@@ -328,6 +329,43 @@ mod native {
                             self.sync_clock();
                             return;
                         }
+                        if self.session.replay_active() && self.session.paused() {
+                            let replay = self.session.replay_status();
+                            let position = replay["target"]
+                                .as_u64()
+                                .or_else(|| replay["position"].as_u64())
+                                .unwrap_or(0) as usize;
+                            let total = replay["total"].as_u64().unwrap_or(0) as usize;
+                            let target = match key {
+                                KeyCode::ArrowLeft => Some(position.saturating_sub(60)),
+                                KeyCode::ArrowRight => Some(position.saturating_add(60).min(total)),
+                                KeyCode::Home => Some(0),
+                                KeyCode::End => Some(total),
+                                _ => None,
+                            };
+                            if let Some(target) = target {
+                                if let Err(error) = self.session.seek_replay(target) {
+                                    eprintln!("seek failed: {}", error.message);
+                                }
+                                self.sync_clock();
+                                return;
+                            }
+                            if matches!(key, KeyCode::Minus | KeyCode::Equal) {
+                                let speed = self.session.replay_speed();
+                                let speed = if key == KeyCode::Minus {
+                                    speed / 2.0
+                                } else {
+                                    speed * 2.0
+                                };
+                                if let Err(error) =
+                                    self.session.set_replay_speed(speed.clamp(0.25, 4.0))
+                                {
+                                    eprintln!("speed change failed: {}", error.message);
+                                }
+                                self.sync_clock();
+                                return;
+                            }
+                        }
                         if self.session.replay_active()
                             && key == KeyCode::KeyN
                             && self.session.paused()
@@ -383,13 +421,20 @@ mod native {
                     if !self.session.paused() {
                         self.accumulated += now
                             .duration_since(self.previous)
-                            .min(Duration::from_millis(250));
+                            .min(Duration::from_millis(250))
+                            .mul_f64(self.session.replay_speed());
                     }
                     self.previous = now;
                     let tick = Duration::from_nanos(16_666_667);
-                    while self.accumulated >= tick {
+                    for _ in 0..120 {
+                        if self.accumulated < tick || self.session.paused() {
+                            break;
+                        }
                         self.session.tick();
                         self.accumulated -= tick;
+                    }
+                    if self.session.paused() {
+                        self.accumulated = Duration::ZERO;
                     }
                     match (|| {
                         let frame = self
@@ -438,7 +483,9 @@ mod native {
         fn window_title(&self) -> String {
             if self.session.replay_active() {
                 let replay = self.session.replay_status();
-                let state = if replay["complete"].as_bool().unwrap_or(false) {
+                let state = if self.session.replay_seeking() {
+                    "Seeking"
+                } else if replay["complete"].as_bool().unwrap_or(false) {
                     if replay["verified"].as_bool() == Some(true) {
                         "Complete · MATCH"
                     } else {
@@ -450,8 +497,10 @@ mod native {
                     "Playing"
                 };
                 format!(
-                    "Titan — Playback {}/{} · {state} · P pause · N step · R restart · L live",
-                    replay["position"], replay["total"]
+                    "Titan — Playback {}/{} · {state} · {}x · P pause · N step · ←/→ seek · -/+ speed · R restart · L live",
+                    replay["position"],
+                    replay["total"],
+                    self.session.replay_speed()
                 )
             } else if self.session.paused() {
                 "Titan — Arena Survival · Paused · P resumes · R restarts".into()

@@ -53,7 +53,7 @@ function failure(error) {
   cancelAnimationFrame(animation); lastTime = undefined;
   errorPanel.hidden = false; errorPanel.textContent = `GPU player stopped: ${error.message ?? error}\nRetry starts a fresh scene.`;
   pause.disabled = true; replay.disabled = true;
-  document.querySelectorAll('[data-action], [data-live], #step, #load-save, #load-recording, #restart-playback, #exit-playback').forEach(button => button.disabled = true);
+  document.querySelectorAll('[data-action], [data-live], #step, #load-save, #load-recording, #restart-playback, #exit-playback, #seek-position, #seek-playback, #playback-speed').forEach(button => button.disabled = true);
   input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
@@ -70,24 +70,29 @@ function syncSession() {
   }
   const playback = JSON.parse(player.playback_status());
   pause.textContent = player.paused() ? 'Resume' : 'Pause';
-  pause.disabled = playback.active && playback.complete;
+  pause.disabled = playback.active && (playback.complete || playback.seeking);
   replay.disabled = playback.active;
   document.querySelectorAll('[data-action]').forEach(button => button.disabled = playback.active);
   document.querySelector('#enable-controls').checked = player.control_enabled();
-  document.querySelector('#step').disabled = !player.paused() || (playback.active ? playback.complete : !player.control_enabled());
+  document.querySelector('#step').disabled = !player.paused() || (playback.active ? playback.complete || playback.seeking : !player.control_enabled());
   document.querySelector('#load-save').disabled = playback.active || !player.control_enabled() || !player.paused() || importingSave;
   document.querySelector('#load-recording').disabled = !player.paused() || importingRecording;
   document.querySelector('#restart-playback').disabled = !playback.active;
   document.querySelector('#exit-playback').disabled = !playback.active;
+  document.querySelector('#seek-position').disabled = !playback.active || !player.paused();
+  document.querySelector('#seek-position').max = playback.total;
+  document.querySelector('#seek-playback').disabled = !playback.active || !player.paused();
+  document.querySelector('#playback-speed').disabled = !playback.active || !player.paused();
+  document.querySelector('#playback-speed').value = String(playback.speed ?? 1);
   document.querySelector('#playback-status').textContent = playback.active
-    ? `Playback ${playback.position}/${playback.total} · ${playback.complete ? (playback.verified ? 'Complete · state and image match' : `Complete · mismatch: ${playback.error ?? 'verification failed'}`) : player.paused() ? 'Paused' : 'Playing'}`
+    ? `Playback ${playback.position}/${playback.total} · ${playback.speed}× · ${playback.seeking ? `Seeking to ${playback.target}` : playback.complete ? (playback.verified ? 'Complete · state and image match' : `Complete · mismatch: ${playback.error ?? 'verification failed'}`) : player.paused() ? 'Paused' : 'Playing'}`
     : 'Live game · pause to load an input recording.';
   document.querySelector('#live-mode').textContent = `${playback.active ? 'Playback' : 'Live game'} · ${player.paused() ? 'Paused' : 'Playing'} · Inspection ${player.control_enabled() ? 'controls enabled' : 'read-only'}`;
 }
 function loop(time) {
   try {
     syncSession();
-    if (player && !player.paused()) player.frame(lastTime === undefined ? 0 : Math.min(250, time - lastTime));
+    if (player && (!player.paused() || JSON.parse(player.playback_status()).seeking)) player.frame(lastTime === undefined ? 0 : Math.min(250, time - lastTime));
     if (player) updateStatus();
     lastTime = time;
     animation = requestAnimationFrame(loop);
@@ -216,6 +221,16 @@ document.querySelector('#load-recording').addEventListener('change', async event
     event.target.value = ''; importingRecording = false; syncSession();
   }
 });
+document.querySelector('#seek-playback').addEventListener('click', () => panel(() => {
+  const input = document.querySelector('#seek-position');
+  const position = input.valueAsNumber;
+  const total = JSON.parse(player.playback_status()).total;
+  if (!Number.isSafeInteger(position) || position < 0 || position > total) throw new Error(`Choose a whole tick from 0 to ${total}.`);
+  player.seek_playback(position); refreshPlayback();
+}));
+document.querySelector('#playback-speed').addEventListener('change', event => panel(() => {
+  player.set_playback_speed(Number(event.target.value)); refreshPlayback();
+}));
 document.querySelector('#restart-playback').addEventListener('click', () => panel(restartPlayback));
 document.querySelector('#exit-playback').addEventListener('click', () => panel(() => {
   player.pause(); player.exit_playback(); refreshPlayback();

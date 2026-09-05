@@ -12,6 +12,7 @@ button {font:inherit; padding:8px 12px; margin-right:8px} pre {white-space:pre-w
 <button id="initial">Initial scene</button><button id="active">Pursuit at tick 240</button><button id="win">Replay survival</button><button id="loss">Idle loss</button>
 <button id="dash">Dash active</button><button id="cooldown">Dash cooldown</button><button id="ready">Dash ready after held input</button>
 <button id="live">Live inspection and recording</button>
+<button id="seeking">Seeking and speed</button>
 <canvas id="canvas" width="640" height="448" aria-label="Arena GPU replay result"></canvas>
 <pre id="result" role="status">Choose a scenario.</pre>
 <script type="module">
@@ -96,6 +97,75 @@ document.querySelector('#live').onclick = async () => {
     const verified = JSON.parse(verify_recording_json(JSON.stringify(recording.response.value)));
     player.set_control_enabled(false);
     result.textContent = 'PASS\n' + JSON.stringify({visible, state, stepped, capture: {...capture, response: {...capture.response, artifact:'PNG data URI'}}, recording, verified}, null, 2);
+  } catch (error) { result.textContent = 'FAIL: ' + (error.stack ?? error); }
+  finally { buttons.forEach(button => button.disabled = false); }
+};
+document.querySelector('#seeking').onclick = async () => {
+  buttons.forEach(button => button.disabled = true);
+  try {
+    await init();
+    player ??= await BrowserPlayer.create(canvas);
+    player.restart(); player.resume();
+    for (let tick=0; tick<1200; tick++) {
+      for (const action of actions) player.set_action(action, action === route(tick));
+      player.frame(1000 / 60);
+    }
+    player.pause();
+    let requestId = 0;
+    const call = request => {
+      const response = JSON.parse(player.handle(JSON.stringify({schema_version:1, request_id:`seek-${++requestId}`, request})));
+      if (response.status !== 'success') throw new Error(JSON.stringify(response));
+      return response.response;
+    };
+    const state = () => JSON.parse(player.playback_status());
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const recording = call({type:'query', name:'recording'}).value;
+    const verified = JSON.parse(verify_recording_json(JSON.stringify(recording)));
+    check(verified.checksum === 'b5cf61da6f50efd7', 'Canonical recording changed');
+    player.load_recording(JSON.stringify(recording));
+    player.set_playback_speed(0.25);
+    player.resume();
+    for (let frame=0; frame<4; frame++) player.frame(1000 / 60);
+    check(state().position === 1, 'Quarter speed must consume one tick in four frames');
+    player.pause();
+    player.set_playback_speed(4);
+    player.resume(); player.frame(1000 / 60); player.pause();
+    check(state().position === 5, 'Four times speed must consume four ticks per frame');
+    player.frame(1000 / 60);
+    check(state().position === 5, 'Paused playback advanced');
+    player.seek_playback(600);
+    const requestedPosition = state().position;
+    player.frame(0);
+    check(state().position === requestedPosition, 'Render-only frame advanced a seek');
+    for (const action of actions) player.set_action(action, true);
+    player.pointer(8, 12, true); player.pointer(8, 12, false);
+    let seekUpdates = 0;
+    function finishSeek(target) {
+      while (state().seeking) {
+        const before = state().position;
+        player.frame(1000 / 60);
+        const advanced = state().position - before;
+        check(advanced > 0 && advanced <= 120, 'Seek update exceeded tick budget');
+        check(++seekUpdates <= 30, 'Seek did not finish');
+      }
+      check(state().position === target && player.paused(), 'Seek target/pause mismatch');
+    }
+    finishSeek(600);
+    const middleSave = JSON.stringify(call({type:'query', name:'save'}).value);
+    const middleChecksum = call({type:'capture'}).checksum;
+    player.seek_playback(0); finishSeek(0);
+    player.set_control_enabled(true);
+    call({type:'step', frames:600});
+    check(JSON.stringify(call({type:'query', name:'save'}).value) === middleSave, 'Seek and sequential state differ');
+    check(call({type:'capture'}).checksum === middleChecksum, 'Seek and sequential pixels differ');
+    player.seek_playback(50); finishSeek(50);
+    player.set_playback_speed(0.5);
+    player.seek_playback(1200); finishSeek(1200);
+    check(state().verified, 'EOF verification failed after seeking');
+    check(JSON.stringify(call({type:'query', name:'save'}).value) === JSON.stringify(verified.save), 'Final snapshot changed');
+    check(call({type:'capture'}).checksum === verified.checksum, 'Final pixels changed');
+    player.frame(0);
+    result.textContent = 'PASS\n' + JSON.stringify({replay:state(), seekUpdates, checksum:verified.checksum, speedChecks:[0.25,4]}, null, 2);
   } catch (error) { result.textContent = 'FAIL: ' + (error.stack ?? error); }
   finally { buttons.forEach(button => button.disabled = false); }
 };
