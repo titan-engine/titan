@@ -123,3 +123,64 @@ Frame uploads are rebuilt without persistent mesh-handle caching, so replacement
 and collection changes cannot silently reuse geometry. Native/browser adapter
 acquisition, error scopes, device loss, surface presentation and readback remain
 the host's responsibility.
+
+## 3D players and UI composition
+
+`SurfaceRenderer3d::new(instance, surface, width, height).await` uses the same
+adapter/device acquisition, resize and presentation implementation as
+`SurfaceRenderer`. `render(scene, clear, overlay, image_assets)` presents one
+immutable `RenderFrame3d` plus the game-owned ECS-extracted `RenderFrame` UI.
+The host owns keyboard/focus events, fixed ticks, camera aspect and extraction.
+`adapter_info()` reports the actual backend. Existing 2D callers need no migration.
+
+`resize` returns bounded dimensions (2048 per axis and the device limit for 3D),
+which hosts must use for camera aspect and browser backing sizes. Zero dimensions
+suspend presentation and preserve previous allocations; `suspended()` reports
+this state and `size()` reports the retained nonzero target size. Timeout and
+occlusion skip a frame; outdated surfaces reconfigure and skip; suboptimal
+frames present then reconfigure. Lost/invalid surfaces and asynchronous device
+errors become actionable `Err` messages. Hosts must stop or recreate the player
+on these errors. Default acquisition probes required color/depth usages and
+float attachment filtering/blending; unsupported WebGL2 configurations fail
+explicitly. There is no software 3D fallback.
+
+For offscreen composition use
+`GpuSceneRenderer3d::new(device, queue, width, height, output_format)`,
+`prepare(scene, clear, overlay, image_assets)` and `render(encoder, target_view)`.
+The caller owns the output texture (including COPY_SRC when later reading it),
+submission, device error scopes and readback. This is the same composition used
+by the player; no game capture protocol is registered here. Output accepts RGBA8
+or BGRA8 unorm/sRGB, single sample. Resize or failed preparation invalidates the
+whole prepared composition; invalid resize preserves the old targets.
+
+The scene uses the existing opaque color/depth pass. UI draws into a separate
+transparent layer using the unchanged sprite renderer's byte-space blending
+and nearest scaling. The fullscreen, depth-disabled composition pass decodes
+both layers' encoded RGB, blends straight UI alpha over the scene in linear
+light, then writes linear RGB to sRGB targets or explicitly encodes for unorm
+output. Alpha stays opaque after composition. Thus an opaque UI color retains
+its authored display bytes and a transparent pixel retains the scene; translucent
+UI blends in linear light at this boundary. Overlapping UI sprites retain their
+existing byte-space semantics. Use a transparent overlay clear for visible 3D.
+
+Scene color/depth keeps its existing 64 MiB allocation budget; the separate UI
+layer costs four more bytes per scene pixel, and the sprite intermediate costs
+eight bytes per logical UI pixel (also limited to 64 MiB). Image uploads retain
+existing sprite limits. The surface's 2048-axis bound keeps ordinary presentation
+below these allocation budgets.
+
+Explicit native GPU verification:
+
+```sh
+cargo test -p titan-render-wgpu --test composition -- --ignored --nocapture
+```
+
+This checks all four output formats, transparent/opaque/translucent UI against
+independently calculated linear-light expectations (tolerance two bytes per
+channel), nearest scaling after resize, zero-size rejection and stale-frame
+invalidation. It retains JSON plus actual/expected/difference PNG triples in
+the temporary directory `titan-composition-evidence`; override this with
+`TITAN_COMPOSITION_EVIDENCE_DIR`. Verified on Apple M5 Pro Metal (24 cases).
+Player-native and actual-browser evidence lives with the
+collection-room hosts. The established 2D offscreen tests and exact RPG
+reference remain unchanged.

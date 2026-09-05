@@ -1,9 +1,11 @@
 //! App-independent sprite and opaque 3D rendering for native and browser wgpu.
 //! Sprites use a logical framebuffer and nearest presentation; 3D owns bounded
 //! offscreen color/depth targets.
+mod composition;
 mod surface;
+pub use composition::GpuSceneRenderer3d;
 mod three_d;
-pub use surface::SurfaceRenderer;
+pub use surface::{SurfaceRenderer, SurfaceRenderer3d};
 pub use three_d::{Gpu3dError, GpuRenderer3d, MAX_3D_TARGET_BYTES};
 
 use bytemuck::{Pod, Zeroable};
