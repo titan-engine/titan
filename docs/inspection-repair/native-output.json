@@ -1,0 +1,433 @@
+{
+  "ambiguity": {
+    "bundle": {
+      "api_text": null,
+      "local_error": {
+        "command": null,
+        "error": {
+          "code": "ambiguous_target",
+          "details": {},
+          "message": "multiple runtime instances match; choose an instance explicitly",
+          "retryable": false
+        },
+        "error_code": "ambiguous_target",
+        "exit_code": null,
+        "success": false
+      },
+      "response": null
+    },
+    "failure": {
+      "error": {
+        "code": "ambiguous_target",
+        "details": {
+          "diagnostic_bundle": "<bundle.json>"
+        },
+        "message": "multiple runtime instances match; choose an instance explicitly",
+        "retryable": false
+      },
+      "status": "failure"
+    },
+    "instances": {
+      "instances": [
+        {
+          "endpoint": "<volatile>",
+          "instance_id": "repair-a",
+          "pid": "<volatile>",
+          "project": "<project>",
+          "run_mode": "headless",
+          "schema_version": 1
+        },
+        {
+          "endpoint": "<volatile>",
+          "instance_id": "repair-b",
+          "pid": "<volatile>",
+          "project": "<project>",
+          "run_mode": "headless",
+          "schema_version": 1
+        }
+      ],
+      "status": "success"
+    },
+    "selected_status": {
+      "instance_id": "repair-a",
+      "observed_frame": 1,
+      "request_id": "<volatile>",
+      "response": {
+        "current_frame": 1,
+        "paused": true,
+        "project": "<project>",
+        "run_mode": "headless",
+        "type": "status"
+      },
+      "schema_version": 1,
+      "state_revision": 3,
+      "status": "success"
+    }
+  },
+  "clock": {
+    "bundle": {
+      "api_text": "Titan protocol schema 1\ncomponent procedural_rpg::game::Player\ncomponent procedural_rpg::game::Position\n  x: i32 [writable] (min=0, max=19, unit=tile, Map tile coordinate)\n  y: i32 [writable] (min=0, max=13, unit=tile, Map tile coordinate)\ncomponent procedural_rpg::game::QuestHud\ncomponent procedural_rpg::game::Shard\ncomponent procedural_rpg::game::Shrine\ncomponent procedural_rpg::game::journal::JournalNode\ncomponent titan::ecs::builtin::Name\ncomponent titan::ui::UiButton\n  enabled: bool [read-only] (Whether a completed gesture may activate)\ncomponent titan::ui::UiNode\n  height: u32 [read-only] (Hit rectangle height in pixels)\n  layer: i32 [read-only] (Sprite and hit-test layer)\n  order: i32 [read-only] (Order within the layer)\n  visible: bool [read-only] (Draw and receive pointer hits)\n  width: u32 [read-only] (Hit rectangle width in pixels)\n  x: i32 [read-only] (Framebuffer-pixel left edge)\n  y: i32 [read-only] (Framebuffer-pixel top edge)\ncomponent titan::ui::UiText\n  color: [u8; 4] [read-only] (Straight-alpha RGBA text tint)\n  text: String [read-only] (Displayed text)\n  wrap: bool [read-only] (Word wrap and truncate to whole font cells in node bounds)\ncommand journal_key \u2014 Journal edge: toggle, next, previous, activate or close. Does not advance gameplay.\n  key: String (toggle | next | previous | activate | close)\ncommand journal_pointer \u2014 Logical primary pointer sample; omit both coordinates for an outside sample. Separate from physical gestures.\n  pressed: bool (Logical framebuffer pointer sample)\n  x: Option<i32> (Logical framebuffer pointer sample)\n  y: Option<i32> (Logical framebuffer pointer sample)\ncommand load_replay \u2014 RPG load_replay; playback changes require pause.\n  recording: JSON (Bounded game-owned data)\ncommand load_save \u2014 RPG load_save; playback changes require pause.\n  save: JSON (Bounded game-owned data)\ncommand pause \u2014 RPG pause; playback changes require pause.\ncommand restart \u2014 RPG restart; playback changes require pause.\ncommand restart_replay \u2014 RPG restart_replay; playback changes require pause.\ncommand resume \u2014 RPG resume; playback changes require pause.\ncommand spawn_shard \u2014 Spawn a collectible shard at a map tile.\n  x: i32 (min=0, max=19, unit=tile, Map tile coordinate)\n  y: i32 (min=0, max=13, unit=tile, Map tile coordinate)\ncommand stop_replay \u2014 RPG stop_replay; playback changes require pause.\n",
+      "local_error": null,
+      "response": {
+        "error": {
+          "code": "not_controlled",
+          "message": "the runtime clock is not controlled by the inspector",
+          "retryable": false
+        },
+        "instance_id": "repair-a",
+        "observed_frame": 0,
+        "request_id": "<volatile>",
+        "schema_version": 1,
+        "state_revision": 1,
+        "status": "failure"
+      }
+    },
+    "capabilities": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "controlled": false,
+        "mutation_enabled": false,
+        "operations": [
+          "inspect",
+          "invoke",
+          "query",
+          "capture"
+        ],
+        "run_mode": "headless",
+        "schema_version": 1,
+        "type": "capabilities"
+      },
+      "schema_version": 1,
+      "state_revision": 1,
+      "status": "success"
+    },
+    "commands": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "commands": [
+          {
+            "arguments": {
+              "key": {
+                "description": "toggle | next | previous | activate | close",
+                "type_name": "String",
+                "writable": false
+              }
+            },
+            "description": "Journal edge: toggle, next, previous, activate or close. Does not advance gameplay.",
+            "name": "journal_key"
+          },
+          {
+            "arguments": {
+              "pressed": {
+                "description": "Logical framebuffer pointer sample",
+                "type_name": "bool",
+                "writable": false
+              },
+              "x": {
+                "description": "Logical framebuffer pointer sample",
+                "type_name": "Option<i32>",
+                "writable": false
+              },
+              "y": {
+                "description": "Logical framebuffer pointer sample",
+                "type_name": "Option<i32>",
+                "writable": false
+              }
+            },
+            "description": "Logical primary pointer sample; omit both coordinates for an outside sample. Separate from physical gestures.",
+            "name": "journal_pointer"
+          },
+          {
+            "arguments": {
+              "recording": {
+                "description": "Bounded game-owned data",
+                "type_name": "JSON",
+                "writable": false
+              }
+            },
+            "description": "RPG load_replay; playback changes require pause.",
+            "name": "load_replay"
+          },
+          {
+            "arguments": {
+              "save": {
+                "description": "Bounded game-owned data",
+                "type_name": "JSON",
+                "writable": false
+              }
+            },
+            "description": "RPG load_save; playback changes require pause.",
+            "name": "load_save"
+          },
+          {
+            "description": "RPG pause; playback changes require pause.",
+            "name": "pause"
+          },
+          {
+            "description": "RPG restart; playback changes require pause.",
+            "name": "restart"
+          },
+          {
+            "description": "RPG restart_replay; playback changes require pause.",
+            "name": "restart_replay"
+          },
+          {
+            "description": "RPG resume; playback changes require pause.",
+            "name": "resume"
+          },
+          {
+            "arguments": {
+              "x": {
+                "description": "Map tile coordinate",
+                "maximum": 19.0,
+                "minimum": 0.0,
+                "type_name": "i32",
+                "unit": "tile",
+                "writable": true
+              },
+              "y": {
+                "description": "Map tile coordinate",
+                "maximum": 13.0,
+                "minimum": 0.0,
+                "type_name": "i32",
+                "unit": "tile",
+                "writable": true
+              }
+            },
+            "description": "Spawn a collectible shard at a map tile.",
+            "name": "spawn_shard"
+          },
+          {
+            "description": "RPG stop_replay; playback changes require pause.",
+            "name": "stop_replay"
+          }
+        ],
+        "type": "commands"
+      },
+      "schema_version": 1,
+      "state_revision": 1,
+      "status": "success"
+    },
+    "failure": {
+      "error": {
+        "code": "not_controlled",
+        "details": {
+          "diagnostic_bundle": "<bundle.json>"
+        },
+        "message": "the runtime clock is not controlled by the inspector",
+        "retryable": false
+      },
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "schema_version": 1,
+      "state_revision": 1,
+      "status": "failure"
+    },
+    "pause": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "applied_frame": 0,
+        "type": "applied"
+      },
+      "schema_version": 1,
+      "state_revision": 2,
+      "status": "success"
+    },
+    "paused_status": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "current_frame": 0,
+        "paused": true,
+        "project": "<project>",
+        "run_mode": "headless",
+        "type": "status"
+      },
+      "schema_version": 1,
+      "state_revision": 2,
+      "status": "success"
+    },
+    "status": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "current_frame": 0,
+        "paused": false,
+        "project": "<project>",
+        "run_mode": "headless",
+        "type": "status"
+      },
+      "schema_version": 1,
+      "state_revision": 1,
+      "status": "success"
+    },
+    "step_after_pause": {
+      "instance_id": "repair-a",
+      "observed_frame": 1,
+      "request_id": "<volatile>",
+      "response": {
+        "current_frame": 1,
+        "frames": 1,
+        "type": "stepped"
+      },
+      "schema_version": 1,
+      "state_revision": 3,
+      "status": "success"
+    }
+  },
+  "mutation": {
+    "after": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "component_fields": {
+          "procedural_rpg::game::Position": {
+            "x": {
+              "description": "Map tile coordinate",
+              "maximum": 19.0,
+              "minimum": 0.0,
+              "type_name": "i32",
+              "unit": "tile",
+              "writable": true
+            },
+            "y": {
+              "description": "Map tile coordinate",
+              "maximum": 13.0,
+              "minimum": 0.0,
+              "type_name": "i32",
+              "unit": "tile",
+              "writable": true
+            }
+          }
+        },
+        "components": {
+          "procedural_rpg::game::Player": null,
+          "procedural_rpg::game::Position": {
+            "x": 2,
+            "y": 2
+          },
+          "titan::ecs::builtin::Name": null
+        },
+        "id": {
+          "generation": 0,
+          "index": 0
+        },
+        "name": "player",
+        "type": "entity"
+      },
+      "schema_version": 1,
+      "state_revision": 0,
+      "status": "success"
+    },
+    "before": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "component_fields": {
+          "procedural_rpg::game::Position": {
+            "x": {
+              "description": "Map tile coordinate",
+              "maximum": 19.0,
+              "minimum": 0.0,
+              "type_name": "i32",
+              "unit": "tile",
+              "writable": true
+            },
+            "y": {
+              "description": "Map tile coordinate",
+              "maximum": 13.0,
+              "minimum": 0.0,
+              "type_name": "i32",
+              "unit": "tile",
+              "writable": true
+            }
+          }
+        },
+        "components": {
+          "procedural_rpg::game::Player": null,
+          "procedural_rpg::game::Position": {
+            "x": 2,
+            "y": 2
+          },
+          "titan::ecs::builtin::Name": null
+        },
+        "id": {
+          "generation": 0,
+          "index": 0
+        },
+        "name": "player",
+        "type": "entity"
+      },
+      "schema_version": 1,
+      "state_revision": 0,
+      "status": "success"
+    },
+    "bundle": {
+      "api_text": "Titan protocol schema 1\ncomponent procedural_rpg::game::Player\ncomponent procedural_rpg::game::Position\n  x: i32 [writable] (min=0, max=19, unit=tile, Map tile coordinate)\n  y: i32 [writable] (min=0, max=13, unit=tile, Map tile coordinate)\ncomponent procedural_rpg::game::QuestHud\ncomponent procedural_rpg::game::Shard\ncomponent procedural_rpg::game::Shrine\ncomponent procedural_rpg::game::journal::JournalNode\ncomponent titan::ecs::builtin::Name\ncomponent titan::ui::UiButton\n  enabled: bool [read-only] (Whether a completed gesture may activate)\ncomponent titan::ui::UiNode\n  height: u32 [read-only] (Hit rectangle height in pixels)\n  layer: i32 [read-only] (Sprite and hit-test layer)\n  order: i32 [read-only] (Order within the layer)\n  visible: bool [read-only] (Draw and receive pointer hits)\n  width: u32 [read-only] (Hit rectangle width in pixels)\n  x: i32 [read-only] (Framebuffer-pixel left edge)\n  y: i32 [read-only] (Framebuffer-pixel top edge)\ncomponent titan::ui::UiText\n  color: [u8; 4] [read-only] (Straight-alpha RGBA text tint)\n  text: String [read-only] (Displayed text)\n  wrap: bool [read-only] (Word wrap and truncate to whole font cells in node bounds)\ncommand journal_key \u2014 Journal edge: toggle, next, previous, activate or close. Does not advance gameplay.\n  key: String (toggle | next | previous | activate | close)\ncommand journal_pointer \u2014 Logical primary pointer sample; omit both coordinates for an outside sample. Separate from physical gestures.\n  pressed: bool (Logical framebuffer pointer sample)\n  x: Option<i32> (Logical framebuffer pointer sample)\n  y: Option<i32> (Logical framebuffer pointer sample)\ncommand load_replay \u2014 RPG load_replay; playback changes require pause.\n  recording: JSON (Bounded game-owned data)\ncommand load_save \u2014 RPG load_save; playback changes require pause.\n  save: JSON (Bounded game-owned data)\ncommand pause \u2014 RPG pause; playback changes require pause.\ncommand restart \u2014 RPG restart; playback changes require pause.\ncommand restart_replay \u2014 RPG restart_replay; playback changes require pause.\ncommand resume \u2014 RPG resume; playback changes require pause.\ncommand spawn_shard \u2014 Spawn a collectible shard at a map tile.\n  x: i32 (min=0, max=19, unit=tile, Map tile coordinate)\n  y: i32 (min=0, max=13, unit=tile, Map tile coordinate)\ncommand stop_replay \u2014 RPG stop_replay; playback changes require pause.\n",
+      "local_error": null,
+      "response": {
+        "error": {
+          "code": "mutation_disabled",
+          "message": "runtime mutation was not explicitly enabled",
+          "retryable": false
+        },
+        "instance_id": "repair-a",
+        "observed_frame": 0,
+        "request_id": "<volatile>",
+        "schema_version": 1,
+        "state_revision": 0,
+        "status": "failure"
+      }
+    },
+    "capabilities": {
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "response": {
+        "controlled": true,
+        "mutation_enabled": false,
+        "operations": [
+          "inspect",
+          "step",
+          "invoke",
+          "inject_input",
+          "query",
+          "capture"
+        ],
+        "run_mode": "headless",
+        "schema_version": 1,
+        "type": "capabilities"
+      },
+      "schema_version": 1,
+      "state_revision": 0,
+      "status": "success"
+    },
+    "failure": {
+      "error": {
+        "code": "mutation_disabled",
+        "details": {
+          "diagnostic_bundle": "<bundle.json>"
+        },
+        "message": "runtime mutation was not explicitly enabled",
+        "retryable": false
+      },
+      "instance_id": "repair-a",
+      "observed_frame": 0,
+      "request_id": "<volatile>",
+      "schema_version": 1,
+      "state_revision": 0,
+      "status": "failure"
+    }
+  }
+}
