@@ -108,10 +108,11 @@ handle. No RPG dependency or game-specific rendering policy enters this API.
 
 ## 3D rendering contract
 
-The following is an agreed design, **not an implemented capability**. Execution
-scope and acceptance live in [#42](https://github.com/titan-engine/titan/issues/42)
-and its linked issues. As implementation lands, update this section in place
-with the actual public API and evidence; do not retain a parallel design history.
+The CPU data/math boundary is implemented in `titan::render::three_d` alongside
+unchanged 2D APIs. GPU drawing, players and captures below remain agreed design,
+**not implemented 3D capabilities**. Execution scope lives in
+[#43](https://github.com/titan-engine/titan/issues/43) and the linked issues of
+[#42](https://github.com/titan-engine/titan/issues/42).
 
 ### Coordinates and data
 
@@ -128,28 +129,91 @@ positive nonzero scale on each axis, composed as translation × rotation × scal
 There is no parent hierarchy in this boundary. Normals use the inverse transpose
 of the model's linear part and are normalized before lighting. Reject nonfinite
 values, degenerate rotations and invalid projections before GPU submission.
-Start with small CPU vector/quaternion/matrix helpers for these operations in the
-engine's rendering module, with convention tests; no new math dependency or
-standalone general math library is selected.
+`Vec3`, `Quaternion`, `Mat4`, `Transform3d` and `PerspectiveCamera` implement these
+operations without a new math dependency. Constructors normalize finite nonzero
+quaternions/directions and reject invalid values or unrepresentable matrices.
+`Mat4::columns` returns column-major f32 data; checked multiplication and
+homogeneous vector transformation report overflow instead of returning infinity.
+CPU intermediates use f64; this is not a portable bitwise floating-point promise.
 
-A mesh owns finite positions, nonzero normals and triangle indices. Validate
-matching attribute lengths, index ranges, complete nondegenerate triangles and
-bounded counts/byte sizes with checked arithmetic. Cube and floor generators use
-this same mesh representation. Handles are process-local and scoped to an asset
-collection, with generation checks when slots are reused; replacing a collection
-must never make an old numeric handle resolve to unrelated geometry. No disk
-identity, importer, general asset graph or persistent GPU cache is implied.
+`Mesh::new` owns finite positions, nonzero finite normals and u32 triangle
+indices in immutable boxed slices (discarding spare input-vector capacity). It
+rejects empty meshes, mismatched attributes, malformed/out-of-range indices and
+zero-area triangles. Counts and byte sizes use checked arithmetic: at most
+1,000,000 vertices, 3,000,000 indices and 64 MiB per mesh. Normals need not be unit
+length; `Transform3d::transform_normal` applies inverse transpose and normalizes.
+`Mesh::cube(size)` is centered at the origin with outward flat normals;
+`Mesh::floor(size)` is an XZ square at Y=0 facing +Y. Both take positive side
+lengths and use the same validating mesh constructor.
 
-An immutable 3D frame owns camera, lighting and ordered draw data (mesh reference,
-transform and opaque base color). Its asset references retain the exact immutable
-mesh versions used by the frame, so later replacement cannot alter an in-flight
-render or capture. Missing/stale handles are errors. Bound draw count and aggregate retained/uploaded
-geometry bytes per frame, not only each mesh in isolation. Extract from `&World` using
-`App`'s existing snapshot boundary; do not put GPU objects, windows or transport
-state in the frame. Fix draw order during extraction, including a stable tie
-break for equal depth. CPU construction, validation and extraction work without
-a GPU. The initial data API belongs beside the existing render data, with GPU
-implementation in `titan-render-wgpu`; no speculative crate split is selected.
+`MeshAssets::insert` returns a private, process-local `MeshHandle` scoped to that
+collection and slot generation. `get` returns an `Arc<Mesh>`; `remove` invalidates
+the handle, and `replace` returns a new handle that callers must store. Old
+handles never resolve after replacement, slot reuse or collection reconstruction.
+Previously retained meshes remain valid. Collections allow 65,536 slots, retire
+exhausted generations, and panic rather than reuse an exhausted process identity.
+Handles are not persistence IDs. There is no importer, asset graph or disk cache.
+
+`RenderFrame3d::new` owns a validated camera, `Lighting3d` and resolved draws.
+`Draw3d` supplies a handle, transform, opaque `BaseColor` and unique u64 `order`.
+The frame sorts ascending by this key, making equal-depth submission deterministic
+regardless of traversal order; duplicate keys are errors. For ECS entities, use
+`(u64::from(entity.index()) << 32) | u64::from(entity.generation())` when no other
+stable game-defined order is needed. No distance sort is imposed on opaque draws.
+`BaseColor::rgb` is sRGB without alpha; `linear()` decodes it for lighting.
+`Lighting3d::new(to_light, ambient, diffuse)` normalizes the direction and bounds
+each intensity to 0..=1.
+
+Each resolved `FrameDraw3d` retains the exact immutable mesh used at construction,
+so asset replacement/removal cannot change an in-flight frame. Missing/stale
+handles, duplicate order, invalid limits and matrix composition overflow return
+`Frame3dError`, with no partial frame. `Frame3dLimits` permits lower budgets up to
+the hard caps of 65,536 draws and 256 MiB of geometry. Geometry is charged once per
+draw, including repeated handles, conservatively bounding retained/upload data;
+allocator/Arc bookkeeping is excluded. Empty frames and zero budgets are valid.
+
+Register a game-owned extractor receiving `&World`; `App` needs no changes and
+owns no render/window/event-loop state. A fallible extractor stores
+`Result<RenderFrame3d, Frame3dError>` as its snapshot, so the host can report asset
+errors instead of rendering a stale successful frame:
+
+```rust,ignore
+use titan::{App, World};
+use titan::render::three_d::*;
+
+fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
+    RenderFrame3d::new(
+        *world.resource::<PerspectiveCamera>().unwrap(),
+        *world.resource::<Lighting3d>().unwrap(),
+        world.resource::<MeshAssets>().unwrap(),
+        world.iter::<Object>().map(|(_, object)| object.0),
+        Frame3dLimits::default(),
+    )
+}
+// Object is a game component wrapping Draw3d. Insert camera, lighting, assets
+// and objects before startup, then register the builder:
+let mut app = App::new();
+// ... populate app.world_mut() ...
+app.add_extractor(extract);
+app.update(); // completes startup and runs the first extraction
+let frame = app.extracted::<Result<RenderFrame3d, Frame3dError>>().unwrap();
+// After direct edits: app.refresh_extracted(); this does not advance simulation.
+```
+
+The complete [headless example](../examples/render_3d.rs) authors a cube and floor,
+extracts them through `App`, and checks ownership and projection. Run it natively
+or in actual WASM without a GPU:
+
+```sh
+cargo run --locked --example render_3d --no-default-features
+node scripts/test-render-3d.mjs
+```
+
+Native unit tests cover validation, handle lifecycle, budgets, stable ordering,
+geometry/winding, transform/normal and projection conventions. The WASM script
+builds the same public example without default features and executes its exported
+verification function in Node with a bounded subprocess. This is CPU evidence;
+it does not claim browser GPU rendering. Existing 2D callers need no migration.
 
 ### Drawing and presentation
 
