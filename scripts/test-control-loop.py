@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-import subprocess
+import acceptance_process as processes
 import tempfile
 import time
 import urllib.error
@@ -18,27 +18,26 @@ GAME = TARGET / "debug" / "examples" / "procedural_rpg"
 
 
 def main():
-    subprocess.run(
+    processes.run(
         ["cargo", "build", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
         cwd=REPO,
-        check=True,
+        check=True, phase="build",
     )
     with tempfile.TemporaryDirectory(prefix="titan-control-loop-") as directory:
         project = Path(directory).resolve()
         with tempfile.TemporaryFile(mode="w+") as log:
-            game = subprocess.Popen(
+            game = processes.Popen(
                 [str(GAME), "--serve", "--project", str(project), "--instance", "acceptance", "--allow-mutation", "--run-for-ms", "30000"],
                 cwd=REPO,
-                stdout=log,
+                project=project, instance="acceptance", stdout=log,
                 stderr=log,
             )
             try:
                 def cli(*arguments, success=True):
-                    output = subprocess.run(
+                    output = processes.run(
                         [str(CLI), "--format", "json", "--project", str(project), "--instance", "acceptance", *arguments],
                         capture_output=True,
                         text=True,
-                        timeout=10,
                     )
                     result = json.loads(output.stdout)  # Rejects extra stdout content.
                     assert (output.returncode == 0) == success, result
@@ -123,18 +122,11 @@ def main():
                     mismatch = json.load(response)
                 assert mismatch["error"]["code"] == "protocol_mismatch"
                 assert mismatch["request_id"] == "mismatch"
-                game.terminate()
-                assert game.wait(timeout=10) == 0
+                assert processes.graceful_shutdown(game) == 0
                 assert not list((project / "target/titan/instances").glob("*.json"))
                 assert cli("instances")["instances"] == []
             finally:
-                if game.poll() is None:
-                    game.terminate()
-                    try:
-                        game.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        game.kill()
-                        game.wait()
+                processes.terminate(game)
     print("Native CLI control loop passed: replay, inspection, commands, fields, exact capture, diagnostics, shutdown.")
 
 

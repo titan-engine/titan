@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import shutil
 import struct
-import subprocess
+import acceptance_process as processes
 import sys
 import tempfile
 import time
@@ -25,8 +25,8 @@ def png(color, width=8, height=10):
             + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
 
 
-def run(command, cwd, success=True, timeout=15):
-    result = subprocess.run(list(map(str, command)), cwd=cwd, capture_output=True, text=True, timeout=timeout)
+def run(command, cwd, success=True, phase="runtime"):
+    result = processes.run(list(map(str, command)), cwd=cwd, capture_output=True, text=True, phase=phase)
     assert (result.returncode == 0) == success, (command, result.stdout, result.stderr)
     return result
 
@@ -37,8 +37,8 @@ def main():
     options = parser.parse_args()
     build = ['cargo', 'build', '-p', 'titan-cli', '-p', 'titan', '--bin', 'titan',
              '--example', 'procedural_rpg', '--example', 'replay_rpg']
-    run(build, ROOT, timeout=180)
-    metadata = json.loads(run(['cargo', 'metadata', '--no-deps', '--format-version', '1'], ROOT).stdout)
+    run(build, ROOT, phase="build")
+    metadata = json.loads(run(['cargo', 'metadata', '--no-deps', '--format-version', '1'], ROOT, phase='build').stdout)
     target = Path(metadata['target_directory'])
     executable = target / 'debug/examples/procedural_rpg'
     verifier = target / 'debug/examples/replay_rpg'
@@ -84,9 +84,9 @@ def main():
 
         # Record with the substituted sprite, then verify in a fresh process with the same asset.
         with tempfile.TemporaryFile(mode='w+') as log:
-            process = subprocess.Popen([str(executable), '--serve', '--project', str(project),
+            process = processes.Popen([str(executable), '--serve', '--project', str(project),
                 '--instance', instance, '--assets-dir', str(assets), '--run-for-ms', '20000'],
-                cwd=project, stdout=log, stderr=log)
+                project=project, instance=instance, cwd=project, stdout=log, stderr=log)
             try:
                 deadline = time.monotonic() + 5
                 while not call('instances')['instances']:
@@ -116,9 +116,7 @@ def main():
                 tree.write_bytes(b'broken after startup')
                 assert call('capture')['response']['checksum'] == second
             finally:
-                if process.poll() is None:
-                    process.terminate()
-                process.wait(timeout=10)
+                processes.terminate(process)
                 log.seek(0)
                 assert process.returncode == 0, log.read()
         assert not call('instances')['instances']
@@ -141,7 +139,7 @@ def main():
             assert reference('--assets-dir', assets) == REFERENCE
 
         if options.gpu:
-            result = run([sys.executable, ROOT / 'scripts/build-rpg-app.py'], ROOT, timeout=180)
+            result = run([sys.executable, ROOT / 'scripts/build-rpg-app.py'], ROOT, phase="build")
             bundle = Path(result.stdout.strip().splitlines()[-1])
             relocated = project / 'Relocated RPG.app'
             shutil.copytree(bundle, relocated)

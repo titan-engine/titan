@@ -3,15 +3,15 @@
 import json
 import os
 from pathlib import Path
-import subprocess
+import acceptance_process as processes
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def command(args, **kwargs):
-    return subprocess.run(args, cwd=ROOT, check=True, text=True,
-                          capture_output=True, timeout=300, **kwargs).stdout
+    return processes.run(args, cwd=ROOT, check=True, text=True,
+                          capture_output=True, phase="build" if args[0] == "cargo" else "runtime", **kwargs).stdout
 
 
 def main():

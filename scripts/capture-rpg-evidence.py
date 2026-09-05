@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import struct
-import subprocess
+import acceptance_process as processes
 import tempfile
 import time
 import zlib
@@ -52,16 +52,16 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory(prefix="titan-art-") as directory, tempfile.TemporaryFile() as log:
         project = Path(directory).resolve()
-        runtime = subprocess.Popen([
+        runtime = processes.Popen([
             str(TARGET / "debug/examples/procedural_rpg"), "--serve", "--project", str(project),
             "--instance", "art-evidence", "--run-for-ms", "30000",
-        ], stdout=log, stderr=log)
+        ], project=project, instance="art-evidence", stdout=log, stderr=log)
         try:
             def call(*arguments):
-                output = subprocess.run([
+                output = processes.run([
                     str(TARGET / "debug/titan"), "--project", str(project), "--instance", "art-evidence",
                     "--format", "json", *arguments,
-                ], capture_output=True, text=True, timeout=10, check=True)
+                ], capture_output=True, text=True, check=True)
                 result = json.loads(output.stdout)
                 assert result["status"] == "success", result
                 return result
@@ -73,7 +73,7 @@ def main():
                     raise RuntimeError("runtime failed to register: " + log.read().decode())
                 time.sleep(0.02)
 
-            evidence = {"source_revision": subprocess.check_output(
+            evidence = {"source_revision": processes.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()}
 
             def capture(label):
@@ -104,13 +104,7 @@ def main():
             (args.output / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
             print(json.dumps(evidence, indent=2))
         finally:
-            if runtime.poll() is None:
-                runtime.terminate()
-                try:
-                    runtime.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    runtime.kill()
-                    runtime.wait()
+            processes.terminate(runtime)
 
 
 if __name__ == "__main__":

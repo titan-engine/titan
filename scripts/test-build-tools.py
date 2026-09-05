@@ -2,6 +2,9 @@
 """Portable build-policy checks; actual external-copy builds have separate tests."""
 import contextlib
 import io
+import importlib.util
+import os
+import sys
 import json
 from pathlib import Path
 import plistlib
@@ -22,6 +25,9 @@ class BuildTools(unittest.TestCase):
         self.shared_input = self.engine / "web/shared/input.mjs"
         self.shared_input.parent.mkdir(parents=True)
         self.shared_input.write_text("export const engineInput = true;\n")
+        process_helper = self.engine / "scripts/acceptance_process.mjs"
+        process_helper.parent.mkdir(parents=True)
+        process_helper.write_text("export const run = true;\n")
         self.metadata = {
             "target_directory": str(self.target),
             "packages": [
@@ -41,12 +47,14 @@ class BuildTools(unittest.TestCase):
 
     def test_browser_rejects_stale_cli_and_installs_matching_version(self):
         self.cli(self.target / "titan/tools/bin/wasm-bindgen")
-        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.subprocess, "run") as run:
+        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.processes, "run") as run:
             run.return_value.returncode = 0
             run.return_value.stdout = "wasm-bindgen 0.2.126\n"
             titan_build.browser(self.root, self.metadata, package_name="independent-game", out_name="game_bindings")
         self.assertEqual((self.root / "web/shared/input.mjs").read_text(), self.shared_input.read_text())
+        self.assertEqual((self.root / "scripts/acceptance_process.mjs").read_text(), "export const run = true;\n")
         self.assertFalse((self.root / "web/assets").exists())
+        self.assertTrue(all(call.kwargs["phase"] == "build" for call in run.call_args_list))
         commands = [call.args[0] for call in run.call_args_list]
         install = next(command for command in commands if command[:2] == ["cargo", "install"])
         self.assertEqual(install[install.index("--version") + 1], "0.2.127")
@@ -65,14 +73,14 @@ class BuildTools(unittest.TestCase):
         destination = self.root / "web/assets"
         destination.mkdir(parents=True)
         (destination / "stale.png").write_bytes(b"old asset")
-        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.subprocess, "run"):
+        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.processes, "run"):
             titan_build.browser(self.root, self.metadata, package_name="independent-game",
                                 out_name="game_bindings", assets_source="art source")
         self.assertEqual(list(destination.iterdir()), [destination / "player.png"])
         self.assertEqual((destination / "player.png").read_bytes(), b"PNG bytes")
 
     def test_missing_explicit_assets_fail_before_build(self):
-        with patch.object(titan_build.subprocess, "run") as run:
+        with patch.object(titan_build.processes, "run") as run:
             with self.assertRaisesRegex(ValueError, "not a directory"):
                 titan_build.browser(self.root, self.metadata, package_name="independent-game",
                                     out_name="game_bindings", assets_source="missing")
@@ -85,7 +93,7 @@ class BuildTools(unittest.TestCase):
         destination = self.root / "web/assets"
         destination.mkdir(parents=True)
         (destination / "player.png").write_bytes(b"previous successful build")
-        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.subprocess, "run", side_effect=RuntimeError("build failed")):
+        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.processes, "run", side_effect=RuntimeError("build failed")):
             with self.assertRaisesRegex(RuntimeError, "build failed"):
                 titan_build.browser(self.root, self.metadata, package_name="independent-game", out_name="game_bindings")
         self.assertEqual((destination / "player.png").read_bytes(), b"previous successful build")
@@ -107,7 +115,7 @@ class BuildTools(unittest.TestCase):
 
     def test_browser_reuses_matching_dependency_checkout_cli(self):
         cached = self.cli(self.engine / "target/titan/tools/bin/wasm-bindgen")
-        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.subprocess, "run") as run:
+        with patch.object(titan_build.shutil, "which", return_value=None), patch.object(titan_build.processes, "run") as run:
             run.return_value.returncode = 0
             run.return_value.stdout = "wasm-bindgen 0.2.127\n"
             titan_build.browser(self.root, self.metadata, package_name="independent-game", out_name="game_bindings")
@@ -117,7 +125,7 @@ class BuildTools(unittest.TestCase):
 
     def test_ambiguous_bindgen_resolution_fails_before_build(self):
         self.metadata["packages"].append({"name": "wasm-bindgen", "version": "0.2.126"})
-        with patch.object(titan_build.subprocess, "run") as run:
+        with patch.object(titan_build.processes, "run") as run:
             with self.assertRaisesRegex(ValueError, "expected one resolved"):
                 titan_build.browser(self.root, self.metadata, package_name="independent-game", out_name="game_bindings")
             run.assert_not_called()
@@ -129,10 +137,10 @@ class BuildTools(unittest.TestCase):
         executable.chmod(0o755)
         artifact = {"reason": "compiler-artifact", "package_id": "game-id", "target": {"name": "play"}, "executable": str(executable)}
         unrelated = dict(artifact, package_id="dependency-id", executable="/wrong/file")
-        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.subprocess, "Popen") as popen, contextlib.redirect_stdout(io.StringIO()) as output:
-            build = popen.return_value.__enter__.return_value
-            build.stdout = [json.dumps(unrelated), json.dumps(artifact)]
-            build.wait.return_value = 0
+        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.processes, "run") as run, contextlib.redirect_stdout(io.StringIO()) as output:
+            build = run.return_value
+            build.stdout = "\n".join([json.dumps(unrelated), json.dumps(artifact)])
+            build.returncode = 0
             titan_build.macos_app(self.root, self.metadata, ["--name", "Copied Game", "--bundle-id", "dev.example.copy", "--release"])
         bundle = Path(output.getvalue().strip())
         self.assertEqual(bundle, self.target / "macos-app/release/Copied Game.app")
@@ -152,12 +160,12 @@ class BuildTools(unittest.TestCase):
         (self.root / "assets/player.png").write_bytes(b"player image")
         artifact = {"reason": "compiler-artifact", "package_id": "game-id",
                     "target": {"name": "play_rpg"}, "executable": str(executable)}
-        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.subprocess, "Popen") as popen, contextlib.redirect_stdout(io.StringIO()) as output:
-            build = popen.return_value.__enter__.return_value
-            build.stdout = [json.dumps(artifact)]
-            build.wait.return_value = 0
+        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.processes, "run") as run, contextlib.redirect_stdout(io.StringIO()) as output:
+            build = run.return_value
+            build.stdout = json.dumps(artifact)
+            build.returncode = 0
             titan_build.macos_app(self.root, self.metadata, ["--example", "play_rpg", "--name", "Titan RPG"])
-        self.assertIn("--example", popen.call_args.args[0])
+        self.assertIn("--example", run.call_args.args[0])
         bundle = Path(output.getvalue().strip())
         relocated = self.root / "Relocated RPG.app"
         bundle.rename(relocated)
@@ -168,10 +176,37 @@ class BuildTools(unittest.TestCase):
         self.assertEqual((relocated / "Contents/Resources/assets/player.png").read_bytes(), b"player image")
 
     def test_invalid_bundle_name_does_not_build(self):
-        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.subprocess, "Popen") as popen, contextlib.redirect_stderr(io.StringIO()):
+        with patch.object(titan_build.sys, "platform", "darwin"), patch.object(titan_build.processes, "run") as run, contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 titan_build.macos_app(self.root, self.metadata, ["--name", "../escape"])
-            popen.assert_not_called()
+            run.assert_not_called()
+
+
+class MetadataBootstrap(unittest.TestCase):
+    def test_standalone_bootstraps_bound_pipe_holding_metadata_descendants(self):
+        repository = Path(__file__).resolve().parent.parent
+        for relative in ["games/arena", "starters/minimal"]:
+            with self.subTest(package=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                script = root / "cargo"
+                pidfile = root / "descendant.pid"
+                script.write_text(f"#!{sys.executable}\n"
+                                  "import subprocess, sys\n"
+                                  "from pathlib import Path\n"
+                                  "child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'])\n"
+                                  f"Path({str(pidfile)!r}).write_text(str(child.pid))\n")
+                script.chmod(0o755)
+                spec = importlib.util.spec_from_file_location("bootstrap", repository / relative / "scripts/titan_tools.py")
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                environment = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
+                                   TITAN_BUILD_TIMEOUT_SECONDS="0.3")
+                with patch.dict(os.environ, environment, clear=True):
+                    with self.assertRaisesRegex(RuntimeError, "build phase timed out"):
+                        module.metadata_bootstrap()
+                pid = pidfile.read_text()
+                state = titan_build.processes.run(["ps", "-o", "stat=", "-p", pid], capture_output=True, text=True)
+                self.assertTrue(state.returncode != 0 or state.stdout.strip().startswith("Z"), state.stdout)
 
 
 if __name__ == "__main__":

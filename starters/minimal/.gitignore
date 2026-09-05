@@ -1,3 +1,4 @@
 /target/
 /web/inspector/pkg/
 /web/shared/input.mjs
+/scripts/acceptance_process.mjs

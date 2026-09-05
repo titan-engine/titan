@@ -7,6 +7,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import acceptance_process as processes
 import sys
 import tempfile
 
@@ -30,9 +31,9 @@ def main():
             manifest.write_text(re.sub(r'path = "(\.\./\.\.[^"]*)"',
                 lambda m: 'path = ' + json.dumps(str((source / m[1]).resolve())),
                 manifest.read_text()))
-            result = subprocess.run([sys.executable, "scripts/build-macos-app.py",
+            result = processes.run([sys.executable, "scripts/build-macos-app.py",
                 "--name", name, "--bundle-id", bundle_id], cwd=project, env=env,
-                check=True, text=True, stdout=subprocess.PIPE, timeout=600)
+                check=True, text=True, stdout=subprocess.PIPE, phase="build")
             bundle = Path(result.stdout.strip().splitlines()[-1])
             assert bundle.is_absolute() and bundle.suffix == ".app", result.stdout
             with (bundle / "Contents/Info.plist").open("rb") as file:
@@ -45,8 +46,8 @@ def main():
             shutil.copytree(bundle, renamed)
             executable = renamed / "Contents/MacOS" / info["CFBundleExecutable"]
             assert executable.is_file() and os.access(executable, os.X_OK)
-            help_result = subprocess.run([str(executable), "--help"], cwd=directory,
-                check=True, text=True, capture_output=True, timeout=10)
+            help_result = processes.run([str(executable), "--help"], cwd=directory,
+                check=True, text=True, capture_output=True)
             assert "--frames" in help_result.stdout
             print(f"Passed external-copy bundle: {name}")
 

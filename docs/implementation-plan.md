@@ -18,6 +18,9 @@ firm commitments, tentative preferences and open questions. Backlog migration
 does not change their certainty or approve all future capabilities. Use issues
 for selection and execution, and update design docs when decisions change.
 
+See [acceptance deadlines](acceptance-timeouts.md) for configurable build/runtime
+limits, owned-process cleanup and CI evidence headroom.
+
 ## Constraints and quality gates
 
 Preserve the accepted RPG behavior and software checksum `f7a298f62ad75c1c` for

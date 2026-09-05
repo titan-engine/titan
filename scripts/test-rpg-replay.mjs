@@ -1,12 +1,12 @@
 // Real WASM RPG sessions, with exported recordings verified by a native process.
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, run } from './acceptance_process.mjs';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--no-deps', '--format-version', '1'], {cwd:root, encoding:'utf8'}));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], {phase:'build',cwd:root, encoding:'utf8'}));
 const {BrowserLiveRuntime, verify_recording_json} = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 let sequence = 0;
 function raw(game, request) {
@@ -213,11 +213,11 @@ const evidence = resolve(metadata.target_directory,'rpg-replay-evidence');
 mkdirSync(evidence,{recursive:true});
 const path = resolve(evidence,'wasm-recording.json');
 writeFileSync(path,JSON.stringify(recording,null,2)+'\n');
-execFileSync('cargo',['build','--example','replay_rpg'],{cwd:root,stdio:'inherit'});
-const native = JSON.parse(execFileSync(resolve(metadata.target_directory,'debug/examples/replay_rpg'),[path],{cwd:root,encoding:'utf8'}));
+await execFile('cargo',['build','--example','replay_rpg'],{phase:'build',cwd:root,stdio:'inherit'});
+const native = JSON.parse(await execFile(resolve(metadata.target_directory,'debug/examples/replay_rpg'),[path],{cwd:root,encoding:'utf8'}));
 assert.deepEqual(native.save,verified.save);
 assert.equal(native.checksum,verified.checksum);
-const foreign = spawnSync(resolve(metadata.target_directory,'debug/examples/replay_rpg'),[resolve(root,'games/arena/tests/fixtures/recording-v1.json')],{encoding:'utf8'});
+const foreign = await run(resolve(metadata.target_directory,'debug/examples/replay_rpg'),[resolve(root,'games/arena/tests/fixtures/recording-v1.json')],{encoding:'utf8'});
 assert.notEqual(foreign.status,0);
 ok(source,invoke('spawn_shard',{x:0,y:0}));
 const editedRecording = query(source,'recording');

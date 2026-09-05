@@ -5,23 +5,26 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import acceptance_process as processes
 import time
 
 GAME = Path(__file__).resolve().parents[1]
 REPO = GAME.parents[1]
 started=time.monotonic()
-subprocess.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True)
+processes.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True, phase="build")
 build_seconds=time.monotonic()-started
-subprocess.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True)
+processes.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build")
 def target(manifest):
-    return Path(json.loads(subprocess.check_output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)]))['target_directory'])
+    return Path(json.loads(processes.check_output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)], phase='build'))['target_directory'])
 CLI=target(REPO/'Cargo.toml')/'debug/titan'
 BINARY=target(GAME/'Cargo.toml')/'debug/titan-game'
 evidence=GAME/'target/arena-evidence'; evidence.mkdir(parents=True,exist_ok=True)
 instance=f'arena-test-{os.getpid()}'
-p=subprocess.Popen([str(BINARY),'--serve','--instance',instance,'--allow-mutation','--run-for-ms','120000'],cwd=GAME,stdout=subprocess.DEVNULL)
+p=processes.Popen([str(BINARY),'--serve','--instance',instance,'--allow-mutation','--run-for-ms','120000'],project=GAME,instance=instance,cwd=GAME,stdout=subprocess.DEVNULL)
 def call(*args, error=None):
-    r=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,*map(str,args)],capture_output=True,text=True,timeout=10)
+    r=processes.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,*map(str,args)],capture_output=True,text=True)
     data=json.loads(r.stdout)
     if error: assert data['error']['code']==error,data
     else: assert data['status']=='success',data
@@ -98,7 +101,7 @@ try:
     load_arguments.write_text(json.dumps({'save':saved}))
     malformed_arguments=evidence/'malformed-load-arguments.json'
     malformed_arguments.write_text('{')
-    malformed=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'invoke','load_save','--arguments-file',str(malformed_arguments)],capture_output=True,text=True,timeout=10)
+    malformed=processes.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'invoke','load_save','--arguments-file',str(malformed_arguments)],capture_output=True,text=True)
     assert malformed.returncode != 0,malformed
     unchanged=call('status')
     assert (unchanged['observed_frame'],unchanged['state_revision'])==(before_load['observed_frame'],before_load['state_revision'])
@@ -115,11 +118,11 @@ try:
     snapshot_recording=call('query','recording')
     snapshot_path=evidence/'native-snapshot-recording.json'
     snapshot_path.write_text(json.dumps(snapshot_recording))
-    verification=json.loads(subprocess.check_output([str(BINARY.with_name('replay')),str(snapshot_path)],text=True))
+    verification=json.loads(processes.check_output([str(BINARY.with_name('replay')),str(snapshot_path)],text=True))
     assert verification['save']==call('query','save')['response']['value']
     assert verification['checksum']==call('capture')['response']['checksum']
     assert snapshot_recording['response']['value']['initial_snapshot']==saved
-    legacy=json.loads(subprocess.check_output([str(BINARY.with_name('replay')),str(GAME/'tests/fixtures/recording-v1.json')],text=True))
+    legacy=json.loads(processes.check_output([str(BINARY.with_name('replay')),str(GAME/'tests/fixtures/recording-v1.json')],text=True))
     assert legacy['ticks']==194 and legacy['checksum']=='ae923e36040921f9'
 
     call('invoke','restart');call('step',310)
@@ -128,12 +131,12 @@ try:
     assert data['world_state']['positions']['run']['outcome']=='Lost'
     shutil.copy(call('capture')['response']['artifact'],evidence/'lost.ppm')
 finally:
-    p.terminate();p.wait(timeout=5)
+    processes.terminate(p)
 assert not call('instances')['instances']
-p=subprocess.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],cwd=GAME,stdout=subprocess.DEVNULL)
+p=processes.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],project=GAME,instance=instance,cwd=GAME,stdout=subprocess.DEVNULL)
 try:
     wait_ready(p)
     call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
 finally:
-    p.terminate();p.wait(timeout=5)
+    processes.terminate(p)
 print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, save/load, snapshot/v1 replay, capture and bounded diagnostics passed.')
