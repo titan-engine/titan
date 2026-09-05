@@ -113,6 +113,9 @@ python3 games/collection-room/scripts/build-macos-app.py --name "Titan Collectio
 ```
 
 The second command builds an unsigned local development app and prints its path.
+Ordinary launches start automatically once the GPU window is ready and focused;
+no preliminary P press is needed. Use `--paused` to deliberately start paused.
+`--trace-focus` logs window creation and focus events for launch diagnostics.
 WASD/arrows move, P pauses/resumes, N advances one paused tick, R restarts and
 clears the replay, and Escape exits. Focus loss pauses and cancels held keys and
 buffered taps. A released tap still reaches the next tick; physical aliases are
