@@ -6,34 +6,60 @@ own game. It imports public Titan crates; it does not import RPG support code.
 
 ## Copy and configure
 
-Install stable Rust, Python 3 and Node.js. Native windows/discovery are currently
-supported on macOS and Linux. Browser graphics require WebGPU or WebGL2 with
-floating-point color attachments. Titan is a local path dependency: crates.io
-publishing is disabled.
+Install stable Rust and Python 3.9 or newer. Node.js is needed only for the
+browser checks. Native windows/discovery are currently supported on macOS and
+Linux. Browser graphics require WebGPU or WebGL2 with floating-point color
+attachments. Titan is a local path dependency: crates.io publishing is disabled.
 
-From the Titan checkout, copy the starter and configure its dependency paths:
+From the Titan checkout, create a game beside it:
 
 ```sh
 export TITAN_REPO="$PWD"
-export GAME_DIR="$(mktemp -d)/my-game"
-cp -R starters/minimal "$GAME_DIR"
-python3 - <<'PY'
-import json, os, re
-from pathlib import Path
-repo = Path(os.environ['TITAN_REPO']).resolve()
-manifest = Path(os.environ['GAME_DIR']) / 'Cargo.toml'
-manifest.write_text(re.sub(r'path = "(\.\./\.\.[^"]*)"',
-    lambda m: 'path = ' + json.dumps(str((repo / 'starters/minimal' / m[1]).resolve())),
-    manifest.read_text()))
-PY
+export GAME_DIR="$(dirname "$TITAN_REPO")/my-game"
+python3 scripts/create-game.py "$GAME_DIR"
 cd "$GAME_DIR"
-cargo test --all-targets
-cargo run --bin titan-game
-cargo run --bin play -- --frames 2
+cargo run --bin play
 ```
 
-`cargo run --bin play` opens an unbounded playable window. Arrow keys or WASD
-move; Escape exits. `--frames 2` bounds GPU presentation for smoke checks.
+You should see a small cyan square on a dark background. Arrow keys or WASD move
+it; Escape exits. The first build downloads and compiles dependencies. Use
+`cargo run --bin play -- --frames 2` for a bounded window smoke check, or
+`cargo run --bin titan-game` for a headless run that prints game state.
+
+Choose any new persistent directory by changing `GAME_DIR`. The setup command
+refuses to overwrite an existing directory. Your game's `Cargo.toml` points to
+this Titan checkout, so keep the checkout in place; if you move it, update the
+Titan dependency paths in your game's manifest. The command runs from the Titan
+checkout; the remaining commands run from your copied game.
+
+## Make your first visible change
+
+In your copied game's `src/game.rs`, find the cyan sprite color in `setup`:
+
+```rust
+Color::rgb(90, 220, 230)
+```
+
+Change it to orange:
+
+```rust
+Color::rgb(255, 160, 60)
+```
+
+Save, close the running window, and run `cargo run --bin play` again. The square
+should now be orange and move as before. Titan rebuilds the game when you run
+Cargo; source edits do not reload into an already running player. For the
+browser player, rebuild with the [browser commands below](#browser) and reload
+the page after changing source.
+
+Then try changing `DOT_SIZE` near the top of the same file from `5` to `9`.
+Rebuild to see a larger square; the movement bounds use this constant too.
+These edits belong to your copied game and do not change Titan's demo or
+reference images. When ready, run `cargo test --all-targets` and explore
+[where code belongs](#where-code-belongs).
+
+## Package layout
+
 The standalone `[workspace]` is intentional. Keep the explicit manifest metadata
 and dependency paths when copying; do not inherit Titan's workspace metadata.
 The package/library name is `titan-game` / `titan_game`; changing it also requires

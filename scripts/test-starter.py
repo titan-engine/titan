@@ -4,8 +4,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
-import shutil
 import acceptance_process as processes
 import tempfile
 import time
@@ -21,14 +19,16 @@ def main():
     processes.run(["cargo", "build", "-p", "titan-cli"], cwd=REPO, check=True, phase="build")
     with tempfile.TemporaryDirectory(prefix="titan-starter-") as directory:
         project = Path(directory) / "my-game"
-        shutil.copytree(REPO / "starters/minimal", project,
-                        ignore=shutil.ignore_patterns("target", "pkg", "__pycache__"))
-        manifest = project / "Cargo.toml"
-        # The same path configuration documented in the starter README.
-        text = manifest.read_text()
-        text = re.sub(r'path = "(\.\./\.\.[^"]*)"',
-                      lambda m: 'path = ' + json.dumps(str((REPO / "starters/minimal" / m[1]).resolve())), text)
-        manifest.write_text(text)
+        processes.run(["python3", str(REPO / "scripts/create-game.py"), str(project)], check=True)
+        # Running setup twice must preserve a contributor's existing game files.
+        sentinel = project / "keep-my-work.txt"
+        sentinel.write_text("work in progress")
+        duplicate = processes.run(
+            ["python3", str(REPO / "scripts/create-game.py"), str(project)],
+            text=True, capture_output=True)
+        assert duplicate.returncode != 0
+        assert "destination already exists" in duplicate.stderr
+        assert sentinel.read_text() == "work in progress"
         assert "examples/support" not in "\n".join(p.read_text() for p in (project / "src").rglob("*.rs"))
         env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "starter-smoke"))
         for command in (["cargo", "fmt", "--all", "--check"],

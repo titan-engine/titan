@@ -1,18 +1,16 @@
-# Design requirements and answer coverage
+# Design requirements
 
-This is a current requirements reference for the opening design discussion in
-[the original planning task](codex://threads/01a06da7-8dcf-7b73-9bfc-a34d8caa2994).
-It accounts for every answer in its first two questionnaires: R1 has 71 questions
-and R2 has 70. The unnumbered “Agent workflow” answer supplies R2.12–21.
-It preserves the scope and certainty of the user's answers, rather than treating
-every question's premise or an assistant's proposed interpretation as agreement.
+This reference records Titan's product direction, requirements and unresolved
+choices. Stable R1 and R2 identifiers preserve links from issues and technical
+docs: R1 contains 71 entries and R2 contains 70. Their numbering comes from the
+initial design discussions; no access to those discussions is needed to use this
+reference. Requirements describe intent, not an implementation schedule.
 
 **Firm** means an intended requirement or direction, not a claim that it ships.
-**Preference** preserves qualifications such as “probably,” “maybe,” or a desired
-future capability. **Open** means the answer did not settle the choice.
-**Refined** identifies an answer clarified by another opening answer; both the
-original qualification and the clarification remain visible. **Instruction**
-records an explicit working constraint, not an engine feature.
+**Preference** means a tentative direction or desired future capability.
+**Open** means the choice remains unsettled. **Refined** identifies a direction
+clarified by another requirement; its qualifications remain visible.
+**Instruction** records a project working constraint, not an engine feature.
 
 The [vision](vision.md) explains the durable product direction. The
 [implementation plan](implementation-plan.md) selects current work, and
@@ -26,43 +24,44 @@ claim to implement general layout or typography. The subsequent [quest
 journal](journal.md) exercises explicit column placement, bounded bitmap text and
 scoped keyboard focus. The RPG and arena exercise
 [shared snapshot-backed interactive replay](replay.md) in native and browser
-players, alongside headless verification. Scrubbing and speed controls remain
-future work. The [file-backed sprite exercise](assets.md) verifies shared
+players, alongside headless verification. The arena also supports
+[bounded seeking and playback speed controls](arena-replay.md); those controls
+are not yet exposed by the RPG player. The [file-backed sprite exercise](assets.md) verifies shared
 procedural/decoded image consumption, loose-file delivery and bounded startup
 failures. It covers two independently replaceable sprite paths within R2.57–62; broader asset requirements
 remain pending. A dedicated [generated image fixture](generated-assets.md)
 exercises build-time/lazy generation and disk caching within R2.58–59.
 
-## Round one: product and initial scope
+## R1: product and initial scope
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
-| R1.01 | Firm | The motivation is quickly trying new game ideas without spending excessive time on them; this answer did not yet choose a demonstration game. |
+| R1.01 | Firm | Make trying new game ideas fast; this requirement does not prescribe a demonstration game. |
 | R1.02 | Refined | Titan combines engine, framework/library, runtime and agent-facing construction roles. Rust authoring comes first; R1.16 and R1.28–34 leave additional declarative forms for later. |
 | R1.03 | Firm | Start with human programmers using agents; eventually include agents directed by humans and non-programmers prompting agents. |
 | R1.04 | Preference | Agent-free development should be possible, but it is not the initial priority. |
 | R1.05 | Firm | Optimize for making good games, small or large, rather than limiting Titan to prototypes. |
-| R1.06 | Firm | Begin as a private experiment and open source later. This direction does not itself authorize publication. |
+| R1.06 | Firm | Develop Titan as an open-source project. It began as a private experiment; publication and release decisions remain maintainer responsibilities. |
 | R1.07 | Open | The balance between a distinct opinionated identity and general-purpose engine remains unspecified. |
 | R1.08 | Refined | Both 2D and 3D are intended; R2.03 selects 2D first rather than requiring simultaneous implementation. |
 | R1.09 | Firm | Aim to accommodate most genres instead of making the initial demonstration genre a permanent limit. |
 | R1.10 | Firm | Platform order is desktop, then mobile, then consoles. |
 | R1.11 | Firm | Browser support matters early because agents often interact with browsers more effectively than desktop applications. |
-| R1.12 | Firm | An agent should build from a user's prompt and test headlessly while the user can play the same game code. Separate executions are acceptable; simultaneous interaction is not the first prerequisite. |
+| R1.12 | Firm | An agent should build from a developer's prompt and test headlessly while a human can play the same game code. Separate executions are acceptable; simultaneous interaction is not the first prerequisite. |
 | R1.13 | Firm | Defer things not needed yet; build capabilities when they are needed. This sequences the vision rather than deleting future capabilities. |
 | R1.14 | Preference | Bevy is the principal positive engine-design reference. |
 
-## Round one: agent workflow and authoring
+## R1: agent workflow and authoring
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R1.15 | Firm | Accept natural requests ranging from precise to vague; agents should generally understand the human's intent rather than require a rigid prompt grammar. |
 | R1.16 | Firm | Agents initially write Rust. Other authoring formats may come later; Rust's broad model familiarity is a reason for starting there. |
 | R1.17 | Firm | Agents directly modify the game's actual source of truth. |
-| R1.18 | Refined | Universal stable textual identifiers were uncertain and potentially messy. R2.26–27 affirm optional names/paths for entities, not identifiers for every object and property. |
-| R1.19 | Refined | The machine-readable-description question was initially unclear. R2.34–40 clarify inspection metadata and protocol direction; a generated whole-game manifest remains open in R2.18. |
-| R1.20 | Firm | Provide a well-designed Titan CLI that can communicate with a server inside the actual game process; the question's example command names are illustrative. |
-| R1.21 | Firm | A CLI plus an agent skill is sufficient. An additional MCP service is not required by this answer. |
+| R1.18 | Refined | Universal stable textual identifiers remain undecided. R2.26–27 affirm optional names/paths for entities, not identifiers for every object and property. |
+| R1.19 | Refined | R2.34–40 define inspection metadata and protocol direction; a generated whole-game manifest remains open in R2.18. |
+| R1.20 | Firm | Provide a well-designed Titan CLI that can communicate with a server inside the actual game process; command names are not prescribed by this requirement. |
+| R1.21 | Firm | A CLI plus an agent skill is sufficient. An additional MCP service is not required. |
 | R1.22 | Firm | Runtime failures should include agent-oriented diagnostics and suggested repairs. |
 | R1.23 | Firm | Agents should query running-game information in structured form, including entities, component values, collisions, performance and logs. |
 | R1.24 | Firm | Agents should control the running game and capture screenshots automatically. |
@@ -77,17 +76,17 @@ exercises build-time/lazy generation and disk caching within R2.58–59.
 | R1.33 | Preference | Scenes start in code; file-based scenes are a later direction. |
 | R1.34 | Open | Authority depends on the authoring form a project uses; no universal code-versus-scene precedence was chosen. Avoid competing sources of truth. |
 | R1.35 | Open | Metadata/generated metadata files are acceptable. The broader policy for generated files, especially gameplay source, was not settled. |
-| R1.36 | Open | Everything should be expressible and documented; the answer did not choose strongly constrained APIs over flexibility. |
+| R1.36 | Open | Everything should be expressible and documented; the balance between API constraints and flexibility remains open. |
 | R1.37 | Open | The balance between simple explicit operations and compact abstractions remains undecided. |
-| R1.38 | Refined | The affirmative answer concerns game-defined custom components and ECS authoring. It does not separately commit to a data-driven component-definition language. |
+| R1.38 | Refined | Support game-defined custom components and ECS authoring. A data-driven component-definition language is not part of this requirement. |
 
-## Round one: architecture and content
+## R1: architecture and content
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R1.39 | Firm | Use an ECS architecture. |
 | R1.40 | Firm | Build a custom ECS. |
-| R1.41 | Refined | Initially “probably” both composable libraries and an easy-to-use high-level API; R2.42 affirms the layered approach. |
+| R1.41 | Refined | Composable libraries and an easy-to-use high-level API were initially a preference; R2.42 affirms the layered approach. |
 | R1.42 | Firm | Prefer building systems ourselves unless an external dependency is sufficiently universal that reimplementation is unreasonable; `serde` is the example. R2.61 also permits excellent format libraries. |
 | R1.43 | Firm | Start with `wgpu`; direct native Metal and Vulkan backends are intended later, not selected initial work. |
 | R1.44 | Firm | Make low-level rendering control possible while preferring high-level APIs for ordinary use. |
@@ -95,17 +94,17 @@ exercises build-time/lazy generation and disk caching within R2.58–59.
 | R1.46 | Firm | Headless execution is required from the beginning. |
 | R1.47 | Firm | Design save/load and serialization early despite having no backward-compatibility requirement. This does not decide that every reflected type must serialize. |
 | R1.48 | Preference | Subsystems should be replaceable at library boundaries; the higher-level framework may be more opinionated. Exact boundaries remain open. |
-| R1.49 | Open | The initial playable slice's specific subsystem list was not selected. The question's audio, physics, animation, UI and other examples were not all automatically approved for that slice. |
+| R1.49 | Open | The initial playable slice did not prescribe a complete subsystem list. Audio, physics, animation and broader UI capabilities require separately selected scope. |
 | R1.50 | Firm | Support asset-free prototyping through code-generated placeholder primitives, textures and simple sounds. |
 | R1.51 | Open | Reusable gameplay primitives such as health, movement, cameras, triggers, timers and state machines may belong in the high-level framework; their inclusion and scope remain undecided. |
 | R1.52 | Firm | UI should use the same entity/component model as the game world. The first text/button implementation is documented in the UI guide; broader UI capabilities remain future work. |
-| R1.53 | Firm | Multiplayer in competitive, cooperative and local forms is intended. The user is not especially fearful of long-term scope because agents accelerate development; this is not an instruction to build every form immediately. |
+| R1.53 | Firm | Multiplayer in competitive, cooperative and local forms is intended. This is a long-term ambition informed by faster agent-assisted development, not a schedule to build every form immediately. |
 | R1.54 | Firm | Procedural generation is important. |
 | R1.55 | Firm | Titan should not prescribe where assets originate; provide procedural-generation APIs and CSG with Boolean operations. |
 
-## Round one: verification and project policy
+## R1: verification and project policy
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R1.56 | Refined | Proof of correctness was initially unspecified; R2.49 chooses evidence appropriate to the feature. |
 | R1.57 | Preference | Projects should generally be runnable and testable entirely from the command line, subject to project needs; this was not an unconditional rule for every possible project. |
@@ -118,18 +117,18 @@ exercises build-time/lazy generation and disk caching within R2.58–59.
 | R1.64 | Open | The acceptable technical-debt tradeoff between speed and architectural quality was not decided. |
 | R1.65 | Firm | Games can pin engine versions. Current repository examples and tests should remain working when migrations change the current engine. |
 | R1.66 | Firm | Freely delete or redesign APIs when better approaches emerge; provide migration guides for especially impactful changes. |
-| R1.67 | Firm | Start with generic pieces, then build the user's games and add engine capabilities those games require; also address feature requests and bug reports. |
+| R1.67 | Firm | Start with generic pieces, then build concrete games and add engine capabilities those games require; also address feature requests and bug reports. |
 | R1.68 | Instruction | Explain why the current architecture works as it does, but do not maintain a separate chronological decision diary. Git already records history. |
 | R1.69 | Firm | Automated formatting, linting, tests and architectural checks matter from the beginning; CI is very important. Specific architectural checks were not selected. |
 | R1.70 | Firm | Wait for measurement before performance optimization, except for early choices that would be costly to reverse. |
 | R1.71 | Firm | Rethink the approach if iterating on a game with an AI agent does not feel natural. |
 
-## Round two: demonstration and execution modes
+## R2: demonstration and execution modes
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R2.01 | Preference | The suggested first demonstration is a small procedural 2D RPG; the original choice was tentative, not a permanent genre restriction. |
-| R2.02 | Firm | Two realistic example prompts were supplied: start a procedural 2D RPG with generated pixel art; make the generated pixel art prettier. Do not invent a third example as a user requirement. |
+| R2.02 | Firm | Two initial workflow examples are starting a procedural 2D RPG with generated pixel art and improving that art. These examples guide verification without defining additional requirements. |
 | R2.03 | Firm | Implement 2D first. |
 | R2.04 | Open | The minimum graphical feature set was not specified. |
 | R2.05 | Preference | The first milestone should probably use primitive/code-generated assets exclusively; this is not a permanent restriction on asset sources. |
@@ -140,13 +139,13 @@ exercises build-time/lazy generation and disk caching within R2.58–59.
 | R2.10 | Firm | Playable and headless modes may be separate runs of identical game code. |
 | R2.11 | Preference | A human playing while an agent observes and modifies the same live process is strongly desired. Do not confuse this with a requirement that every early test share a live process. |
 
-## Round two: agent workflow
+## R2: agent workflow
 
-These answers were supplied together in the unnumbered “Agent workflow” paragraph.
+These requirements describe the intended authoring and runtime inspection loop.
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
-| R2.12 | Firm | The proposed edit/check/play-or-test/start-inspection/input-or-step/query-and-capture/evaluate loop is the intended workflow. Example CLI command spellings are not fixed by this answer. |
+| R2.12 | Firm | The proposed edit/check/play-or-test/start-inspection/input-or-step/query-and-capture/evaluate loop is the intended workflow. Example CLI command spellings are not fixed requirements. |
 | R2.13 | Preference | Cargo stays supported; the Titan CLI may be preferred. |
 | R2.14 | Firm | Ordinary Cargo use, including running the game, must remain supported. |
 | R2.15 | Firm | The CLI supports both human-readable and machine-readable output. |
@@ -157,9 +156,9 @@ These answers were supplied together in the unnumbered “Agent workflow” para
 | R2.20 | Preference | Runtime mutation is desired for debugging; a separate explicitly enabled mode was suggested tentatively. Current mutation-policy behavior is documented separately in the inspection docs. |
 | R2.21 | Firm | Support game-defined commands, not only raw field edits. |
 
-## Round two: ECS and inspection
+## R2: ECS and inspection
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R2.22 | Firm | Components should be ordinary Rust structs with a component derive. |
 | R2.23 | Preference | Begin with Bevy-like typed system parameters; remain open to exploring other authoring styles later. |
@@ -170,20 +169,20 @@ These answers were supplied together in the unnumbered “Agent workflow” para
 | R2.28 | Firm | Eventually run systems in parallel automatically when their data access permits. This is a design requirement, not a claim about the current executor. |
 | R2.29 | Firm | Make the choice between determinism and maximum parallelism configurable. |
 | R2.30 | Firm | Familiar explicit default stages belong only in the higher-level framework and must be customizable. Do not impose those stages on low-level ECS consumers. |
-| R2.31 | Firm | Support both modest worlds and very large games, including the question's millions-of-lightweight-entities scale. This is an ambition, not an established capacity benchmark. |
+| R2.31 | Firm | Support both modest worlds and very large games, including millions of lightweight entities. This is an ambition, not an established capacity benchmark. |
 | R2.32 | Preference | Prefer buffered structural changes; explicit synchronization points should be possible with their performance cost understood. |
 | R2.33 | Preference | Eventual rollback snapshots are strongly desired for multiplayer and deterministic debugging. |
 | R2.34 | Firm | Reflection metadata is acceptable for tool-exposed types; internal types may remain opaque. |
 | R2.35 | Firm | Allow descriptions, ranges, units and editor hints without requiring every enrichment. |
 | R2.36 | Firm | Keep documentation on Rust types and fields so it can feed Rust docs, agent context and a future editor. |
-| R2.37 | Open | The user requested clarification about explaining rejected writes. Structured reasons were subsequently an assistant proposal, not an explicit original answer. The [inspection documentation](inspection.md) describes current implemented validation; it does not turn this original clarification request into an affirmative answer. |
+| R2.37 | Open | The broader requirement for explaining rejected writes was left unresolved. The [inspection documentation](inspection.md) describes implemented structured validation errors; that implementation does not settle the broader design requirement. |
 | R2.38 | Preference | A structured in-code request model should underlie other query forms. JSON, CLI flags and possibly a query language were considered; a separate query language was not firmly selected. |
-| R2.39 | Firm | A localhost JSON protocol over HTTP/WebSocket is an acceptable initial direction; this answer does not require both transports. |
+| R2.39 | Firm | A localhost JSON protocol over HTTP/WebSocket is an acceptable initial direction; both transports are not required. |
 | R2.40 | Firm | The inspection protocol should be public and documented for third-party tools. |
 
-## Round two: API structure and verification
+## R2: API structure and verification
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R2.41 | Firm | A Bevy-like `App` builder with plugins and schedule/system registration is an acceptable minimal game API. The exact illustrative snippet is not an immutable API contract. |
 | R2.42 | Firm | Provide the high-level `App` API while exposing lower-level crates independently. |
@@ -202,9 +201,9 @@ These answers were supplied together in the unnumbered “Agent workflow” para
 | R2.55 | Firm | Support both simulation-frame budgets and wall-clock timeouts for hanging tests. |
 | R2.56 | Open | Whether tests should assert performance budgets remains undecided. |
 
-## Round two: assets and project policy
+## R2: assets and project policy
 
-| Answer | Standing | Requirement, preference, or unresolved choice |
+| ID | Standing | Requirement, preference, or unresolved choice |
 | --- | --- | --- |
 | R2.57 | Firm | Code-generated meshes, textures, materials, sounds and animations should be first-class assets using the same interface as file-backed assets. |
 | R2.58 | Firm | Support procedural generation at compile/build time, startup and lazily at runtime. |
@@ -212,11 +211,11 @@ These answers were supplied together in the unnumbered “Agent workflow” para
 | R2.60 | Firm | CSG is intended both for runtime gameplay and asset construction. |
 | R2.61 | Firm | Import common formats through external libraries only when they are very well maintained and high quality; otherwise implement the needed support ourselves. |
 | R2.62 | Firm | An engine-native asset format is intended eventually; its design is not yet selected. |
-| R2.63 | Firm | Titan is intended for MIT and Apache-2.0 licensing; dependencies must be compatible. |
-| R2.64 | Firm | Initially optimize for the user's development machine while preserving a portable architecture. |
-| R2.65 | Firm | The stated development target is macOS on an M5 Pro MacBook Pro. This does not invent a minimum supported machine or a numerical performance target. |
+| R2.63 | Firm | Titan is dual-licensed under MIT and Apache-2.0; dependencies must be compatible. |
+| R2.64 | Firm | Early optimization may focus on the primary development platform while preserving a portable architecture. |
+| R2.65 | Firm | The initial reference development platform is macOS on Apple Silicon (M5 Pro). This is a reference environment, not a minimum supported machine or numerical performance target. |
 | R2.66 | Firm | Use GitHub Actions, with CI from the beginning. |
 | R2.67 | Firm | Changes must pass formatting, Clippy with warnings denied, unit tests and headless integration tests. |
 | R2.68 | Firm | Make releases frequent so games can pin versions; no precise cadence or automatic publication permission follows. |
 | R2.69 | Firm | Treat examples as tested products that compile against the current engine. |
-| R2.70 | Instruction | Document the agreed design before choosing where substantial initial implementation should begin. This opening instruction is not a requirement to repeat the questionnaire before routine work. |
+| R2.70 | Instruction | Document the agreed design before selecting substantial implementation work. Routine changes do not require repeating the initial design process. |

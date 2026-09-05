@@ -2,7 +2,8 @@
 
 Pending execution work lives in [Titan Development](https://github.com/orgs/titan-engine/projects/1)
 and linked [GitHub issues](https://github.com/titan-engine/titan/issues).
-Use [the contributor workflow](workflow.md) for approval, ownership, dependencies,
+Start with [the contribution guide](../CONTRIBUTING.md) for outside contributions.
+Use [the maintainer and agent workflow](workflow.md) for approval, ownership, dependencies,
 PRs, stacks, reviews and autonomous integration. Proposed ideas are not approved
 implementation. Do not duplicate the backlog here.
 
