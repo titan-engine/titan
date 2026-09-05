@@ -187,8 +187,10 @@ open and does not change the entity-based UI commitment.
 
 ### Reflection
 
-Derive macros should produce reflection metadata needed by inspection and
-tooling. Types that do not participate may remain opaque. Basic field metadata
+Derive-generated reflection metadata is the preferred approach for inspection
+and tooling, subject to further design. The current Component derive does not
+yet generate complete field reflection. Types that do not participate may remain
+opaque. Basic field metadata
 can be automatic; descriptions, valid ranges, units, editability, and editor
 hints are optional enrichments.
 
