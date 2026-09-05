@@ -24,6 +24,9 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt,clippy
           rustup default stable
 
+      - name: Check portable build tooling policy
+        run: python3 scripts/test-build-tools.py
+
       - name: Check formatting
         run: cargo fmt --all --check
 

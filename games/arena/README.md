@@ -104,3 +104,12 @@ This is an unsigned local-development bundle, with no signing, notarization,
 installation or security-setting changes. Bundling requires macOS; the game
 itself still supports native Linux. The script follows Apple's
 [macOS bundle layout](https://developer.apple.com/documentation/bundleresources/placing-content-in-a-bundle).
+
+The build entrypoints delegate to public `scripts/titan_build.py` in the resolved
+`titan` dependency. The small `scripts/titan_tools.py` loader uses Cargo metadata,
+so copied games need only their normal Titan dependency paths configured; no
+RPG files or checkout-relative script paths are required. Keep application names,
+bundle IDs and browser binding names in the game entrypoints. The helper supports
+path and Git dependencies containing the tooling file; older Titan revisions
+without that file require their original scripts. See `docs/host-tooling.md` in
+the Titan checkout for the helper API and verification commands.
