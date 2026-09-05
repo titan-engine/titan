@@ -25,7 +25,7 @@ mod native {
         },
     };
     use titan_collection_room::{game, player::PlayerSession};
-    use titan_protocol::RunMode;
+    use titan_protocol::{Request, RequestEnvelope, ResponseOutcome, RunMode};
     use titan_remote::{RequestQueue, Server, ServerConfig};
     use titan_render_wgpu::{SurfaceRenderer3d, wgpu};
     use winit::{
@@ -64,6 +64,25 @@ mod native {
                 self.pending = false;
                 session.resume();
             }
+        }
+        fn dispatch(&mut self, session: &mut PlayerSession, request: &RequestEnvelope) -> Dispatch {
+            let epoch = session.clock_epoch();
+            let result = session.dispatch(request);
+            let write = matches!(
+                request.request,
+                Request::Invoke { .. }
+                    | Request::Step { .. }
+                    | Request::InjectInput { .. }
+                    | Request::SetField { .. }
+            );
+            let accepted = matches!(&result, Dispatch::Ready(response)
+                if matches!(response.outcome, ResponseOutcome::Success { .. }));
+            // Accepted controls express deliberate intent even when they leave
+            // the clock unchanged (e.g. a paused step or queued input).
+            if (write && accepted) || epoch != session.clock_epoch() {
+                self.cancel();
+            }
+            result
         }
         fn cancel(&mut self) {
             self.pending = false;
@@ -398,11 +417,7 @@ mod native {
             if let Some(queue) = &self.queue {
                 queue.drain_with_reply(|request, reply| {
                     let started = Instant::now();
-                    let epoch = self.session.clock_epoch();
-                    let dispatch = self.session.dispatch(request);
-                    if epoch != self.session.clock_epoch() {
-                        self.startup.cancel();
-                    }
+                    let dispatch = self.startup.dispatch(&mut self.session, request);
                     if let Some((device, queue)) = &self.capture_device {
                         self.captures.start(device.clone(), queue.clone());
                     }
@@ -603,6 +618,29 @@ mod native {
                 startup.focus(true, &mut session);
                 startup.ready(&mut session);
                 assert!(session.paused());
+            }
+        }
+        #[test]
+        fn accepted_inspector_step_cancels_startup_but_reads_and_rejections_do_not() {
+            for request in [
+                Request::Step { frames: 1 },
+                Request::Status,
+                Request::Step { frames: u64::MAX },
+            ] {
+                let mut session = session();
+                let mut startup = StartupFocus::new(true);
+                let deliberate = matches!(request, Request::Step { frames: 1 });
+                let epoch = session.clock_epoch();
+                let result = startup
+                    .dispatch(&mut session, &RequestEnvelope::new("startup", request))
+                    .into_ready();
+                assert_eq!(epoch, session.clock_epoch());
+                if deliberate {
+                    assert!(matches!(result.outcome, ResponseOutcome::Success { .. }));
+                }
+                startup.focus(true, &mut session);
+                startup.ready(&mut session);
+                assert_eq!(session.paused(), deliberate);
             }
         }
         #[test]
