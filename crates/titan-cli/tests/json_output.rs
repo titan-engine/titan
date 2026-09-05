@@ -1,10 +1,30 @@
 use std::process::Command;
 
+use titan::render::{Image, ImageDecodeLimits};
+
 fn run(arguments: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_titan"))
         .args(arguments)
         .output()
         .unwrap()
+}
+
+fn temporary_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "titan-cli-{name}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ))
+}
+
+fn write_png(path: &std::path::Path, width: u32, height: u32, pixels: Vec<u8>) {
+    let image = Image::new(width, height, pixels).unwrap();
+    let mut bytes = Vec::new();
+    titan_diagnostics::write_png(&image, &mut bytes).unwrap();
+    std::fs::write(path, bytes).unwrap();
 }
 
 #[test]
@@ -132,4 +152,161 @@ fn cargo_failure_bundle_contains_bounded_logs_and_cause() {
     );
     assert!(bundle["timings_us"]["process"].is_u64());
     std::fs::remove_dir_all(project).unwrap();
+}
+
+#[test]
+fn image_comparison_reports_exact_pass_and_mismatch_with_artifacts() {
+    let root = temporary_path("image-comparison");
+    std::fs::create_dir_all(&root).unwrap();
+    let expected = root.join("expected.png");
+    let actual = root.join("actual.png");
+    let reports = root.join("reports");
+    write_png(&expected, 2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]);
+    write_png(&actual, 2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]);
+
+    let arguments = [
+        "--format",
+        "json",
+        "--diagnostics",
+        "never",
+        "compare-images",
+        expected.to_str().unwrap(),
+        actual.to_str().unwrap(),
+        "--output",
+        reports.to_str().unwrap(),
+        "--exact",
+    ];
+    let output = run(&arguments);
+    assert!(output.status.success());
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["command"], "compare_images");
+    assert_eq!(result["success"], true);
+    assert_eq!(result["data"]["type"], "image_comparison");
+    assert_eq!(result["data"]["comparison"]["exact"], true);
+    assert_eq!(result["data"]["comparison"]["passes"], true);
+    assert_eq!(result["data"]["comparison"]["differing_pixels"], 0);
+
+    write_png(&actual, 2, 1, vec![10, 20, 30, 255, 41, 50, 60, 255]);
+    let output = run(&arguments);
+    assert_eq!(output.status.code(), Some(2));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["success"], false);
+    assert_eq!(result["exit_code"], 2);
+    assert_eq!(result["error_code"], "visual_mismatch");
+    assert_eq!(result["data"]["comparison"]["passes"], false);
+    assert_eq!(result["data"]["comparison"]["differing_pixels"], 1);
+    let manifest = result["data"]["artifacts"]["manifest"].as_str().unwrap();
+    let report: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+    assert_eq!(report["comparison"], result["data"]["comparison"]);
+    for artifact in ["expected", "actual", "difference"] {
+        let path = result["data"]["artifacts"][artifact].as_str().unwrap();
+        let bytes = std::fs::read(path).unwrap();
+        Image::from_png(&bytes, ImageDecodeLimits::default()).unwrap();
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn image_comparison_applies_explicit_tolerances() {
+    let root = temporary_path("image-tolerance");
+    std::fs::create_dir_all(&root).unwrap();
+    let expected = root.join("expected.png");
+    let actual = root.join("actual.png");
+    let reports = root.join("reports");
+    write_png(&expected, 1, 1, vec![100, 100, 100, 255]);
+    write_png(&actual, 1, 1, vec![102, 100, 100, 255]);
+
+    let invoke = |maximum_channel_error: &str| {
+        run(&[
+            "--format",
+            "json",
+            "--diagnostics",
+            "never",
+            "compare-images",
+            expected.to_str().unwrap(),
+            actual.to_str().unwrap(),
+            "--output",
+            reports.to_str().unwrap(),
+            "--maximum-channel-error",
+            maximum_channel_error,
+            "--minimum-ssim",
+            "-1",
+            "--maximum-linear-rmse",
+            "1",
+        ])
+    };
+    let passing = invoke("2");
+    assert!(passing.status.success());
+    let result: serde_json::Value = serde_json::from_slice(&passing.stdout).unwrap();
+    assert_eq!(result["data"]["comparison"]["exact"], false);
+    assert_eq!(result["data"]["comparison"]["passes"], true);
+    assert_eq!(result["data"]["options"]["maximum_channel_error"], 2);
+
+    let failing = invoke("1");
+    assert_eq!(failing.status.code(), Some(2));
+    let result: serde_json::Value = serde_json::from_slice(&failing.stdout).unwrap();
+    assert_eq!(result["error_code"], "visual_mismatch");
+    assert_eq!(result["data"]["comparison"]["passes"], false);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn image_comparison_rejects_invalid_bounded_inputs_and_write_failures() {
+    let root = temporary_path("image-errors");
+    std::fs::create_dir_all(&root).unwrap();
+    let valid = root.join("valid.png");
+    let malformed = root.join("malformed.png");
+    let oversized = root.join("oversized.png");
+    let unequal = root.join("unequal.png");
+    let blocked_output = root.join("blocked-output");
+    write_png(&valid, 1, 1, vec![0, 0, 0, 255]);
+    write_png(&unequal, 2, 1, vec![0; 8]);
+    std::fs::write(&malformed, b"not a PNG").unwrap();
+    std::fs::File::create(&oversized)
+        .unwrap()
+        .set_len(8 * 1024 * 1024 + 1)
+        .unwrap();
+    std::fs::write(&blocked_output, b"not a directory").unwrap();
+
+    let invoke = |left: &std::path::Path,
+                  right: &std::path::Path,
+                  output: &std::path::Path,
+                  extra: &[&str]| {
+        let mut arguments = vec![
+            "--format",
+            "json",
+            "--diagnostics",
+            "never",
+            "compare-images",
+            left.to_str().unwrap(),
+            right.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ];
+        arguments.extend_from_slice(extra);
+        run(&arguments)
+    };
+    for (left, right, extra) in [
+        (malformed.as_path(), valid.as_path(), Vec::<&str>::new()),
+        (oversized.as_path(), valid.as_path(), Vec::<&str>::new()),
+        (valid.as_path(), unequal.as_path(), Vec::<&str>::new()),
+        (
+            valid.as_path(),
+            valid.as_path(),
+            vec!["--minimum-ssim", "nan"],
+        ),
+    ] {
+        let output = invoke(left, right, &root.join("reports"), &extra);
+        assert_eq!(output.status.code(), Some(1));
+        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(result["error_code"], "invalid_value");
+        assert!(result["data"].is_null());
+    }
+
+    let output = invoke(&valid, &valid, &blocked_output, &[]);
+    assert_eq!(output.status.code(), Some(1));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["error_code"], "artifact_write_failed");
+    std::fs::remove_dir_all(root).unwrap();
 }

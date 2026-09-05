@@ -7,6 +7,11 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
+use titan::render::{Image, ImageDecodeLimits};
+use titan_diagnostics::{
+    ComparisonOptions, ComparisonReportError, ImageComparison, compare_images,
+    write_comparison_report,
+};
 use titan_protocol::{
     EntityId, EntityQuery, InputValue, PageRequest, Request, RequestEnvelope, ResponseOutcome,
     SCHEMA_VERSION,
@@ -124,6 +129,33 @@ enum CliCommand {
     RunExample {
         name: String,
     },
+    /// Compares two existing PNGs and writes a self-contained visual diff report.
+    CompareImages {
+        expected: PathBuf,
+        actual: PathBuf,
+        /// Directory below which a unique comparison report is created.
+        #[arg(long)]
+        output: PathBuf,
+        /// Requires byte-for-byte RGBA equality.
+        #[arg(
+            long,
+            conflicts_with_all = [
+                "maximum_channel_error",
+                "minimum_ssim",
+                "maximum_linear_rmse"
+            ]
+        )]
+        exact: bool,
+        /// Optional maximum error for every RGBA byte (0-255).
+        #[arg(long)]
+        maximum_channel_error: Option<u8>,
+        /// Minimum block SSIM score (-1 to 1; default 0.99).
+        #[arg(long, allow_hyphen_values = true)]
+        minimum_ssim: Option<f64>,
+        /// Maximum linear-RGB RMSE (0 to 1; default 0.01).
+        #[arg(long)]
+        maximum_linear_rmse: Option<f64>,
+    },
 }
 
 #[derive(Serialize)]
@@ -158,6 +190,24 @@ enum CommandData {
         program: String,
         arguments: Vec<String>,
     },
+    ImageComparison {
+        expected: PathBuf,
+        actual: PathBuf,
+        width: u32,
+        height: u32,
+        options: ComparisonOptions,
+        comparison: ImageComparison,
+        artifacts: ComparisonArtifacts,
+    },
+}
+
+#[derive(Serialize)]
+struct ComparisonArtifacts {
+    directory: PathBuf,
+    manifest: PathBuf,
+    expected: PathBuf,
+    actual: PathBuf,
+    difference: PathBuf,
 }
 
 fn main() -> ExitCode {
@@ -183,7 +233,11 @@ fn main() -> ExitCode {
     };
     if matches!(
         cli.command,
-        CliCommand::Info | CliCommand::Check | CliCommand::Test | CliCommand::RunExample { .. }
+        CliCommand::Info
+            | CliCommand::Check
+            | CliCommand::Test
+            | CliCommand::RunExample { .. }
+            | CliCommand::CompareImages { .. }
     ) {
         let mut result = execute(
             &cli.command,
@@ -195,11 +249,7 @@ fn main() -> ExitCode {
         result.diagnostic_bundle = summary["diagnostic_bundle"].as_str().map(str::to_owned);
         result.diagnostic_error = summary["diagnostic_error"].as_str().map(str::to_owned);
         render(cli.format, &result);
-        return if result.success {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        };
+        return command_exit_code(&result);
     }
     let (mut result, success) = match execute_remote(&cli) {
         Ok(result) => result,
@@ -215,6 +265,16 @@ fn main() -> ExitCode {
     }
     if success {
         ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn command_exit_code(result: &CommandResult) -> ExitCode {
+    if result.success {
+        ExitCode::SUCCESS
+    } else if result.error_code == Some("visual_mismatch") {
+        ExitCode::from(2)
     } else {
         ExitCode::FAILURE
     }
@@ -478,8 +538,140 @@ fn execute(command: &CliCommand, project: &Path, timeout: Duration) -> CommandRe
             &["run", "--example", name.as_str()],
             timeout,
         ),
+        CliCommand::CompareImages {
+            expected,
+            actual,
+            output,
+            exact,
+            maximum_channel_error,
+            minimum_ssim,
+            maximum_linear_rmse,
+        } => compare_image_files(
+            expected,
+            actual,
+            output,
+            *exact,
+            *maximum_channel_error,
+            *minimum_ssim,
+            *maximum_linear_rmse,
+        ),
         _ => unreachable!("remote commands handled separately"),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compare_image_files(
+    expected_path: &Path,
+    actual_path: &Path,
+    output: &Path,
+    exact: bool,
+    maximum_channel_error: Option<u8>,
+    minimum_ssim: Option<f64>,
+    maximum_linear_rmse: Option<f64>,
+) -> CommandResult {
+    let started = std::time::Instant::now();
+    let options = if exact {
+        ComparisonOptions::exact()
+    } else {
+        let defaults = ComparisonOptions::default();
+        ComparisonOptions {
+            maximum_channel_error,
+            minimum_ssim: minimum_ssim.unwrap_or(defaults.minimum_ssim),
+            maximum_linear_rmse: maximum_linear_rmse.unwrap_or(defaults.maximum_linear_rmse),
+        }
+    };
+    let failure = |code, message: String| CommandResult {
+        command: "compare_images",
+        success: false,
+        exit_code: Some(1),
+        stdout: String::new(),
+        stderr: format!("{message}\n"),
+        data: None,
+        diagnostic_bundle: None,
+        diagnostic_error: None,
+        error_code: Some(code),
+        elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+    };
+    let expected = match read_png(expected_path) {
+        Ok(image) => image,
+        Err(error) => return failure("invalid_value", error),
+    };
+    let actual = match read_png(actual_path) {
+        Ok(image) => image,
+        Err(error) => return failure("invalid_value", error),
+    };
+    let comparison = match compare_images(&expected, &actual, options) {
+        Ok(comparison) => comparison,
+        Err(error) => return failure("invalid_value", error.to_string()),
+    };
+    let written = match write_comparison_report(output, &expected, &actual, options) {
+        Ok(written) => written,
+        Err(ComparisonReportError::Comparison(error)) => {
+            return failure("invalid_value", error.to_string());
+        }
+        Err(error) => return failure("artifact_write_failed", error.to_string()),
+    };
+    let success = comparison.passes;
+    CommandResult {
+        command: "compare_images",
+        success,
+        exit_code: Some(if success { 0 } else { 2 }),
+        stdout: String::new(),
+        stderr: String::new(),
+        data: Some(CommandData::ImageComparison {
+            expected: expected_path.to_path_buf(),
+            actual: actual_path.to_path_buf(),
+            width: expected.width(),
+            height: expected.height(),
+            options,
+            comparison,
+            artifacts: ComparisonArtifacts {
+                directory: written.directory,
+                manifest: written.manifest,
+                expected: written.expected,
+                actual: written.actual,
+                difference: written.difference,
+            },
+        }),
+        diagnostic_bundle: None,
+        diagnostic_error: None,
+        error_code: (!success).then_some("visual_mismatch"),
+        elapsed_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+    }
+}
+
+fn read_png(path: &Path) -> Result<Image, String> {
+    let limits = ImageDecodeLimits::default();
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let input = options
+        .open(path)
+        .map_err(|error| format!("cannot open PNG `{}`: {error}", path.display()))?;
+    let metadata = input
+        .metadata()
+        .map_err(|error| format!("cannot inspect PNG `{}`: {error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("PNG `{}` must be a regular file", path.display()));
+    }
+    if metadata.len() > limits.max_encoded_bytes as u64 {
+        return Err(format!(
+            "PNG `{}` exceeds the {} byte encoded input limit",
+            path.display(),
+            limits.max_encoded_bytes
+        ));
+    }
+    let mut bytes = Vec::new();
+    input
+        .take(limits.max_encoded_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read PNG `{}`: {error}", path.display()))?;
+    Image::from_png(&bytes, limits)
+        .map_err(|error| format!("cannot decode PNG `{}`: {error}", path.display()))
 }
 
 fn run_cargo(
@@ -629,6 +821,44 @@ fn render_human(result: &CommandResult) {
     {
         println!("Titan CLI {cli_version}");
         println!("Inspection protocol schema {protocol_schema}");
+        return;
+    }
+
+    if let Some(CommandData::ImageComparison {
+        width,
+        height,
+        options,
+        comparison,
+        artifacts,
+        ..
+    }) = &result.data
+    {
+        println!(
+            "Image comparison: {}",
+            if comparison.passes {
+                "PASS"
+            } else {
+                "MISMATCH"
+            }
+        );
+        println!("Dimensions: {width}x{height}");
+        println!(
+            "Exact: {}; differing pixels: {}; maximum channel error: {}",
+            comparison.exact, comparison.differing_pixels, comparison.maximum_channel_error
+        );
+        println!(
+            "Mean absolute channel error: {:.6}; linear RMSE: {:.6} (maximum {:.6}); SSIM: {:.6} (minimum {:.6})",
+            comparison.mean_absolute_channel_error,
+            comparison.linear_rmse,
+            options.maximum_linear_rmse,
+            comparison.ssim,
+            options.minimum_ssim
+        );
+        if let Some(maximum) = options.maximum_channel_error {
+            println!("Maximum channel error threshold: {maximum}");
+        }
+        println!("Report: {}", artifacts.manifest.display());
+        println!("Difference image: {}", artifacts.difference.display());
         return;
     }
 

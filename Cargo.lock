@@ -2010,6 +2010,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "titan",
  "titan-diagnostics",
  "titan-protocol",
  "titan-remote",

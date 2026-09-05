@@ -11,6 +11,7 @@ cargo run -p titan-cli -- info
 cargo run -p titan-cli -- check
 cargo run -p titan-cli -- test
 cargo run -p titan-cli -- run-example procedural_rpg
+cargo run -p titan-cli -- compare-images expected.png actual.png --output target/visual-diffs --exact
 ```
 
 Every command accepts `--format human` (the default) or `--format json`:
@@ -22,6 +23,60 @@ cargo run -p titan-cli -- --format json check
 In JSON mode, stdout contains exactly one JSON result. Cargo output is captured
 inside that result so agents do not need to combine several output streams.
 Invocation or CLI failures use a nonzero process exit code.
+
+## Offline image comparison
+
+`compare-images` compares two existing PNG files without starting or attaching to
+a game. Exact mode requires identical decoded RGBA bytes:
+
+```sh
+target/debug/titan compare-images expected.png actual.png \
+  --output target/visual-diffs --exact
+```
+
+Without `--exact`, the existing perceptual defaults apply: block SSIM must be at
+least `0.99`, linear-RGB RMSE must be at most `0.01`, and no maximum individual
+RGBA-byte error is imposed. Override any tolerance explicitly as needed:
+
+```sh
+target/debug/titan compare-images expected.png actual.png \
+  --output target/visual-diffs \
+  --minimum-ssim 0.995 \
+  --maximum-linear-rmse 0.005 \
+  --maximum-channel-error 4
+```
+
+`--exact` conflicts with tolerance flags so an invocation cannot imply two
+comparison policies. The inputs are decoded with Titan's normal bounded PNG
+limits: each must be a regular file of at most 8 MiB, dimensions are limited to
+4096×4096, decoded RGBA data to 64 MiB, and decoder allocation accounting to
+160 MiB. Malformed, animated, truncated, unsupported, oversized, and unequal-size
+inputs are rejected before a report is written.
+
+The output argument names a report root, not a file to overwrite. Each completed
+comparison creates a unique owner-only directory below it containing lossless
+`expected.png` and `actual.png` copies, `difference.png`, and `report.json`.
+Artifacts and their decoded inputs are bounded to 64 MiB apiece. A failed write
+cleans up only its newly created directory and never replaces an existing report.
+The [diagnostics crate guide](../crates/titan-diagnostics/README.md#offline-comparison-reports)
+documents the difference-image channels and metric definitions.
+
+Human output identifies `PASS` or `MISMATCH`, summarizes every metric and prints
+the manifest and difference-image paths. JSON mode emits the normal local
+`CommandResult` with `command: "compare_images"` and `data.type:
+"image_comparison"`. `data` contains the dimensions, selected options, unchanged
+comparison metrics, input paths, and absolute paths for the report directory,
+manifest, source copies, and difference image. Completed mismatches retain this
+data and the report while setting `success: false`, `exit_code: 2`, and
+`error_code: "visual_mismatch"`.
+
+The process exits with status 0 when thresholds pass, 2 when comparison completes
+but thresholds do not pass, and 1 for invalid input or execution failure. Invalid
+files, dimensions, or thresholds use `error_code: "invalid_value"`; report-write
+failures use `error_code: "artifact_write_failed"`. Those failures have no
+comparison `data`. Under the default diagnostic policy a mismatch or failure also
+writes the usual CLI diagnostic bundle beneath `--project`; use `--diagnostics
+never` when only the comparison report is desired.
 
 ## Native headless control
 
