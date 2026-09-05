@@ -78,14 +78,14 @@ toolchain; do not turn local results into a CI timing threshold. In particular:
 
 ## Recorded evidence
 
-Measured 2026-09-05 at 15:46 UTC on macOS 27 arm64, an 18-logical-CPU Apple M5
+Measured 2026-09-05 at 15:54 UTC on macOS 27 arm64, an 18-logical-CPU Apple M5
 Pro, with rustc 1.98.1 and the release profile. The machine was connected to AC
 power. Normal interactive desktop, UI, and media-analysis work remained active;
-load averages moved from 6.93/7.09/6.28 to 6.93/7.08/6.30, so the ranges below
+load averages moved from 5.30/5.78/5.92 to 6.05/5.91/5.96, so the ranges below
 matter and the results are not an isolated-machine benchmark.
 
 The [raw report](evidence/executor-mixed.json) records clean revision
-`1be3b69e0a1b8b5d2033b5a2dd26de675e3a64fc`, five fresh child processes per
+`d16a700f0801661c20eeedf3ab94294217f3a179`, five fresh child processes per
 count/policy and two fresh worlds per scenario in each child. Every expected-state
 check passed, repeat checksums agreed, and checksums matched across policies.
 Cells are the median and full range of ten simulation samples, in milliseconds
@@ -94,31 +94,31 @@ sample order, load, and exact batch shapes remain in the raw report.
 
 | Scenario | Entities | Sequential | Limit 2 | Limit 4 | Limit 8 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Small compatible | 0 | 0.011 (0.010–0.012) | 7.034 (6.081–9.259) | 5.492 (4.526–6.464) | 5.191 (4.614–5.830) |
-| Small compatible | 64 | 0.079 (0.073–0.085) | 6.380 (6.109–6.559) | 5.267 (4.627–5.975) | 5.232 (4.783–5.630) |
-| Small compatible | 1,000 | 0.724 (0.676–0.746) | 6.862 (6.207–7.044) | 5.517 (5.128–5.909) | 5.167 (4.800–5.567) |
-| Small compatible | 10,000 | 9.221 (6.464–10.159) | 13.710 (12.914–14.784) | 8.596 (7.540–9.060) | 8.670 (8.492–9.732) |
-| Uneven compatible | 0 | 0.028 (0.025–0.033) | 6.885 (5.950–8.974) | 5.334 (4.592–9.376) | 4.904 (4.599–5.983) |
-| Uneven compatible | 64 | 1.546 (1.528–1.577) | 7.253 (6.960–7.777) | 5.729 (4.974–6.561) | 5.420 (5.143–6.079) |
-| Uneven compatible | 1,000 | 23.397 (23.299–23.652) | 28.010 (27.771–28.736) | 20.449 (19.767–20.819) | 20.139 (19.872–21.135) |
-| Uneven compatible | 10,000 | 234.274 (232.521–236.246) | 223.539 (221.315–229.710) | 160.967 (159.899–176.677) | 160.402 (160.070–161.115) |
-| Conflicts | 0 | 0.014 (0.013–0.016) | 3.687 (3.002–3.964) | 3.465 (3.062–4.994) | 3.114 (2.946–3.600) |
-| Conflicts | 64 | 0.087 (0.083–0.094) | 3.155 (3.077–3.689) | 3.285 (3.083–4.472) | 3.296 (3.075–3.505) |
-| Conflicts | 1,000 | 0.816 (0.752–0.863) | 3.885 (3.681–4.196) | 3.895 (3.716–4.157) | 3.881 (3.790–4.592) |
-| Conflicts | 10,000 | 10.419 (9.629–10.709) | 12.507 (12.398–12.745) | 12.688 (11.894–13.139) | 12.372 (11.778–12.891) |
-| Commands barriers | 0 | 0.045 (0.039–0.062) | 3.581 (2.977–4.050) | 3.111 (2.940–4.468) | 3.077 (2.987–4.194) |
-| Commands barriers | 64 | 0.079 (0.073–0.083) | 3.083 (3.023–3.503) | 3.221 (3.025–4.236) | 3.229 (3.064–3.388) |
-| Commands barriers | 1,000 | 0.411 (0.383–0.441) | 3.762 (3.595–4.005) | 3.755 (3.533–4.363) | 3.766 (3.676–4.313) |
-| Commands barriers | 10,000 | 4.817 (4.141–4.891) | 9.011 (8.383–9.272) | 8.828 (8.330–9.548) | 8.902 (8.457–9.247) |
+| Small compatible | 0 | 0.011 (0.009–0.018) | 6.928 (6.118–11.404) | 5.468 (5.027–6.347) | 5.120 (4.937–6.066) |
+| Small compatible | 64 | 0.074 (0.068–0.085) | 6.844 (6.406–8.893) | 5.350 (4.898–5.713) | 5.594 (4.742–6.072) |
+| Small compatible | 1,000 | 0.690 (0.643–0.759) | 7.344 (6.930–8.893) | 5.466 (5.245–6.066) | 5.918 (5.189–6.474) |
+| Small compatible | 10,000 | 8.958 (7.744–10.127) | 15.085 (13.238–16.818) | 9.026 (8.059–10.246) | 9.026 (8.694–9.528) |
+| Uneven compatible | 0 | 0.027 (0.024–0.047) | 6.717 (6.354–9.486) | 5.489 (4.899–6.054) | 5.270 (5.038–5.906) |
+| Uneven compatible | 64 | 1.529 (1.461–1.649) | 8.018 (7.639–9.777) | 5.696 (5.434–6.605) | 6.157 (5.533–6.433) |
+| Uneven compatible | 1,000 | 22.672 (22.307–23.323) | 29.987 (29.084–30.481) | 20.551 (20.294–21.368) | 20.821 (20.370–21.472) |
+| Uneven compatible | 10,000 | 225.837 (221.947–242.979) | 218.765 (216.451–260.575) | 159.492 (154.161–182.604) | 156.151 (154.763–162.583) |
+| Conflicts | 0 | 0.013 (0.012–0.022) | 3.442 (3.219–4.539) | 3.304 (3.163–4.078) | 3.285 (2.913–3.890) |
+| Conflicts | 64 | 0.086 (0.081–0.100) | 3.512 (3.323–4.503) | 3.464 (3.183–3.539) | 3.552 (3.448–4.195) |
+| Conflicts | 1,000 | 0.783 (0.730–0.815) | 4.298 (4.038–5.010) | 4.358 (4.123–5.245) | 4.254 (4.096–4.938) |
+| Conflicts | 10,000 | 10.037 (9.921–10.611) | 13.103 (12.790–13.296) | 13.205 (12.695–13.750) | 13.149 (12.679–13.840) |
+| Commands barriers | 0 | 0.043 (0.039–0.079) | 3.373 (3.107–6.212) | 3.341 (3.121–3.917) | 3.400 (3.048–4.291) |
+| Commands barriers | 64 | 0.076 (0.071–0.090) | 3.467 (3.289–4.547) | 3.452 (3.099–3.682) | 3.476 (3.375–4.278) |
+| Commands barriers | 1,000 | 0.387 (0.351–0.425) | 4.176 (3.936–4.590) | 4.065 (3.795–4.846) | 4.039 (3.881–4.649) |
+| Commands barriers | 10,000 | 4.623 (4.343–4.851) | 9.016 (8.697–9.512) | 9.158 (8.698–9.732) | 9.011 (8.668–9.410) |
 
 For the zero-entity small-compatible calibration, subtracting sequential time
-and dividing by prepared batches and ticks estimates a combined overhead of 29.3
-µs per batch/tick at limit 2, 45.7 µs at limit 4, and 43.2 µs at limit 8. This
+and dividing by prepared batches and ticks estimates a combined overhead of 28.8
+µs per batch/tick at limit 2, 45.5 µs at limit 4, and 42.6 µs at limit 8. This
 does not separate compatibility checks, context preparation, spawning, or joins.
 
 Only the uneven workload shows a stable practical crossover in this matrix:
-limits 4 and 8 are already modestly faster at 1,000 entities and about 31% faster
-at 10,000. Limit 2 is slower at 1,000 and only about 5% faster at 10,000 because
+limits 4 and 8 are already modestly faster at 1,000 entities and about 30% faster
+at 10,000. Limit 2 is slower at 1,000 and only about 3% faster at 10,000 because
 the 8× lane dominates its pair. Small compatible work is near parity only at
 10,000 with limits 4/8, while the conflict and Commands shapes remain slower at
 every measured count. Raising the limit from 4 to 8 cannot widen these four-
