@@ -68,6 +68,18 @@ def cpu_model():
     return platform.processor() or 'unavailable'
 
 
+def hoist_schedule_shapes(report, sample, threads):
+    """Store invariant shapes once per thread limit and keep raw samples compact."""
+    shapes = report['schedule_shapes_by_thread_limit'].setdefault(str(threads), {})
+    for run in sample['workload']['runs']:
+        for scenario in run:
+            shape = scenario.pop('schedule')
+            previous = shapes.setdefault(scenario['name'], shape)
+            if previous != shape:
+                raise RuntimeError(
+                    f'schedule shape changed for {scenario["name"]} at thread limit {threads}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--counts', nargs='+', type=integer(0), default=[0, 64, 1000, 10000])
@@ -111,6 +123,7 @@ def main():
         'rustflags': os.environ.get('RUSTFLAGS', ''),
         'memory_scope': 'whole child process high-water RSS, including all scenarios, repeated worlds and validation; excludes Cargo and this runner',
         'wall_scope': 'whole child lifetime including launch and checks; polling resolution approximately 10ms',
+        'schedule_shapes_by_thread_limit': {},
         'samples': [],
     }
     sample_sequence = 0
@@ -125,6 +138,7 @@ def main():
                 command = [executable, '--entities', str(count), '--steps', str(args.steps),
                            '--work-iterations', str(args.work_iterations), '--threads', str(threads)]
                 sample = measure(command, args.timeout_seconds)
+                hoist_schedule_shapes(report, sample, threads)
                 sample.update(entities=count, max_threads=threads, repeat=repeat + 1,
                               sample_sequence=sample_sequence,
                               load_average_before=list(os.getloadavg()))

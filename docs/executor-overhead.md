@@ -61,7 +61,9 @@ splits, and command/deferred barriers per fixed tick. These are structural
 counts, not internal timers or new executor instrumentation. For example, limit two
 produces `[2,2]` for the compatible schedules, `[1,2,1]` for conflicts, and
 `[1,1,1,2]` around command barriers. The example tests these shapes so a fixture
-edit cannot silently relabel the evidence.
+edit cannot silently relabel the evidence. The fresh-process runner verifies that
+the shapes stay invariant and hoists them into `schedule_shapes_by_thread_limit`
+instead of repeating identical metadata in every raw sample.
 
 Compare medians and ranges from repeated release samples on the same machine and
 toolchain; do not turn local results into a CI timing threshold. In particular:

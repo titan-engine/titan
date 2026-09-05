@@ -33,6 +33,25 @@ class MeasurementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             measurement.measure([sys.executable, '-c', 'print("invalid")'], 10)
 
+    def test_schedule_shapes_are_hoisted_and_must_remain_stable(self):
+        shape = {'batch_sizes': [2, 2]}
+        sample = {'workload': {'runs': [[
+            {'name': 'small_compatible', 'schedule': shape.copy()},
+        ], [
+            {'name': 'small_compatible', 'schedule': shape.copy()},
+        ]]}}
+        report = {'schedule_shapes_by_thread_limit': {}}
+        measurement.hoist_schedule_shapes(report, sample, 2)
+        self.assertEqual(report['schedule_shapes_by_thread_limit']['2'],
+                         {'small_compatible': shape})
+        self.assertNotIn('schedule', sample['workload']['runs'][0][0])
+
+        changed = {'workload': {'runs': [[
+            {'name': 'small_compatible', 'schedule': {'batch_sizes': [4]}},
+        ]]}}
+        with self.assertRaisesRegex(RuntimeError, 'schedule shape changed'):
+            measurement.hoist_schedule_shapes(report, changed, 2)
+
 
 if __name__ == '__main__':
     unittest.main()
