@@ -13,10 +13,10 @@ health and outcome presentation needed no engine changes. Existing request
 history and diagnostics were sufficient to diagnose the failed route. No shared
 collision helper or reflection expansion was justified.
 
-Host setup consolidation is complete, including remote CI. The arena dash
-was accepted by the user. Difficulty settings remain a future possibility;
-input cancellation consolidation and live-player inspection are now locally
-verified. See the [live-player evidence](live-player.md).
+Host setup consolidation is complete, including remote CI. The arena dash,
+input cancellation consolidation and live-player inspection are implemented.
+Difficulty settings remain a future possibility. See the
+[live-player evidence](live-player.md).
 The [implementation plan](implementation-plan.md) tracks execution; the
 [host setup audit](host-setup-audit.md) records completed consolidation evidence.
 The [first entity-based UI slice](ui.md) now covers both games and pointer-driven
@@ -41,8 +41,7 @@ Remaining questions require evidence from future game iteration:
 ## Design choices still open
 
 The [design requirements](design-requirements.md) distinguish firm commitments
-from tentative answers in the opening planning conversation. Completed game
-milestones do not resolve all of those broader questions. These are unresolved
+from tentative design directions. Completed game milestones do not resolve all of those broader questions. These are unresolved
 choices, not a queue of authorized implementation tasks:
 
 - **Product identity:** how opinionated should Titan be as a whole, beyond the
@@ -61,8 +60,8 @@ choices, not a queue of authorized implementation tasks:
   direction is tentative beyond required subsystem disableability. (R1.36–37,
   R1.48; R2.44)
 - **Reusable gameplay primitives:** should health, movement, cameras, triggers,
-  timers and state machines be framework features? The user tentatively suggested
-  the high-level framework. This is separate from the firm requirement that UI
+  timers and state machines be framework features? The high-level framework is a
+  tentative home for them. This is separate from the firm requirement that UI
   share the entity/component model. (R1.51–52)
 - **Generated capability summaries:** does a compact game manifest or capability
   map help discovery and context efficiency enough to justify it? Context-aware
@@ -79,5 +78,5 @@ choices, not a queue of authorized implementation tasks:
   bounded test execution are agreed; performance assertions remain undecided.
   (R2.56)
 - **Technical debt:** what tradeoffs are acceptable when iteration speed and
-  architectural quality conflict? The user did not choose a general policy.
+  architectural quality conflict? No general policy has been chosen.
   (R1.64)

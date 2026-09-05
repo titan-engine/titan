@@ -54,7 +54,7 @@ On this machine, native `play --frames 2` presented two GPU frames successfully;
 all-target tests, Clippy, actual-WASM scenarios and browser bridge tests passed.
 Final visual evidence and user-facing play review are coordinated by the parent
 agent. The parent also supplies the GPU readback integration test and root CI.
-The user subsequently accepted both playable versions on 2026-09-05.
+The maintainer subsequently accepted both playable versions on 2026-09-05.
 
 ## Graphical integration evidence
 
@@ -75,13 +75,13 @@ targets. These are integration results, not substitutes for exact software
 checksums or gameplay assertions. [Verification summary](milestone-2/verification.json).
 
 A [fresh independent verifier](arena-verification.md) reproduced native and WASM
-checks using local guidance. No engine expansion was needed. The user played both native and browser
+checks using local guidance. No engine expansion was needed. The maintainer played both native and browser
 versions and accepted the result on 2026-09-05.
 
 ## Reusable macOS host gap
 
 The native executable initially rendered correctly but was absent from Computer
-Use's app list and could not be selected by executable path. At the user's
+Use's app list and could not be selected by executable path. At the maintainer's
 suggestion, the starter gained a reusable `scripts/build-macos-app.py` step,
 carried into the arena copy. It packages Cargo's reported executable and a
 standard Info.plist as an unsigned local `.app`, with configurable name and

@@ -1,10 +1,13 @@
 # Milestone 2: build a second game from the starter
 
-## Current status
+## Historical milestone: v0.2.0
 
-Accepted on 2026-09-05. The user played both native and browser versions and
-confirmed that both work well. Implementation, independent verification and
-playable user review are complete. Start with the [arena play instructions](../games/arena/README.md).
+Accepted on 2026-09-05 after maintainer playtesting of both native and browser
+versions. Implementation, independent verification and playable review are
+complete. This page preserves the original milestone brief and acceptance
+evidence; use the [implementation plan](implementation-plan.md) and
+[development board](https://github.com/orgs/titan-engine/projects/1) for current
+status. Start with the [arena play instructions](../games/arena/README.md).
 The [starter verification](starter-verification.md),
 [independent build and failed-attempt diagnosis](arena-exercise.md),
 [fresh arena verification](arena-verification.md), and
@@ -82,7 +85,7 @@ Git holds implementation history.
 - Captures and semantic assertions verify the final game. Intentional visual
   changes are reviewed before updating image expectations.
 - The independent-agent verification succeeds through local guidance, and the
-  user reviews the playable result.
+  maintainer reviews the playable result.
 - CI covers both games and starter setup while preserving the accepted RPG
   replay and capture checks.
 

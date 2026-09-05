@@ -2,7 +2,7 @@
 
 This document states intended capabilities and design direction, including work
 that is not implemented or scheduled. The [design requirements](design-requirements.md)
-preserve the opening planning answers and their qualifications; the
+record requirements and their certainty; the
 [implementation plan](implementation-plan.md) tracks selected execution work.
 Undecided choices remain in [open questions](open-questions.md).
 
@@ -21,8 +21,9 @@ Titan is intended to combine four roles:
 - an agent-facing game construction and verification system.
 
 The initial audience is human programmers working with agents. Direct use by
-non-programmers and comfortable agent-free development are desirable later,
-but neither should compromise the initial agent-assisted workflow.
+non-programmers and comfortable agent-free game development are desirable later.
+Contributions with or without AI assistance are welcome; the engine's initial
+product focus does not prescribe how contributors work.
 
 Titan should eventually be capable of powering good games of many sizes and
 genres. Early development will remain grounded in concrete games rather than
@@ -276,12 +277,12 @@ diary.
 
 ## Project standards
 
-- Titan is initially a private experiment and is intended to become open
-  source later under the MIT and Apache-2.0 licenses.
-- Dependencies must be compatible with that intended licensing model.
+- Titan is an experimental open-source project, dual-licensed under MIT and
+  Apache-2.0.
+- Dependencies must be compatible with that licensing model.
 - Prefer custom implementations unless an external crate is universal or is a
   clearly superior, mature, well-maintained choice.
-- CI is important from the beginning and will use GitHub Actions.
+- CI uses GitHub Actions.
 - Formatting, Clippy, unit tests, headless integration tests, and continuously
   compiling examples should be enforced.
 - Architectural checks are intended as part of CI; their specific scope remains
@@ -289,5 +290,5 @@ diary.
 - Releases should be frequent so games can pin known engine revisions.
 - Optimize only in response to evidence, except where an early choice would be
   prohibitively expensive to reverse.
-- Initial development may optimize for a modern Apple Silicon MacBook Pro while
-  preserving the intended cross-platform architecture.
+- The initial reference development platform is macOS on Apple Silicon; it is
+  not a hardware requirement. Preserve the cross-platform architecture.
