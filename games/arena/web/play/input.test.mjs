@@ -23,7 +23,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       click() { return handlers.click?.(); },
     };
   }
-  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'save', 'load-save', 'live-summary'].map(key => [key, surface()]));
+  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'save', 'load-save', 'load-recording', 'restart-playback', 'exit-playback', 'playback-status', 'live-entities', 'live-summary'].map(key => [key, surface()]));
   const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
   const window = surface();
   const document = Object.assign(surface(), {
@@ -37,6 +37,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   let paused = true;
   let epoch = 0;
   let enabled = false;
+  let playback = { active: false };
   let handleCount = 0;
   const messages = [];
   window.postMessage = response => messages.push(response);
@@ -67,6 +68,11 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
     paused: () => paused,
     clock_epoch: () => String(epoch),
     control_enabled: () => enabled,
+    playback_active: () => playback.active,
+    playback_status: () => JSON.stringify(playback),
+    step_playback() { playback.position++; },
+    restart_playback() { playback.position = 0; playback.complete = false; epoch++; },
+    exit_playback() { playback = { active: false }; epoch++; },
     set_control_enabled(value) { enabled = value; epoch++; },
     pause() { paused = true; epoch++; },
     resume() { paused = false; epoch++; },
@@ -163,4 +169,26 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   ids['enable-controls'].handlers.change({ target: { checked: false } });
   assert.equal(ids.step.disabled, true, 'revoking controls disables step');
   assert.equal(ids['load-save'].disabled, true, 'revoking controls disables file loading');
+
+  playback = { active: true, position: 0, total: 2, complete: false };
+  epoch++;
+  ids['enable-controls'].handlers.change({ target: { checked: false } });
+  assert.equal(ids.step.disabled, false, 'local playback step does not require inspection opt-in');
+  assert.equal(ids.restart.disabled, true, 'live restart is disabled during playback');
+  assert.equal(ids['load-save'].disabled, true);
+  ids.pause.click();
+  key('keydown', 'w', 'KeyW');
+  assert.equal(held.up, false, 'live movement is ignored during playback');
+  key('keydown', 'r', 'KeyR');
+  assert.equal(playback.position, 0);
+  assert.equal(paused, true, 'R restarts playback paused');
+  playback.complete = true; playback.verified = true; epoch++;
+  ids['enable-controls'].handlers.change({ target: { checked: false } });
+  assert.equal(ids.pause.disabled, true, 'EOF cannot resume past the recording');
+  assert.equal(ids.step.disabled, true);
+  assert.match(ids['playback-status'].textContent, /state and image match/);
+  ids['exit-playback'].click();
+  assert.equal(playback.active, false);
+  assert.equal(ids.restart.disabled, false);
+
 });

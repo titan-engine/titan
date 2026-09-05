@@ -4,6 +4,7 @@ import { bridgeResponse } from '../inspector/bridge.mjs';
 import { inspectEntities, entityRow, inspectionDetails } from './entities.mjs';
 import { bindCanvasPointer } from './pointer.mjs';
 import { readSaveForSession } from './save.mjs';
+import { readRecordingForSession } from './replay.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -17,23 +18,26 @@ let player;
 let epoch;
 let requestId = 0;
 let importingSave = false;
+let importingRecording = false;
 let lastTime;
 let animation;
 const input = bindPlayerInput({
   canvas, buttons: document.querySelectorAll('[data-action]'), keys, actions,
-  isRunning: () => Boolean(player && !player.paused()),
+  isRunning: () => Boolean(player && !player.paused() && !player.playback_active()),
   setAction: (action, pressed) => player?.set_action(action, pressed),
   cancelAction: action => player?.cancel_action(action),
   clearInput: () => player?.clear_input(),
   onHidden: () => { lastTime = undefined; },
   onKey: event => {
     if (!player || event.key.toLowerCase() !== 'r') return false;
-    event.preventDefault(); replay.click(); return true;
+    event.preventDefault();
+    if (player.playback_active()) panel(restartPlayback); else replay.click();
+    return true;
   },
 });
 const canvasPointer = bindCanvasPointer({
   canvas,
-  enabled: () => Boolean(player),
+  enabled: () => Boolean(player && !player.playback_active()),
   pointer: (x, y, pressed) => {
     try { return player.pointer(x, y, pressed); }
     catch (error) { failure(error); return false; }
@@ -49,7 +53,7 @@ function failure(error) {
   cancelAnimationFrame(animation); lastTime = undefined;
   errorPanel.hidden = false; errorPanel.textContent = `GPU player stopped: ${error.message ?? error}\nRetry starts a fresh scene.`;
   pause.disabled = true; replay.disabled = true;
-  document.querySelectorAll('[data-action], [data-live], #step, #load-save').forEach(button => button.disabled = true);
+  document.querySelectorAll('[data-action], [data-live], #step, #load-save, #load-recording, #restart-playback, #exit-playback').forEach(button => button.disabled = true);
   input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
@@ -64,11 +68,21 @@ function syncSession() {
     input.cancel();
     canvasPointer.cancel();
   }
+  const playback = JSON.parse(player.playback_status());
   pause.textContent = player.paused() ? 'Resume' : 'Pause';
+  pause.disabled = playback.active && playback.complete;
+  replay.disabled = playback.active;
+  document.querySelectorAll('[data-action]').forEach(button => button.disabled = playback.active);
   document.querySelector('#enable-controls').checked = player.control_enabled();
-  document.querySelector('#step').disabled = !player.control_enabled() || !player.paused();
-  document.querySelector('#load-save').disabled = !player.control_enabled() || !player.paused() || importingSave;
-  document.querySelector('#live-mode').textContent = `${player.paused() ? 'Paused' : 'Playing'} · Inspection ${player.control_enabled() ? 'controls enabled' : 'read-only'}`;
+  document.querySelector('#step').disabled = !player.paused() || (playback.active ? playback.complete : !player.control_enabled());
+  document.querySelector('#load-save').disabled = playback.active || !player.control_enabled() || !player.paused() || importingSave;
+  document.querySelector('#load-recording').disabled = !player.paused() || importingRecording;
+  document.querySelector('#restart-playback').disabled = !playback.active;
+  document.querySelector('#exit-playback').disabled = !playback.active;
+  document.querySelector('#playback-status').textContent = playback.active
+    ? `Playback ${playback.position}/${playback.total} · ${playback.complete ? (playback.verified ? 'Complete · state and image match' : `Complete · mismatch: ${playback.error ?? 'verification failed'}`) : player.paused() ? 'Paused' : 'Playing'}`
+    : 'Live game · pause to load an input recording.';
+  document.querySelector('#live-mode').textContent = `${playback.active ? 'Playback' : 'Live game'} · ${player.paused() ? 'Paused' : 'Playing'} · Inspection ${player.control_enabled() ? 'controls enabled' : 'read-only'}`;
 }
 function loop(time) {
   try {
@@ -179,6 +193,34 @@ document.querySelector('#load-save').addEventListener('change', async event => {
     event.target.value = ''; importingSave = false; syncSession();
   }
 });
+function refreshPlayback() {
+  syncSession(); player.frame(0); updateStatus();
+  document.querySelector('#live-entities').hidden = true;
+  document.querySelector('#live-capture').hidden = true;
+}
+function restartPlayback() {
+  player.pause(); player.restart_playback(); refreshPlayback();
+}
+document.querySelector('#load-recording').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file || importingRecording) return;
+  importingRecording = true; syncSession();
+  try {
+    const recording = await readRecordingForSession(file, player, () => player);
+    player.load_recording(recording);
+    refreshPlayback();
+    liveSummary.textContent = 'Recording loaded. Resume or step through its recorded inputs.';
+  } catch (error) {
+    liveSummary.textContent = `Playback load failed: ${error.message ?? error}`;
+  } finally {
+    event.target.value = ''; importingRecording = false; syncSession();
+  }
+});
+document.querySelector('#restart-playback').addEventListener('click', () => panel(restartPlayback));
+document.querySelector('#exit-playback').addEventListener('click', () => panel(() => {
+  player.pause(); player.exit_playback(); refreshPlayback();
+  liveSummary.textContent = 'Playback exited. Resume to play the fresh live game.';
+}));
 document.querySelector('#recording').addEventListener('click', () => panel(() => {
   const response = request({ type: 'query', name: 'recording', arguments: {} });
   const recording = response.response.value;
@@ -194,7 +236,13 @@ document.querySelector('#enable-controls').addEventListener('change', event => p
   player.set_control_enabled(event.target.checked); syncSession();
 }));
 document.querySelector('#step').addEventListener('click', () => panel(() => {
-  const response = request({ type: 'step', frames: 1 });
+  let response;
+  if (player.playback_active()) {
+    player.step_playback(); refreshPlayback();
+    response = JSON.parse(player.playback_status());
+  } else {
+    response = request({ type: 'step', frames: 1 });
+  }
   summarize(request({ type: 'query', name: 'arena_state' }).response.value);
   showDetails(response);
 }));

@@ -15,6 +15,8 @@ mod native {
     use super::game;
     use std::{
         collections::HashSet,
+        io::Read,
+        path::Path,
         sync::{
             Arc,
             atomic::{AtomicBool, Ordering},
@@ -52,12 +54,14 @@ mod native {
         rendered: u64,
         limit: Option<u64>,
         error: Option<String>,
+        last_title: String,
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut limit = None;
         let mut duration = None;
+        let mut recording_path = None;
         let mut inspect = false;
         let mut enable_control = false;
         let mut configured_inspection = false;
@@ -74,6 +78,9 @@ mod native {
                         return Err("--frames must be positive".into());
                     }
                     limit = Some(count);
+                }
+                "--recording" => {
+                    recording_path = Some(args.next().ok_or("--recording requires a JSON file")?);
                 }
                 "--inspect" => inspect = true,
                 "--allow-control" => {
@@ -100,7 +107,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; Space dashes; P pauses/resumes; R restarts; Escape exits.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; Space dashes; P pauses/resumes; R restarts; Escape exits.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -121,6 +128,10 @@ mod native {
                     .into(),
             );
         }
+        let recording = recording_path
+            .as_deref()
+            .map(|path| read_recording(Path::new(path)))
+            .transpose()?;
         let project = project.canonicalize()?;
         let stopped = Arc::new(AtomicBool::new(false));
         let stop_signal = stopped.clone();
@@ -148,7 +159,13 @@ mod native {
             RunMode::Interactive,
             enable_control,
         );
-        session.resume();
+        if let Some(recording) = recording {
+            session
+                .load_replay(recording)
+                .map_err(|error| error.message)?;
+        } else {
+            session.resume();
+        }
         let clock_epoch = session.clock_epoch();
         let mut player = Player {
             session,
@@ -167,6 +184,7 @@ mod native {
             rendered: 0,
             limit,
             error: None,
+            last_title: String::new(),
         };
         EventLoop::new()?.run_app(&mut player)?;
         if let Some(server) = &mut server {
@@ -193,9 +211,7 @@ mod native {
                     event_loop
                         .create_window(
                             Window::default_attributes()
-                                .with_title(
-                                    "Titan — Arena Survival · P pauses · Space dashes · R restarts",
-                                )
+                                .with_title(self.window_title())
                                 .with_inner_size(LogicalSize::new(800.0, 560.0)),
                         )
                         .map_err(|error| error.to_string())?,
@@ -230,6 +246,7 @@ mod native {
                 queue.drain(|request| self.session.handle(request));
             }
             self.sync_clock();
+            self.update_title();
             if self.stopped.load(Ordering::Acquire)
                 || self
                     .duration
@@ -311,15 +328,44 @@ mod native {
                             self.sync_clock();
                             return;
                         }
+                        if self.session.replay_active()
+                            && key == KeyCode::KeyN
+                            && self.session.paused()
+                        {
+                            if !self.session.replay_status()["complete"]
+                                .as_bool()
+                                .unwrap_or(false)
+                                && let Err(error) = self.session.step_replay()
+                            {
+                                eprintln!("playback step failed: {}", error.message);
+                            }
+                            self.sync_clock();
+                            return;
+                        }
+                        if self.session.replay_active() && key == KeyCode::KeyL {
+                            self.session.pause();
+                            if let Err(error) = self.session.stop_replay() {
+                                eprintln!("exit playback failed: {}", error.message);
+                            }
+                            self.sync_clock();
+                            return;
+                        }
                         if key == KeyCode::KeyR {
-                            self.session.restart();
+                            if self.session.replay_active() {
+                                self.session.pause();
+                                if let Err(error) = self.session.restart_replay() {
+                                    eprintln!("restart playback failed: {}", error.message);
+                                }
+                            } else {
+                                self.session.restart();
+                            }
                             self.sync_clock();
                             return;
                         }
                     }
                     // A key still physically down across pause/focus loss must
                     // not be resurrected by the operating system's repeat event.
-                    if self.session.paused() || event.repeat {
+                    if self.session.paused() || self.session.replay_active() || event.repeat {
                         return;
                     }
                     if let Some((action, pressed)) = update_key(
@@ -378,12 +424,50 @@ mod native {
 
     impl Player {
         fn route_pointer(&mut self) {
+            if self.session.replay_active() {
+                return;
+            }
             let position = self.window.as_ref().and_then(|window| {
                 let size = window.inner_size();
                 self.pointer_position
                     .and_then(|(x, y)| surface_point(x, y, size.width, size.height))
             });
             self.session.pointer(position, self.pointer_pressed);
+        }
+
+        fn window_title(&self) -> String {
+            if self.session.replay_active() {
+                let replay = self.session.replay_status();
+                let state = if replay["complete"].as_bool().unwrap_or(false) {
+                    if replay["verified"].as_bool() == Some(true) {
+                        "Complete · MATCH"
+                    } else {
+                        "Complete · MISMATCH"
+                    }
+                } else if self.session.paused() {
+                    "Paused"
+                } else {
+                    "Playing"
+                };
+                format!(
+                    "Titan — Playback {}/{} · {state} · P pause · N step · R restart · L live",
+                    replay["position"], replay["total"]
+                )
+            } else if self.session.paused() {
+                "Titan — Arena Survival · Paused · P resumes · R restarts".into()
+            } else {
+                "Titan — Arena Survival · P pauses · Space dashes · R restarts".into()
+            }
+        }
+
+        fn update_title(&mut self) {
+            let title = self.window_title();
+            if title != self.last_title {
+                if let Some(window) = &self.window {
+                    window.set_title(&title);
+                }
+                self.last_title = title;
+            }
         }
 
         fn sync_clock(&mut self) {
@@ -395,15 +479,24 @@ mod native {
                 self.session.cancel_pointer();
                 self.accumulated = Duration::ZERO;
                 self.previous = Instant::now();
-                if let Some(window) = &self.window {
-                    window.set_title(if self.session.paused() {
-                        "Titan — Arena Survival · Paused · P resumes · R restarts"
-                    } else {
-                        "Titan — Arena Survival · P pauses · Space dashes · R restarts"
-                    });
-                }
             }
         }
+    }
+
+    fn read_recording(path: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        const MAX_BYTES: u64 = 2 * 1024 * 1024;
+        let metadata = path.metadata()?;
+        if !metadata.is_file() || metadata.len() > MAX_BYTES {
+            return Err("recording must be a regular JSON file no larger than 2 MiB".into());
+        }
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)?
+            .take(MAX_BYTES + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_BYTES {
+            return Err("recording exceeds the 2 MiB size bound".into());
+        }
+        Ok(serde_json::from_slice(&bytes)?)
     }
 
     fn surface_point(x: f64, y: f64, width: u32, height: u32) -> Option<(i32, i32)> {
@@ -439,6 +532,23 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn recording_reader_rejects_non_files_and_oversized_files() {
+            assert!(read_recording(&std::env::temp_dir()).is_err());
+            let path = std::env::temp_dir().join(format!(
+                "titan-player-recording-{}.json",
+                std::process::id()
+            ));
+            std::fs::write(&path, b"{}").unwrap();
+            assert_eq!(read_recording(&path).unwrap(), serde_json::json!({}));
+            std::fs::File::create(&path)
+                .unwrap()
+                .set_len(2 * 1024 * 1024 + 1)
+                .unwrap();
+            assert!(read_recording(&path).is_err());
+            std::fs::remove_file(path).unwrap();
+        }
 
         #[test]
         fn pointer_coordinates_use_physical_surface_size_and_reject_outside() {

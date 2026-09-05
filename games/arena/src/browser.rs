@@ -83,6 +83,32 @@ impl BrowserLiveRuntime {
     pub fn set_control_enabled(&mut self, enabled: bool) {
         self.session.set_control_enabled(enabled);
     }
+    pub fn load_recording(&mut self, json: &str) -> Result<(), JsValue> {
+        self.session
+            .load_replay(parse_recording_json(json)?)
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn playback_active(&self) -> bool {
+        self.session.replay_active()
+    }
+    pub fn playback_status(&self) -> String {
+        self.session.replay_status().to_string()
+    }
+    pub fn step_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .step_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn restart_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .restart_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn exit_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .stop_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
 }
 
 impl Default for BrowserLiveRuntime {
@@ -102,6 +128,13 @@ pub fn verify_recording_json(recording_json: &str) -> Result<String, JsValue> {
         .and_then(crate::live::verify_recording)
         .and_then(|value| serde_json::to_string(&value).map_err(|error| error.to_string()));
     result.map_err(|error| JsValue::from_str(&error))
+}
+
+fn parse_recording_json(json: &str) -> Result<serde_json::Value, JsValue> {
+    if json.len() > 2 * 1024 * 1024 {
+        return Err(JsValue::from_str("recording exceeds the 2 MiB size bound"));
+    }
+    serde_json::from_str(json).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 fn capture(app: &App) -> Result<CaptureResult, ProtocolError> {
@@ -247,6 +280,33 @@ mod player {
         pub fn set_control_enabled(&mut self, enabled: bool) {
             self.session.set_control_enabled(enabled);
         }
+        pub fn load_recording(&mut self, json: &str) -> Result<(), JsValue> {
+            self.session
+                .load_replay(super::parse_recording_json(json)?)
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn playback_active(&self) -> bool {
+            self.session.replay_active()
+        }
+        pub fn playback_status(&self) -> String {
+            self.session.replay_status().to_string()
+        }
+        pub fn step_playback(&mut self) -> Result<(), JsValue> {
+            self.session
+                .step_replay()
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn restart_playback(&mut self) -> Result<(), JsValue> {
+            self.session
+                .restart_replay()
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn exit_playback(&mut self) -> Result<(), JsValue> {
+            self.session
+                .stop_replay()
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+
         /// Inspect and control the exact session presented on this canvas.
         pub fn handle(&mut self, request_json: &str) -> String {
             self.session.handle_json(request_json)

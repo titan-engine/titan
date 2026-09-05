@@ -23,7 +23,7 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
         click() { return handlers.click?.(); },
       };
     }
-    const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'replay', 'status', 'result', 'error', 'inspect', 'capture', 'recording', 'enable-controls', 'step', 'live-mode', 'live-output', 'live-summary', 'live-capture', 'save', 'load-save'].map(id => [id, surface()]));
+    const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'replay', 'status', 'result', 'error', 'inspect', 'capture', 'recording', 'enable-controls', 'step', 'live-mode', 'live-output', 'live-summary', 'live-capture', 'save', 'load-save', 'load-recording', 'restart-playback', 'exit-playback', 'playback-status'].map(id => [id, surface()]));
     const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
     const window = surface();
     const document = Object.assign(surface(), {
@@ -50,6 +50,8 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       paused: () => paused,
       clock_epoch: () => String(epoch),
       control_enabled: () => false,
+      playback_active: () => false,
+      playback_status: () => JSON.stringify({active:false}),
       status: () => JSON.stringify({ frame: 0, run: { health: 3, elapsed: 0, outcome: 'Running', dash_ready: true } }),
     };
     const context = vm.createContext({

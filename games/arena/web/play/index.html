@@ -23,8 +23,11 @@
 <p id="live-mode" role="status">Start the game to inspect it.</p>
 <div class="toolbar"><button id="inspect" data-live disabled>Inspect state</button><button id="capture" data-live disabled>Capture</button><button id="recording" data-live disabled>Verify &amp; export recording</button><label><input id="enable-controls" type="checkbox" data-live disabled>Enable inspection controls</label><button id="step" disabled>Step one tick</button></div>
 <div class="toolbar"><button id="save" data-live disabled>Save snapshot</button><label>Load snapshot <input id="load-save" type="file" accept=".json,application/json" disabled></label></div>
-<p>Snapshots resume gameplay from the saved point. To load a local JSON file (up to 64 KiB), pause and enable inspection controls. Loading preserves the host clock and requires a restart before recording an exact replay.</p>
-<p>Recordings contain at most 3,600 ticks from the latest restart. Replay an export from the arena directory with <code>cargo run --bin replay -- RECORDING.json</code>.</p>
+<p>Snapshots resume gameplay from the saved point. To load a local JSON file (up to 64 KiB), pause and enable inspection controls. Loading preserves the host clock and starts a new input recording from the restored snapshot.</p>
+<div class="toolbar"><label>Load recording <input id="load-recording" type="file" accept=".json,application/json" disabled></label><button id="restart-playback" disabled>Restart playback</button><button id="exit-playback" disabled>Exit playback</button></div>
+<p id="playback-status" role="status">Live game · start and pause to load a recording.</p>
+<p>Playback reads recorded inputs, ignores live movement and in-game clicks, and stops at the end. Pause/Resume and Step work without inspection controls. Exit playback starts a fresh live game. Recording files are limited to 2 MiB.</p>
+<p>Recordings contain at most 3,600 ticks from the latest restart or successful save load. Replay an export from the arena directory with <code>cargo run --bin replay -- RECORDING.json</code>.</p>
 <p id="live-summary" role="status">Read-only inspection is the default.</p>
 <div id="live-entities" class="entity-list" hidden><table><caption id="live-entity-caption"></caption><thead><tr><th scope="col">Name</th><th scope="col">ID</th><th scope="col">Activity</th><th scope="col">Position</th></tr></thead><tbody id="live-entity-body"></tbody></table></div>
 <details><summary>Inspection JSON</summary><pre id="live-output"></pre></details>
