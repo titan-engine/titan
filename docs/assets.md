@@ -121,7 +121,10 @@ runs relocated bundles with replacement/missing/explicit-override resources.
 Actual WASM checks both runtimes, invalid images, retained startup pairs,
 recording round trips and native cross-verification. The GPU comparison decodes
 both committed PNGs and checks open/closed journal views against software.
-Physical native and browser canvas inspection confirms the normal sprite;
-reloading the browser after replacing only its served PNG visibly changes the
-sprite, and repairing invalid bytes makes Retry succeed. [Earlier single-image evidence](assets/checks.json) records the original regression
-suite; issue #8 and its PR record the two-image verification. CI includes the new native/browser/bundle checks.
+Browser canvas inspection for the two-image exercise confirms the reference
+scene, tree-only replacement with the player preserved, a named invalid-tree
+error, and successful Retry after repair. Native GPU evidence uses exact
+software/readback comparison and relocated bundle execution with each resource.
+[Earlier single-image evidence](assets/checks.json) records the original regression
+suite; issue #8 and its PR record the two-image verification. CI includes the
+native/browser/bundle checks.
