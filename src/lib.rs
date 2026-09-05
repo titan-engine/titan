@@ -12,6 +12,7 @@ pub mod inspection;
 pub mod render;
 pub mod system;
 pub mod time;
+pub mod ui;
 
 pub use app::{App, AppError, FixedUpdate, Plugin, ScheduleLabel, Startup, Update};
 pub use ecs::{
