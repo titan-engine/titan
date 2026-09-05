@@ -1,4 +1,5 @@
 //! Executor behavior is observable through ECS values and bounded handshakes.
+#![cfg(not(target_arch = "wasm32"))]
 use std::{
     num::NonZeroUsize,
     panic::{AssertUnwindSafe, catch_unwind},
