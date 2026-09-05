@@ -1,3 +1,8 @@
+#[path = "rpg_live.rs"]
+pub mod live;
+#[path = "rpg_snapshot.rs"]
+pub mod snapshot;
+
 use std::collections::BTreeMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs;
@@ -92,11 +97,15 @@ pub fn build_game() -> App {
     app.world_mut().insert_resource(QuestState::default());
     app.world_mut().insert_resource(ScheduledInput::default());
     app.add_systems(Startup, setup);
+    app.add_systems(Startup, live::begin_recording);
     app.add_systems(FixedUpdate, apply_scheduled_input);
+    app.add_systems(FixedUpdate, live::record_consumed);
     app.add_systems(FixedUpdate, move_player);
     app.add_systems(FixedUpdate, collect_shards);
     app.add_systems(FixedUpdate, activate_shrine);
     app.add_systems(FixedUpdate, sync_quest_ui);
+    app.add_systems(FixedUpdate, titan::ApplyDeferred);
+    app.add_systems(FixedUpdate, live::finish_tick);
     app.add_extractor(render_frame);
     app
 }
@@ -245,6 +254,7 @@ pub fn inspector_with_capture(
         Ok(())
     });
     inspector.register_capture_handler(capture);
+    live::register(&mut inspector);
     inspector
 }
 
@@ -769,12 +779,17 @@ mod tests {
                 .collected_shards,
             3
         );
-        assert!(app.system_metadata(titan::FixedUpdate).all(|system| {
-            system
-                .accesses
-                .iter()
-                .all(|access| access.target != titan::AccessTarget::World)
-        }));
+        // Snapshot hooks require exclusive access; gameplay systems remain typed.
+        assert!(
+            app.system_metadata(titan::FixedUpdate)
+                .filter(|system| !system.name.contains("::live::"))
+                .all(|system| {
+                    system
+                        .accesses
+                        .iter()
+                        .all(|access| access.target != titan::AccessTarget::World)
+                })
+        );
     }
 
     #[test]
