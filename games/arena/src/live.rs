@@ -283,10 +283,26 @@ impl ArenaSession {
     }
 
     pub fn clear_input(&mut self) {
+        self.cancel_pointer();
         self.input.clear();
         self.app
             .world_mut()
             .insert_resource(InputFrame::<Action>::default());
+    }
+
+    /// Returns whether the in-game UI consumed this primary-pointer update.
+    pub fn pointer(&mut self, position: Option<(i32, i32)>, pressed: bool) -> bool {
+        let before = game::restart_epoch(&self.app);
+        let result = game::handle_ui_pointer(&mut self.app, position, pressed);
+        if game::restart_epoch(&self.app) != before {
+            self.reset_timing_and_input();
+            self.inspector.note_external_change();
+        }
+        result.consumed
+    }
+
+    pub fn cancel_pointer(&mut self) {
+        game::cancel_ui_pointer(&mut self.app);
     }
 
     fn reset_timing_and_input(&mut self) {
@@ -331,6 +347,7 @@ impl ArenaSession {
 
     pub fn handle(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
         let was_paused = self.paused();
+        let restart_epoch = game::restart_epoch(&self.app);
         self.inspector.set_controlled(was_paused);
         let response = handle_with_policy(
             &mut self.app,
@@ -338,12 +355,10 @@ impl ArenaSession {
             self.enable_control,
             request,
         );
+        if game::restart_epoch(&self.app) != restart_epoch || was_paused != self.paused() {
+            self.reset_timing_and_input();
+        }
         if matches!(response.outcome, ResponseOutcome::Success { .. }) {
-            if matches!(&request.request, Request::Invoke { name, .. } if name == "restart")
-                || was_paused != self.paused()
-            {
-                self.reset_timing_and_input();
-            }
             if matches!(request.request, Request::SetField { .. }) {
                 self.app
                     .world_mut()
@@ -768,5 +783,91 @@ mod tests {
         assert!(recording_value(&app).unwrap()["invalid_reason"].is_string());
         game::restart(&mut app);
         assert!(verify_recording(recording_value(&app).unwrap()).is_ok());
+    }
+    #[test]
+    fn ui_inspection_and_local_or_command_restart_share_session_reset() {
+        let mut live = session(false);
+        let button = live
+            .app()
+            .world()
+            .iter::<titan::Name>()
+            .find(|(_, name)| name.as_str() == "ui/restart")
+            .unwrap()
+            .0;
+        let entity = EntityId {
+            index: button.index(),
+            generation: button.generation(),
+        };
+        let Response::Entity(details) = success(request(&mut live, Request::Entity { entity }))
+        else {
+            panic!("entity details")
+        };
+        assert_eq!(
+            details.components[std::any::type_name::<titan::ui::UiText>()]["text"],
+            "R RESTART"
+        );
+        assert!(
+            !details.component_fields[std::any::type_name::<titan::ui::UiButton>()]["enabled"]
+                .writable
+        );
+        live.resume();
+        live.set_action("right", true).unwrap();
+        live.tick();
+        live.pause();
+        let before = request(&mut live, Request::Status);
+        let pointer_request = |pressed| Request::Invoke {
+            name: "ui_pointer".into(),
+            arguments: [
+                ("x".into(), 8.into()),
+                ("y".into(), 12.into()),
+                ("pressed".into(), serde_json::Value::Bool(pressed)),
+            ]
+            .into(),
+        };
+        assert!(
+            matches!(request(&mut live, pointer_request(true)).outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::MutationDisabled)
+        );
+        assert!(live.pointer(Some((8, 12)), true));
+        assert!(live.pointer(Some((8, 12)), false));
+        assert!(
+            live.paused(),
+            "local button works while paused without inspector opt-in"
+        );
+        let after = request(&mut live, Request::Status);
+        assert_eq!(after.observed_frame, before.observed_frame);
+        assert!(after.state_revision > before.state_revision);
+        assert_eq!(query(&mut live, "recording")["recorded_ticks"], 0);
+        live.resume();
+        live.tick();
+        assert_eq!(
+            query(&mut live, "arena_state")["position"]["x"],
+            80,
+            "button restart clears held movement"
+        );
+        live.pause();
+        live.set_control_enabled(true);
+        let clock = request(&mut live, Request::Status).observed_frame;
+        success(request(
+            &mut live,
+            Request::InjectInput {
+                frame: clock + 1,
+                actions: [("dash".into(), InputValue::Button(true))].into(),
+            },
+        ));
+        let epoch = live.clock_epoch();
+        success(request(&mut live, pointer_request(true)));
+        success(request(&mut live, pointer_request(false)));
+        assert!(
+            live.clock_epoch() > epoch,
+            "command activation uses game reset epoch, not a restart command-name check"
+        );
+        assert!(live.paused());
+        success(request(&mut live, Request::Step { frames: 1 }));
+        assert_eq!(
+            query(&mut live, "arena_state")["position"]["x"],
+            80,
+            "command activation clears pending injected input"
+        );
+        assert!(verify_recording(query(&mut live, "recording")).is_ok());
     }
 }

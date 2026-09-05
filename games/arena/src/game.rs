@@ -11,6 +11,10 @@ use titan::inspection::{InspectionConfig, Inspector};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
+use titan::ui::{
+    BitmapFont, UiButton, UiNode, UiPointer, UiPointerResult, UiText, append_ui,
+    register_ui_inspection,
+};
 use titan::{App, Component, FixedTime, FixedUpdate, Name, Res, ResMut, Startup, World};
 use titan_protocol::{
     CaptureResult, CommandMetadata, ErrorCode, FieldMetadata, InputValue, ProtocolError,
@@ -88,11 +92,32 @@ struct ScheduledInput {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RestartArgs {}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PointerArgs {
+    x: Option<i32>,
+    y: Option<i32>,
+    pressed: bool,
+}
+#[derive(Component, Clone, Copy)]
+enum HudKind {
+    Status,
+    Restart,
+    Dash,
+}
+#[derive(Component)]
+struct RestartButton;
+#[derive(Default)]
+struct RestartEpoch(u64);
+#[derive(Default)]
+struct UiPointers {
+    local: UiPointer,
+    controlled: UiPointer,
+}
 struct Art {
     player: ImageId,
     enemy: ImageId,
     floor: ImageId,
-    glyphs: BTreeMap<char, ImageId>,
 }
 
 pub fn build_game() -> App {
@@ -104,6 +129,7 @@ pub fn build_game() -> App {
     app.add_systems(FixedUpdate, apply_scheduled_input);
     app.add_systems(FixedUpdate, crate::live::record_consumed);
     app.add_systems(FixedUpdate, simulate);
+    app.add_systems(FixedUpdate, sync_hud);
     app.add_systems(FixedUpdate, crate::live::finish_recording);
     app.add_extractor(render_frame);
     app
@@ -129,7 +155,60 @@ pub fn restart(app: &mut App) {
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(ScheduledInput::default());
     crate::live::begin_recording(app.world_mut());
+    let epoch = app.world_mut().resource_mut::<RestartEpoch>().unwrap();
+    epoch.0 = epoch.0.wrapping_add(1);
+    cancel_ui_pointer(app);
+    sync_hud(app.world_mut());
     app.refresh_extracted();
+}
+
+pub(crate) fn restart_epoch(app: &App) -> u64 {
+    app.world()
+        .resource::<RestartEpoch>()
+        .map_or(0, |epoch| epoch.0)
+}
+
+pub fn cancel_ui_pointer(app: &mut App) {
+    if let Some(pointers) = app.world_mut().resource_mut::<UiPointers>() {
+        pointers.local.cancel();
+        pointers.controlled.cancel();
+    }
+}
+
+/// The same entity hit test serves local pointer input and controlled commands.
+pub fn handle_ui_pointer(
+    app: &mut App,
+    position: Option<(i32, i32)>,
+    pressed: bool,
+) -> UiPointerResult {
+    update_ui_pointer(app, position, pressed, false)
+}
+
+fn update_ui_pointer(
+    app: &mut App,
+    position: Option<(i32, i32)>,
+    pressed: bool,
+    controlled: bool,
+) -> UiPointerResult {
+    app.update_schedule(Startup);
+    let mut pointers = app
+        .world_mut()
+        .remove_resource::<UiPointers>()
+        .unwrap_or_default();
+    let pointer = if controlled {
+        &mut pointers.controlled
+    } else {
+        &mut pointers.local
+    };
+    let result = pointer.update(app.world(), position, pressed);
+    app.world_mut().insert_resource(pointers);
+    if result
+        .activated
+        .is_some_and(|entity| app.world().get::<RestartButton>(entity).is_some())
+    {
+        restart(app);
+    }
+    result
 }
 
 pub(crate) fn clear_scheduled_input(app: &mut App) {
@@ -170,6 +249,7 @@ pub fn inspector_with_capture(
     capture: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
 ) -> Inspector {
     let mut inspector = Inspector::new(config);
+    register_ui_inspection(&mut inspector).expect("unique UI fields");
     inspector
         .register_read_only_field::<Enemy, bool>(
             "active",
@@ -223,6 +303,28 @@ pub fn inspector_with_capture(
             },
         )
         .expect("unique restart command");
+    inspector
+        .register_command(
+            CommandMetadata {
+                name: "ui_pointer".into(),
+                description: "Update the primary UI pointer; press and release inside ui/restart activates the same in-game button. Omit both coordinates to release outside.".into(),
+                arguments: [
+                    ("x".into(), FieldMetadata { type_name: "Option<i32>".into(), description: "Framebuffer pixel x, or null with y".into(), writable: false, minimum: None, maximum: None, unit: Some("pixel".into()) }),
+                    ("y".into(), FieldMetadata { type_name: "Option<i32>".into(), description: "Framebuffer pixel y, or null with x".into(), writable: false, minimum: None, maximum: None, unit: Some("pixel".into()) }),
+                    ("pressed".into(), FieldMetadata { type_name: "bool".into(), description: "Whether the primary pointer is pressed".into(), writable: false, minimum: None, maximum: None, unit: None }),
+                ].into(),
+            },
+            |app, args: PointerArgs| {
+                let position = match (args.x, args.y) {
+                    (Some(x), Some(y)) => Some((x, y)),
+                    (None, None) => None,
+                    _ => return Err(ProtocolError::new(ErrorCode::InvalidValue, "provide both pointer coordinates or neither")),
+                };
+                update_ui_pointer(app, position, args.pressed, true);
+                Ok(())
+            },
+        )
+        .expect("unique pointer command");
     inspector
         .register_command(
             CommandMetadata {
@@ -377,58 +479,17 @@ fn setup(world: &mut World) {
         })
         .unwrap(),
     );
-    let mut glyphs = BTreeMap::new();
-    for (c, rows) in [
-        ('0', [7, 5, 5, 5, 7]),
-        ('1', [2, 6, 2, 2, 7]),
-        ('2', [7, 1, 7, 4, 7]),
-        ('3', [7, 1, 7, 1, 7]),
-        ('4', [5, 5, 7, 1, 1]),
-        ('5', [7, 4, 7, 1, 7]),
-        ('6', [7, 4, 7, 5, 7]),
-        ('7', [7, 1, 1, 1, 1]),
-        ('8', [7, 5, 7, 5, 7]),
-        ('9', [7, 5, 7, 1, 7]),
-        ('H', [5, 5, 7, 5, 5]),
-        ('P', [6, 5, 6, 4, 4]),
-        ('T', [7, 2, 2, 2, 2]),
-        ('I', [7, 2, 2, 2, 7]),
-        ('M', [5, 7, 7, 5, 5]),
-        ('E', [7, 4, 6, 4, 7]),
-        ('W', [5, 5, 7, 7, 5]),
-        ('O', [7, 5, 5, 5, 7]),
-        ('N', [5, 7, 7, 7, 5]),
-        ('L', [4, 4, 4, 4, 7]),
-        ('S', [7, 4, 7, 1, 7]),
-        ('R', [6, 5, 6, 5, 5]),
-        ('A', [2, 5, 7, 5, 5]),
-        ('D', [6, 5, 5, 5, 6]),
-        ('Y', [5, 5, 2, 2, 2]),
-        ('.', [0, 0, 0, 0, 2]),
-        ('/', [1, 1, 2, 4, 4]),
-    ] {
-        glyphs.insert(
-            c,
-            assets.insert(
-                Image::from_fn(3, 5, |x, y| {
-                    if rows[y as usize] & (1 << (2 - x)) != 0 {
-                        Color::rgb(225, 239, 249)
-                    } else {
-                        Color::rgba(0, 0, 0, 0)
-                    }
-                })
-                .unwrap(),
-            ),
-        );
-    }
+    let font = BitmapFont::tiny(&mut assets);
+    world.insert_resource(font);
     world.insert_resource(assets);
     world.insert_resource(Art {
         player,
         enemy,
         floor,
-        glyphs,
     });
     world.insert_resource(Run::default());
+    world.insert_resource(RestartEpoch::default());
+    world.insert_resource(UiPointers::default());
     crate::live::begin_recording(world);
     world.spawn_with((initial_position(), Player, Name::new("player")));
     for index in 0..14 {
@@ -438,8 +499,57 @@ fn setup(world: &mut World) {
             Name::new(format!("enemy-{index}")),
         ));
     }
+    let color = Color::rgb(225, 239, 249);
+    world.spawn_with((
+        HudKind::Status,
+        UiNode::new(4, 3, 76, 5),
+        UiText::new("").with_color(color),
+        Name::new("ui/status"),
+    ));
+    world.spawn_with((
+        HudKind::Restart,
+        UiNode::new(4, 10, 36, 5),
+        UiText::new("").with_color(color),
+        UiButton::default(),
+        RestartButton,
+        Name::new("ui/restart"),
+    ));
+    world.spawn_with((
+        HudKind::Dash,
+        UiNode::new(112, 10, 40, 5),
+        UiText::new("").with_color(color),
+        Name::new("ui/dash"),
+    ));
+    sync_hud(world);
     crate::live::finish_recording(world);
 }
+
+fn sync_hud(world: &mut World) {
+    let run = *world.resource::<Run>().unwrap();
+    let entities: Vec<_> = world
+        .iter::<HudKind>()
+        .map(|(entity, kind)| (entity, *kind))
+        .collect();
+    for (entity, kind) in entities {
+        let text = match kind {
+            HudKind::Status => format!("HP {}   TIME {:02}/20", run.health, run.elapsed / 60),
+            HudKind::Restart => match run.outcome {
+                Outcome::Running => "R RESTART",
+                Outcome::Won => "WON R RESTART",
+                Outcome::Lost => "LOST R RESTART",
+            }
+            .to_owned(),
+            HudKind::Dash if run.dash_cooldown == 0 => "DASH READY".into(),
+            HudKind::Dash => {
+                let tenths = run.dash_cooldown.div_ceil(6);
+                format!("DASH {}.{}S", tenths / 10, tenths % 10)
+            }
+        };
+        world.get_mut::<UiNode>(entity).unwrap().width = text.chars().count() as u32 * 4;
+        world.get_mut::<UiText>(entity).unwrap().text = text;
+    }
+}
+
 fn simulate(world: &mut World) {
     let mut run = *world.resource::<Run>().unwrap();
     if run.outcome != Outcome::Running {
@@ -543,30 +653,7 @@ fn render_frame(world: &World) -> RenderFrame {
                 frame.push(SpriteDraw::new(sprite, p.x, p.y));
             }
         }
-        let run = world.resource::<Run>().unwrap();
-        let hud = format!("HP {}   TIME {:02}/20", run.health, run.elapsed / 60);
-        let outcome = match run.outcome {
-            Outcome::Running => "R RESTART",
-            Outcome::Won => "WON R RESTART",
-            Outcome::Lost => "LOST R RESTART",
-        };
-        let dash = if run.dash_cooldown == 0 {
-            "DASH READY".to_owned()
-        } else {
-            let tenths = run.dash_cooldown.div_ceil(6);
-            format!("DASH {}.{}S", tenths / 10, tenths % 10)
-        };
-        for (line, x, y) in [
-            (hud.as_str(), 4, 3),
-            (outcome, 4, 10),
-            (dash.as_str(), 112, 10),
-        ] {
-            for (i, c) in line.chars().enumerate() {
-                if let Some(id) = art.glyphs.get(&c) {
-                    frame.push(SpriteDraw::new(*id, x + i as i32 * 4, y));
-                }
-            }
-        }
+        append_ui(world, &mut frame);
     }
     frame
 }
@@ -905,6 +992,91 @@ mod tests {
         assert_eq!(
             image_checksum(&render_image(a.world()).unwrap()),
             image_checksum(&render_image(b.world()).unwrap())
+        );
+    }
+    #[test]
+    fn hud_entities_follow_game_state_and_restart_uses_the_entity_button() {
+        let mut app = ready();
+        assert_eq!(app.world().iter::<UiNode>().count(), 3);
+        let restart_button = app.world().iter::<RestartButton>().next().unwrap().0;
+        assert_eq!(
+            app.world().get::<UiText>(restart_button).unwrap().text,
+            "R RESTART"
+        );
+        let mut input = InteractiveInput::default();
+        input.set_action("dash", true).unwrap();
+        input.tick(&mut app);
+        let dash = app
+            .world()
+            .iter::<HudKind>()
+            .find(|(_, kind)| matches!(kind, HudKind::Dash))
+            .unwrap()
+            .0;
+        assert_eq!(app.world().get::<UiText>(dash).unwrap().text, "DASH 2.0S");
+        let elapsed = app.world().resource::<Run>().unwrap().elapsed;
+        let clock = app.world().resource::<FixedTime>().unwrap().tick();
+        assert!(handle_ui_pointer(&mut app, Some((8, 12)), true).consumed);
+        assert_eq!(
+            app.world().resource::<Run>().unwrap().elapsed,
+            elapsed,
+            "press alone must not activate"
+        );
+        assert!(
+            handle_ui_pointer(&mut app, Some((100, 50)), false)
+                .activated
+                .is_none()
+        );
+        assert_eq!(app.world().resource::<Run>().unwrap().elapsed, elapsed);
+        handle_ui_pointer(&mut app, Some((8, 12)), true);
+        cancel_ui_pointer(&mut app);
+        assert!(
+            handle_ui_pointer(&mut app, Some((8, 12)), false)
+                .activated
+                .is_none()
+        );
+        assert_eq!(app.world().resource::<Run>().unwrap().elapsed, elapsed);
+        handle_ui_pointer(&mut app, Some((8, 12)), true);
+        assert!(
+            update_ui_pointer(&mut app, Some((8, 12)), false, true)
+                .activated
+                .is_none(),
+            "local press cannot pair with controlled release"
+        );
+        cancel_ui_pointer(&mut app);
+        update_ui_pointer(&mut app, Some((8, 12)), true, true);
+        assert!(
+            handle_ui_pointer(&mut app, Some((8, 12)), false)
+                .activated
+                .is_none(),
+            "controlled press cannot pair with local release"
+        );
+        cancel_ui_pointer(&mut app);
+        assert_eq!(app.world().resource::<Run>().unwrap().elapsed, elapsed);
+        app.world_mut()
+            .get_mut::<UiButton>(restart_button)
+            .unwrap()
+            .enabled = false;
+        assert!(handle_ui_pointer(&mut app, Some((8, 12)), true).consumed);
+        assert!(
+            handle_ui_pointer(&mut app, Some((8, 12)), false)
+                .activated
+                .is_none()
+        );
+        app.world_mut()
+            .get_mut::<UiButton>(restart_button)
+            .unwrap()
+            .enabled = true;
+        handle_ui_pointer(&mut app, Some((8, 12)), true);
+        assert_eq!(
+            handle_ui_pointer(&mut app, Some((8, 12)), false).activated,
+            Some(restart_button)
+        );
+        assert_eq!(app.world().resource::<Run>().unwrap().elapsed, 0);
+        assert_eq!(app.world().resource::<FixedTime>().unwrap().tick(), clock);
+        assert_eq!(app.world().get::<UiText>(dash).unwrap().text, "DASH READY");
+        assert_eq!(
+            image_checksum(&render_image(app.world()).unwrap()),
+            0xe096_abf9_4fd1_2c24
         );
     }
 }

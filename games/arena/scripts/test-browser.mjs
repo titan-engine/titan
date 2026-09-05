@@ -19,6 +19,7 @@ for (const request of [
   { type: 'step', frames: 1 },
   { type: 'inject_input', frame: 1, actions: {} },
   { type: 'invoke', name: 'restart', arguments: {} },
+  { type: 'invoke', name: 'ui_pointer', arguments: {x:8,y:12,pressed:true} },
   { type: 'set_field', entity: { index: 0, generation: 0 }, component: 'Position', field: 'x', value: 0 },
 ]) { assert.equal(fail(readonly, request, 'mutation_disabled').observed_frame, 0); }
 for (const [change, code] of [[{ schema_version: 999 }, 'protocol_mismatch'], [{ target_instance: 'missing' }, 'not_found']]) {
@@ -27,11 +28,15 @@ for (const [change, code] of [[{ schema_version: 999 }, 'protocol_mismatch'], [{
 }
 assert.equal(JSON.parse(readonly.handle('no JSON')).error.code, 'invalid_value');
 const inactiveEntities = inspectEntities(request => raw(readonly, request));
-assert.equal(inactiveEntities.entities.length, 15);
+assert.equal(inactiveEntities.entities.length, 18);
 assert.equal(inactiveEntities.truncated, false);
 assert.equal(inactiveEntities.entities.filter(entity => entityRow(entity)[2] === 'Player').length, 1);
 assert.equal(inactiveEntities.entities.filter(entity => entityRow(entity)[2] === 'Inactive · awaiting spawn').length, 14);
-assert.deepEqual(inactiveEntities.entities.map(entity => entity.name), ['player', ...Array.from({length:14}, (_, index) => `enemy-${index}`)]);
+assert.deepEqual(inactiveEntities.entities.map(entity => entity.name), ['player', ...Array.from({length:14}, (_, index) => `enemy-${index}`), 'ui/status', 'ui/restart', 'ui/dash']);
+const uiButton = inactiveEntities.entities.find(entity => entity.name === 'ui/restart');
+const uiTextKey = Object.keys(uiButton.components).find(name => name.endsWith('::UiText'));
+assert.equal(uiButton.components[uiTextKey].text, 'R RESTART');
+assert.equal(uiButton.component_fields[uiTextKey].text.writable, false);
 readonly.free();
 const game = new BrowserRuntime(true);
 assert.equal(ok(game, { type: 'capabilities' }).mutation_enabled, true);
@@ -49,7 +54,7 @@ ok(game, { type: 'inject_input', frame: 1, actions: { right: { kind: 'button', v
 ok(game, { type: 'step', frames: 1 });
 assert.equal(position().x, before.x + 1);
 const pursuingEntities = inspectEntities(request => raw(game, request));
-assert.equal(pursuingEntities.entities.length, 15);
+assert.equal(pursuingEntities.entities.length, 18);
 assert.equal(pursuingEntities.entities.filter(entity => entityRow(entity)[2] === 'Active pursuer').length, 1);
 assert.equal(pursuingEntities.entities.filter(entity => entityRow(entity)[2] === 'Inactive · awaiting spawn').length, 13);
 assert.equal(ok(game, {type:'status'}).current_frame, 1, 'entity inspection does not advance simulation');
@@ -92,6 +97,13 @@ ok(game, { type: 'inject_input', frame: clock + 124, actions: { dash: { kind: 'b
 ok(game, { type: 'invoke', name: 'restart', arguments: {} });
 ok(game, { type: 'step', frames: 1 });
 assert.deepEqual(position(), before, 'restart clears pending dash');
+const clickFrame = ok(game, {type:'status'}).current_frame;
+ok(game, {type:'invoke', name:'ui_pointer', arguments:{x:8,y:12,pressed:true}});
+assert.equal(ok(game, {type:'query', name:'arena_state'}).value.run.elapsed, 1, 'press alone does not activate');
+ok(game, {type:'invoke', name:'ui_pointer', arguments:{x:8,y:12,pressed:false}});
+assert.equal(ok(game, {type:'status'}).current_frame, clickFrame);
+assert.equal(ok(game, {type:'capture'}).checksum, initial.checksum);
+assert.equal(ok(game, {type:'query', name:'recording'}).value.recorded_ticks, 0);
 game.free();
 const arena = new BrowserRuntime(true);
 for (let tick=0; tick<1200; tick++) {
@@ -133,5 +145,19 @@ ok(live, {type:'step', frames:1});
 assert.equal(ok(live, {type:'status'}).current_frame, 2);
 live.set_control_enabled(false);
 fail(live, {type:'step', frames:1}, 'mutation_disabled');
+const beforePointer = ok(live, {type:'query', name:'arena_state'}).value;
+assert.equal(live.pointer(8, 12, true), true);
+assert.equal(ok(live, {type:'query', name:'arena_state'}).value.run.elapsed, beforePointer.run.elapsed);
+live.pointer(100, 50, false);
+assert.equal(ok(live, {type:'query', name:'arena_state'}).value.run.elapsed, beforePointer.run.elapsed, 'release outside cancels');
+live.pointer(8, 12, true); live.cancel_pointer(); live.pointer(8, 12, false);
+assert.equal(ok(live, {type:'query', name:'arena_state'}).value.run.elapsed, beforePointer.run.elapsed, 'canceled gesture cannot restart');
+live.pointer(8, 12, true); live.pointer(8, 12, false);
+const restarted = ok(live, {type:'query', name:'arena_state'}).value;
+assert.equal(restarted.run.elapsed, 0, 'local ECS button works paused with readonly inspection');
+assert.equal(restarted.frame, beforePointer.frame, 'button preserves host clock');
+assert.equal(restarted.paused, true);
+assert.equal(restarted.recording.recorded_ticks, 0);
+assert.equal(ok(live, {type:'capture'}).checksum, 'e096abf94fd12c24');
 live.free();
 console.log('live headless WASM session: read-only inspection, opt-in, same-instance step and exact recording replay passed');
