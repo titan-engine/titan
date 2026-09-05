@@ -131,8 +131,11 @@ try:
     assert data['world_state']['positions']['run']['outcome']=='Lost'
     shutil.copy(call('capture')['response']['artifact'],evidence/'lost.ppm')
 finally:
-    processes.terminate(p)
-assert not call('instances')['instances']
+    try:
+        processes.graceful_shutdown(p)
+        assert not call('instances')['instances']
+    finally:
+        processes.terminate(p)
 p=processes.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],project=GAME,instance=instance,cwd=GAME,stdout=subprocess.DEVNULL)
 try:
     wait_ready(p)

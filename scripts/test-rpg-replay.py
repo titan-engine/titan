@@ -215,13 +215,16 @@ def main():
                     assert query('save') == initial and checksum() == initial_checksum
                     assert len(gameplay_entities()) == 6 and ui_text() == 'SHARDS 0/3'
                 finally:
-                    processes.terminate(process)
-                    log.seek(0)
-                    output = log.read()
-                    assert process.returncode == 0, output
-                    if gpu:
-                        assert 'GPU frames' in output, output
-                assert not call('instances')['instances']
+                    try:
+                        processes.graceful_shutdown(process)
+                        log.seek(0)
+                        output = log.read()
+                        assert process.returncode == 0, output
+                        if gpu:
+                            assert 'GPU frames' in output, output
+                        assert not call('instances')['instances']
+                    finally:
+                        processes.terminate(process)
 
     scenario(False)
     if options.gpu:

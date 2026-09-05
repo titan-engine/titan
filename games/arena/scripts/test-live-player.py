@@ -240,11 +240,14 @@ def scenario(control):
         verification = json.loads(replay.stdout)
         assert verification['checksum'] == recording['response']['value']['final_checksum'], verification
     finally:
-        processes.terminate(process)
-        stdout, stderr = process.communicate()
-        assert process.returncode == 0, (process.returncode, stdout, stderr)
-        assert 'rendered ' in stdout and ' GPU frames;' in stdout, stdout
-        assert not any(item['instance_id'] == instance for item in call(instance, 'instances')['instances'])
+        try:
+            processes.graceful_shutdown(process)
+            assert not any(item['instance_id'] == instance for item in call(instance, 'instances')['instances'])
+            stdout, stderr = process.communicate()
+            assert process.returncode == 0, (process.returncode, stdout, stderr)
+            assert 'rendered ' in stdout and ' GPU frames;' in stdout, stdout
+        finally:
+            processes.terminate(process)
 
 
 scenario(False)

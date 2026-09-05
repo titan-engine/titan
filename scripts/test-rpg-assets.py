@@ -116,10 +116,13 @@ def main():
                 tree.write_bytes(b'broken after startup')
                 assert call('capture')['response']['checksum'] == second
             finally:
-                processes.terminate(process)
-                log.seek(0)
-                assert process.returncode == 0, log.read()
-        assert not call('instances')['instances']
+                try:
+                    processes.graceful_shutdown(process)
+                    log.seek(0)
+                    assert process.returncode == 0, log.read()
+                    assert not call('instances')['instances']
+                finally:
+                    processes.terminate(process)
 
         for path in (sprite, tree):
             sprite.write_bytes((ROOT / 'assets/player.png').read_bytes())
