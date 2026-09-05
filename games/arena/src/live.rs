@@ -18,6 +18,7 @@ use titan_protocol::{
 
 use crate::game::{self, Action};
 
+pub const MAX_SEEK_TICKS_PER_UPDATE: usize = 120;
 pub const MAX_RECORDING_TICKS: usize = 3_600;
 pub const MAX_RECORDING_BYTES: usize = 2 * 1024 * 1024;
 const ACTION_SCHEMA: &str = "arena-buttons-v1:up,down,left,right,dash";
@@ -161,6 +162,17 @@ struct LoadReplayArgs {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct SeekReplayArgs {
+    position: usize,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReplaySpeedArgs {
+    speed: f64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NoArguments {}
 
 pub(crate) fn register_queries(inspector: &mut Inspector) {
@@ -278,6 +290,27 @@ impl ArenaSession {
                 |app, args: LoadReplayArgs| load_replay(app, args.recording),
             )
             .expect("unique replay load");
+        inspector.register_command(
+            CommandMetadata {
+                name: "seek_replay".into(),
+                description: "Seek a paused replay to a consumed-tick position; advances at most 120 ticks per host update.".into(),
+                arguments: [("position".into(), FieldMetadata {
+                    type_name: "usize".into(), description: "Consumed ticks from 0 through replay total.".into(),
+                    writable: false, minimum: Some(0.0), maximum: Some(MAX_RECORDING_TICKS as f64), unit: Some("ticks".into()),
+                })].into(),
+            }, |app, args: SeekReplayArgs| seek_replay(app, args.position),
+        ).expect("unique replay seek");
+        inspector.register_command(
+            CommandMetadata {
+                name: "replay_speed".into(),
+                description: "Set paused replay wall-clock speed; fixed ticks and manual stepping stay unchanged.".into(),
+                arguments: [("speed".into(), FieldMetadata {
+                    type_name: "f64".into(), description: "One of 0.25, 0.5, 1, 2 or 4.".into(),
+                    writable: false, minimum: Some(0.25), maximum: Some(4.0), unit: None,
+                })].into(),
+            }, |app, args: ReplaySpeedArgs| set_replay_speed(app, args.speed),
+        ).expect("unique replay speed");
+
         for (name, callback) in [
             (
                 "restart_replay",
@@ -308,7 +341,7 @@ impl ArenaSession {
                         arguments: BTreeMap::new(),
                     },
                     move |app, _: NoArguments| {
-                        if !paused && replay_complete(app.world()) { return Ok(()); }
+                        if !paused && (replay_complete(app.world()) || replay_seeking(app.world())) { return Ok(()); }
                         app.world_mut().resource_mut::<PlaybackControl>().unwrap().paused = paused;
                         Ok(())
                     },
@@ -352,10 +385,48 @@ impl ArenaSession {
         self.inspector.note_external_change();
         Ok(())
     }
+    pub fn replay_seeking(&self) -> bool {
+        replay_seeking(self.app.world())
+    }
+    pub fn replay_speed(&self) -> f64 {
+        self.app
+            .world()
+            .resource::<ReplayState>()
+            .map_or(1.0, ReplayState::speed)
+    }
+    pub fn set_replay_speed(&mut self, speed: f64) -> Result<(), ProtocolError> {
+        set_replay_speed(&mut self.app, speed)?;
+        self.reset_timing_and_input();
+        self.inspector.note_external_change();
+        Ok(())
+    }
+    /// Queue a bounded seek while paused. Targets include both origin and EOF.
+    pub fn seek_replay(&mut self, position: usize) -> Result<(), ProtocolError> {
+        seek_replay(&mut self.app, position)?;
+        self.reset_timing_and_input();
+        self.inspector.note_external_change();
+        Ok(())
+    }
+    /// Hosts call once per update, including while paused, before servicing controls.
+    pub fn update_replay_seek(&mut self) -> usize {
+        let ticks = self
+            .app
+            .world()
+            .resource::<ReplayState>()
+            .map_or(0, |replay| replay.seek_budget(MAX_SEEK_TICKS_PER_UPDATE));
+        if ticks > 0 {
+            self.app.advance_fixed(ticks as u64);
+            self.inspector.note_external_change();
+            if !self.replay_seeking() {
+                self.reset_timing_and_input();
+            }
+        }
+        ticks
+    }
     /// Consume exactly one recorded frame while paused; rejects completion.
     pub fn step_replay(&mut self) -> Result<(), ProtocolError> {
         require_paused(&self.app)?;
-        if !self.replay_active() || replay_complete(self.app.world()) {
+        if !self.replay_active() || replay_complete(self.app.world()) || self.replay_seeking() {
             return Err(invalid("no remaining replay frames"));
         }
         self.app.advance_fixed(1);
@@ -443,7 +514,7 @@ impl ArenaSession {
     }
 
     fn set_paused(&mut self, paused: bool) {
-        if !paused && replay_complete(self.app.world()) {
+        if !paused && (replay_complete(self.app.world()) || self.replay_seeking()) {
             return;
         }
         if self.paused() != paused {
@@ -479,11 +550,12 @@ impl ArenaSession {
         let reset_epoch = game::restart_epoch(&self.app);
         self.inspector.set_controlled(was_paused);
         self.inspector.set_step_budget(StepBudget {
-            max_frames: self
-                .app
-                .world()
-                .resource::<ReplayState>()
-                .map_or(StepBudget::DEFAULT.max_frames, |r| r.remaining() as u64),
+            max_frames: self.app.world().resource::<ReplayState>().map_or(
+                StepBudget::DEFAULT.max_frames,
+                |r| {
+                    if r.seeking() { 0 } else { r.remaining() as u64 }
+                },
+            ),
             ..StepBudget::DEFAULT
         });
         let allowed = !self.replay_active()
@@ -497,6 +569,8 @@ impl ArenaSession {
                         | "load_replay"
                         | "restart_replay"
                         | "stop_replay"
+                        | "seek_replay"
+                        | "replay_speed"
                 ),
                 _ => true,
             };
@@ -506,7 +580,13 @@ impl ArenaSession {
             self.enable_control && allowed,
             request,
         );
-        if game::restart_epoch(&self.app) != reset_epoch || was_paused != self.paused() {
+        let replay_control_changed = matches!(&request.request, Request::Invoke { name, .. }
+            if matches!(name.as_str(), "seek_replay" | "replay_speed"))
+            && matches!(response.outcome, ResponseOutcome::Success { .. });
+        if game::restart_epoch(&self.app) != reset_epoch
+            || was_paused != self.paused()
+            || replay_control_changed
+        {
             self.reset_timing_and_input();
         }
         if matches!(response.outcome, ResponseOutcome::Success { .. }) {
@@ -609,6 +689,43 @@ fn require_paused(app: &App) -> Result<(), ProtocolError> {
     }
     Ok(())
 }
+fn replay_seeking(world: &World) -> bool {
+    world
+        .resource::<ReplayState>()
+        .is_some_and(ReplayState::seeking)
+}
+fn set_replay_speed(app: &mut App, speed: f64) -> Result<(), ProtocolError> {
+    require_paused(app)?;
+    app.world_mut()
+        .resource_mut::<ReplayState>()
+        .ok_or_else(|| invalid("no replay loaded"))?
+        .set_speed(speed)
+        .map_err(invalid)
+}
+fn seek_replay(app: &mut App, position: usize) -> Result<(), ProtocolError> {
+    require_paused(app)?;
+    let replay = app
+        .world()
+        .resource::<ReplayState>()
+        .ok_or_else(|| invalid("no replay loaded"))?;
+    if position > replay.recording().frames.len() {
+        return Err(invalid("seek position exceeds replay total"));
+    }
+    if position < replay.position() {
+        let mut replay = app.world_mut().remove_resource::<ReplayState>().unwrap();
+        restore_origin(app, replay.recording())?;
+        replay.rewind();
+        app.world_mut().insert_resource(replay);
+        disable_replay_buttons(app);
+    }
+    app.world_mut()
+        .resource_mut::<ReplayState>()
+        .unwrap()
+        .seek(position)
+        .map_err(invalid)?;
+    finish_replay(app.world_mut());
+    Ok(())
+}
 fn replay_complete(world: &World) -> bool {
     world
         .resource::<ReplayState>()
@@ -634,6 +751,11 @@ fn install_replay(
     restore_origin(app, &recording)?;
     app.world_mut()
         .insert_resource(ReplayState::new(recording, expected_save));
+    disable_replay_buttons(app);
+    finish_replay(app.world_mut());
+    Ok(())
+}
+fn disable_replay_buttons(app: &mut App) {
     let buttons: Vec<_> = app
         .world()
         .iter::<titan::ui::UiButton>()
@@ -645,8 +767,6 @@ fn install_replay(
             .unwrap()
             .enabled = false;
     }
-    finish_replay(app.world_mut());
-    Ok(())
 }
 fn restart_replay(app: &mut App) -> Result<(), ProtocolError> {
     require_paused(app)?;
@@ -700,6 +820,130 @@ fn finish_replay(world: &mut World) {
 mod tests {
     use super::*;
     use titan_protocol::{EntityId, InputValue, Response};
+
+    #[test]
+    fn bounded_seek_retargets_and_matches_sequential_snapshots_and_pixels() {
+        let mut source = session(false);
+        source.resume();
+        source.set_action("right", true).unwrap();
+        let mut snapshots = Vec::new();
+        let mut checksums = Vec::new();
+        for _ in 0..301 {
+            snapshots.push(game::export_save(source.app()).unwrap());
+            checksums.push(game::image_checksum(
+                &game::render_image(source.app().world()).unwrap(),
+            ));
+            source.tick();
+        }
+        source.pause();
+        let recording = recording_value(source.app()).unwrap();
+        let mut target = session(true);
+        target.load_replay(recording.clone()).unwrap();
+        target.set_replay_speed(4.0).unwrap();
+        let initial_epoch = target.clock_epoch();
+        target.seek_replay(300).unwrap();
+        assert!(target.clock_epoch() > initial_epoch);
+        assert_eq!(target.update_replay_seek(), 120);
+        assert_eq!(target.replay_status()["target"], 300);
+        assert!(target.step_replay().is_err());
+        target.resume();
+        assert!(target.paused());
+        assert!(matches!(
+            request(&mut target, Request::Step { frames: 1 }).outcome,
+            ResponseOutcome::Failure { .. }
+        ));
+        target.set_action("left", true).unwrap();
+        target.seek_replay(140).unwrap();
+        assert_eq!(target.update_replay_seek(), 20);
+        assert!(!target.replay_seeking());
+        assert_eq!(game::export_save(target.app()).unwrap(), snapshots[140]);
+        assert_eq!(
+            game::image_checksum(&game::render_image(target.app().world()).unwrap()),
+            checksums[140]
+        );
+        let host_frame = target.app.world().resource::<FixedTime>().unwrap().tick();
+        target.seek_replay(60).unwrap();
+        assert_eq!(
+            target.app.world().resource::<FixedTime>().unwrap().tick(),
+            host_frame
+        );
+        assert_eq!(target.replay_speed(), 4.0);
+        assert_eq!(target.update_replay_seek(), 60);
+        assert_eq!(game::export_save(target.app()).unwrap(), snapshots[60]);
+        target.seek_replay(0).unwrap();
+        assert_eq!(target.update_replay_seek(), 0);
+        assert_eq!(game::export_save(target.app()).unwrap(), snapshots[0]);
+        target.seek_replay(301).unwrap();
+        assert_eq!(target.update_replay_seek(), 120);
+        assert_eq!(target.update_replay_seek(), 120);
+        assert_eq!(target.update_replay_seek(), 61);
+        assert_eq!(target.update_replay_seek(), 0);
+        assert_eq!(target.replay_status()["verified"], true);
+        assert_eq!(
+            game::export_save(target.app()).unwrap(),
+            recording["final_snapshot"]
+        );
+        assert_eq!(recording_value(target.app()).unwrap(), recording);
+        target.restart_replay().unwrap();
+        assert_eq!(target.replay_status()["verified"], serde_json::Value::Null);
+        assert_eq!(target.replay_speed(), 1.0);
+        target.seek_replay(250).unwrap();
+        target.stop_replay().unwrap();
+        assert_eq!(target.update_replay_seek(), 0);
+        assert!(!target.replay_seeking());
+    }
+
+    #[test]
+    fn seek_and_speed_commands_validate_without_mutating_and_reset_clock_epoch() {
+        let mut source = session(false);
+        source.resume();
+        source.tick();
+        source.pause();
+        let mut target = session(true);
+        target
+            .load_replay(recording_value(source.app()).unwrap())
+            .unwrap();
+        let invoke = |name: &str, key: &str, value| Request::Invoke {
+            name: name.into(),
+            arguments: [(key.into(), value)].into(),
+        };
+        let before = request(&mut target, Request::Status);
+        let epoch = target.clock_epoch();
+        for action in [
+            invoke("seek_replay", "position", 2.into()),
+            invoke("seek_replay", "position", (-1).into()),
+            invoke("seek_replay", "position", 0.5.into()),
+            invoke("replay_speed", "speed", 3.into()),
+            invoke("replay_speed", "speed", "fast".into()),
+        ] {
+            let response = request(&mut target, action);
+            assert!(matches!(response.outcome, ResponseOutcome::Failure { .. }));
+            assert_eq!(response.state_revision, before.state_revision);
+            assert_eq!(response.observed_frame, before.observed_frame);
+            assert_eq!(target.clock_epoch(), epoch);
+        }
+        for speed in [0.25, 0.5, 1.0, 2.0, 4.0] {
+            let epoch = target.clock_epoch();
+            success(request(
+                &mut target,
+                invoke("replay_speed", "speed", speed.into()),
+            ));
+            assert_eq!(target.replay_speed(), speed);
+            assert!(target.clock_epoch() > epoch);
+        }
+        target.resume();
+        assert!(target.seek_replay(1).is_err());
+        assert!(target.set_replay_speed(1.0).is_err());
+        target.pause();
+        target.set_control_enabled(false);
+        assert!(
+            matches!(request(&mut target, invoke("seek_replay", "position", 1.into())).outcome,
+            ResponseOutcome::Failure { error } if error.code == ErrorCode::MutationDisabled)
+        );
+        target.seek_replay(1).unwrap();
+        assert_eq!(target.update_replay_seek(), 1);
+        assert_eq!(target.replay_status()["verified"], true);
+    }
 
     #[test]
     fn snapshot_origin_playback_matches_complete_state_and_pixels() {
