@@ -109,9 +109,10 @@ handle. No RPG dependency or game-specific rendering policy enters this API.
 ## 3D rendering contract
 
 The CPU data/math boundary is implemented in `titan::render::three_d` alongside
-unchanged 2D APIs. GPU drawing, players and captures below remain agreed design,
-**not implemented 3D capabilities**. Execution scope lives in
-[#43](https://github.com/titan-engine/titan/issues/43) and the linked issues of
+unchanged 2D APIs. `titan_render_wgpu::GpuRenderer3d` consumes these frames into
+bounded offscreen color and depth targets. Game players, UI composition and
+asynchronous captures below remain agreed design, **not implemented 3D
+capabilities**. Their execution scope lives in the linked issues of
 [#42](https://github.com/titan-engine/titan/issues/42).
 
 ### Coordinates and data
@@ -227,7 +228,8 @@ Use an sRGB attachment's conversion or an explicit conversion for a non-sRGB
 output, never both. Do not apply the 2D renderer's byte-space lighting/blending
 convention to 3D.
 
-Reuse the existing entity-based text UI for a small progress/completion overlay.
+Player/overlay integration remains future work: reuse the existing entity-based
+text UI for a small progress/completion overlay.
 Compose it after the scene with depth disabled, accounting explicitly for its
 byte-space color convention at the output boundary. Include that overlay in
 captures. This does not select new widgets, typography or general UI layout.
@@ -236,8 +238,8 @@ redesigned; migrate current callers and document material changes instead of
 preserving obsolete interfaces. Keep the existing 2D visual references intact.
 
 The validation targets are native Metal on the reference macOS machine and
-actual browser WebGPU and WebGL2 paths. This is a target matrix, not a claim that
-3D support has shipped or has been verified. Probe required color/depth/readback
+actual browser WebGPU and WebGL2 paths. The low-level GPU verification fixture below exercises this matrix separately
+from future game-player integration. Probe required color/depth/readback
 formats and limits on each backend; explicitly report unavailable capability,
 with no silent software 3D fallback. Existing 2D WebGL2 requires floating-point
 color attachments; a shared overlay path must account for that requirement.
@@ -257,3 +259,44 @@ Native offscreen rendering, the actual native player and actual browser GPU
 players each supply evidence; Node WASM execution alone proves no GPU behavior.
 Capture state correspondence follows the [asynchronous capture
 contract](inspection.md#asynchronous-capture-contract).
+
+
+### Low-level GPU verification
+
+`GpuRenderer3d` owns GPU resources, with no `App`, surface, event loop or capture
+protocol. See [its API and lifecycle](../crates/titan-render-wgpu/README.md) for
+construction, preparation, resize, encoding and offscreen texture access.
+Existing 2D callers need no migration. The 3D path uses a separate shader and
+linear-light color policy; the sprite path and exact software references remain
+unchanged.
+
+Run the shared GPU fixture natively and in an actual browser:
+
+```sh
+cargo test -p titan-render-wgpu --test three_d -- --ignored --nocapture
+python3 scripts/build-render-3d-browser.py
+python3 -m http.server 8000 --bind 127.0.0.1 --directory web
+# Open /render-3d/?backend=webgpu, then /render-3d/?backend=webgl2.
+```
+
+Each browser URL requests exactly one backend; unavailable adapters are failures,
+not fallback passes. The page runs actual WASM vertex/fragment shaders and GPU
+readback, displays the resulting images and offers full JSON evidence for
+download. Browser execution has a 60-second deadline. A timeout requires reload
+to discard that test session; it does not claim cancellation of GPU work.
+
+The fixtures declare interior probe regions and color tolerances before
+comparison. Expected images mark only asserted regions; unasserted edges do not
+establish portable rasterization equality. Native artifacts and browser downloads
+retain actual, expected and difference pixels plus adapter and comparison details.
+CI runs native readback on macOS, uploads its JSON/PNG triples for seven days,
+and compiles the actual browser fixture. Browser GPU execution remains an
+explicit local verification step. Fixture hosts probe the required format usages
+and collect wgpu validation errors before accepting evidence.
+
+The fixture has been verified on Apple M5 Pro native Metal, browser WebGPU and
+browser WebGL2 (Chromium ANGLE Metal). Each backend passed 36 image cases with
+50 interior probes at a declared per-channel tolerance of 2. These results cover
+the low-level offscreen renderer, not a native/browser 3D game player. Native
+artifacts default to the system temporary directory's `titan-3d-evidence` folder;
+set `TITAN_3D_EVIDENCE_DIR` to retain them elsewhere.

@@ -1,7 +1,10 @@
-//! App-independent textured sprite rendering for native wgpu and browser WebGPU.
-//! Render into a logical-size framebuffer, then present it with nearest sampling.
+//! App-independent sprite and opaque 3D rendering for native and browser wgpu.
+//! Sprites use a logical framebuffer and nearest presentation; 3D owns bounded
+//! offscreen color/depth targets.
 mod surface;
+mod three_d;
 pub use surface::SurfaceRenderer;
+pub use three_d::{Gpu3dError, GpuRenderer3d, MAX_3D_TARGET_BYTES};
 
 use bytemuck::{Pod, Zeroable};
 use std::{collections::BTreeMap, fmt};

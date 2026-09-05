@@ -224,6 +224,9 @@ jobs:
       - name: Exercise headless 3D primitives in actual WebAssembly
         run: node scripts/test-render-3d.mjs
 
+      - name: Build actual browser 3D GPU verification fixture
+        run: python3 scripts/build-render-3d-browser.py
+
       - name: Build the browser adapter and run the real WASM control loop
         run: |
           python3 scripts/build-browser.py
@@ -288,6 +291,20 @@ jobs:
 
       - name: Build and run relocated bundles from copied games
         run: python3 scripts/test-macos-bundles.py
+
+      - name: Verify native 3D shaders and offscreen readback
+        env:
+          TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
+        run: cargo test -p titan-render-wgpu --test three_d -- --ignored
+
+      - name: Retain native 3D GPU comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: three-d-gpu-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/titan-3d-evidence/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Inspect and replay the actual native arena player
         run: python3 games/arena/scripts/test-live-player.py
