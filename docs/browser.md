@@ -1,6 +1,7 @@
 # Browser inspection
 
-RPG pages fetch `../assets/player.png` before constructing their runtime/player.
+RPG pages fetch `../assets/player.png` and `../assets/tree.png` before constructing
+their runtime/player. Both must succeed.
 The browser build copies root `assets/` into `web/assets`; replace the served file
 and reload to change art without rebuilding WASM. Startup failures expose Retry
 and no playable world. See [asset behavior](assets.md) for limits and replay rules.

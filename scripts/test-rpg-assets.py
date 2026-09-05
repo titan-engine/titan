@@ -49,6 +49,8 @@ def main():
         assets.mkdir()
         sprite = assets / 'player.png'
         sprite.write_bytes((ROOT / 'assets/player.png').read_bytes())
+        tree = assets / 'tree.png'
+        tree.write_bytes((ROOT / 'assets/tree.png').read_bytes())
 
         def reference(*arguments):
             output = run([executable, *arguments], project).stdout
@@ -65,6 +67,14 @@ def main():
         sprite.write_bytes(png((30, 220, 230, 255)))
         second = reference('--assets-dir', assets)
         assert len({REFERENCE, first, second}) == 3
+        # Replace only the tree, then both; each role changes pixels independently.
+        sprite.write_bytes((ROOT / 'assets/player.png').read_bytes())
+        tree.write_bytes(png((90, 40, 170, 255), 18, 18))
+        tree_only = reference('--assets-dir', assets)
+        sprite.write_bytes(png((30, 220, 230, 255)))
+        both = reference('--assets-dir', assets)
+        assert len({REFERENCE, first, second, tree_only, both}) == 5
+        second = both
         assert binary_before == (executable.stat().st_mtime_ns, executable.stat().st_size)
 
         instance = f'assets-{os.getpid()}'
@@ -94,7 +104,17 @@ def main():
                 verified = json.loads(run([verifier, record_path, '--assets-dir', assets], project).stdout)
                 assert verified['save'] == save and verified['checksum'] == second
                 rejected = run([verifier, record_path, '--assets-dir', ROOT / 'assets'], project, success=False)
-                assert 'pixels mismatch' in rejected.stderr.lower() and 'same player image' in rejected.stderr.lower(), rejected.stderr
+                assert 'pixels mismatch' in rejected.stderr.lower() and 'image' in rejected.stderr.lower(), rejected.stderr
+                # Either mismatched source must reject fresh replay independently.
+                for path in (sprite, tree):
+                    retained = path.read_bytes()
+                    path.write_bytes((ROOT / 'assets' / path.name).read_bytes())
+                    run([verifier, record_path, '--assets-dir', assets], project, success=False)
+                    path.write_bytes(retained)
+                # Once loaded, disk failures cannot alter this session's art.
+                sprite.write_bytes(b'broken after startup')
+                tree.write_bytes(b'broken after startup')
+                assert call('capture')['response']['checksum'] == second
             finally:
                 if process.poll() is None:
                     process.terminate()
@@ -103,17 +123,22 @@ def main():
                 assert process.returncode == 0, log.read()
         assert not call('instances')['instances']
 
-        for label, data in [('missing', None), ('corrupt', b'not a PNG'),
-                            ('oversized', b'x' * (256 * 1024 + 1)),
-                            ('dimensions', png((0, 0, 0, 255), 65, 1))]:
-            if data is None:
-                sprite.unlink()
-            else:
-                sprite.write_bytes(data)
-            failed = run([executable, '--serve', '--project', project, '--instance', instance,
-                          '--run-for-ms', '1000', '--assets-dir', assets], project, success=False)
-            assert str(sprite) in failed.stderr and '--assets-dir' in failed.stderr, (label, failed.stderr)
-            assert not call('instances')['instances'], label
+        for path in (sprite, tree):
+            sprite.write_bytes((ROOT / 'assets/player.png').read_bytes())
+            tree.write_bytes((ROOT / 'assets/tree.png').read_bytes())
+            for label, data in [('missing', None), ('corrupt', b'not a PNG'),
+                                ('oversized', b'x' * (256 * 1024 + 1)),
+                                ('dimensions', png((0, 0, 0, 255), 65, 1))]:
+                if data is None:
+                    path.unlink()
+                else:
+                    path.write_bytes(data)
+                failed = run([executable, '--serve', '--project', project, '--instance', instance,
+                              '--run-for-ms', '1000', '--assets-dir', assets], project, success=False)
+                assert str(path) in failed.stderr and '--assets-dir' in failed.stderr, (label, failed.stderr)
+                assert not call('instances')['instances'], label
+            path.write_bytes((ROOT / 'assets' / path.name).read_bytes())
+            assert reference('--assets-dir', assets) == REFERENCE
 
         if options.gpu:
             result = run([sys.executable, ROOT / 'scripts/build-rpg-app.py'], ROOT, timeout=180)
@@ -132,6 +157,14 @@ def main():
                 assert rendered and int(rendered[1]) >= 2, played.stdout
                 state = json.loads(played.stdout.split('; ', 1)[1])
                 assert state['collected_shards'] == 3 and state['shrine_active'] is True, state
+            bundled_tree = relocated / 'Contents/Resources/assets/tree.png'
+            assert bundled_tree.read_bytes() == (ROOT / 'assets/tree.png').read_bytes()
+            bundled_tree.write_bytes(png((90, 40, 170, 255), 18, 18))
+            run([bundled_player, '--replay', '--frames', '2', '--run-for-ms', '5000'], project)
+            bundled_tree.unlink()
+            failed = run([bundled_player, '--replay', '--frames', '2'], ROOT, success=False)
+            assert str(bundled_tree) in failed.stderr, failed.stderr
+            bundled_tree.write_bytes((ROOT / 'assets/tree.png').read_bytes())
             bundled_sprite.unlink()
             failed = run([bundled_player, '--replay', '--frames', '2'], ROOT, success=False)
             assert str(bundled_sprite) in failed.stderr, failed.stderr  # No fallback to cwd/assets.

@@ -224,7 +224,7 @@ asset format is also an intended future capability; its design and implementatio
 are not selected. The engine does not prescribe whether source assets were made
 by humans, AI systems or procedural code.
 
-The [first file-backed image exercise](assets.md) now loads a loose PNG into the
+The [file-backed image exercise](assets.md) now loads two loose PNGs into the
 same RGBA `Image` used by procedural generation, with host startup and packaging
 verified across native/browser/headless paths. This is evidence for a shared
 image boundary; caching, asset identity/dependencies, additional formats and

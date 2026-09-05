@@ -1,6 +1,6 @@
 # Interactive rendering
 
-The RPG player now loads a loose PNG at startup into the same engine `Image` as
+The RPG player loads two loose PNGs at startup into the same engine `Image` as
 procedural art. See [asset limits and iteration](assets.md) for native paths,
 browser copies, bundle resources and the explicit procedural comparison.
 
