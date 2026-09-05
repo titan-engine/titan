@@ -7,6 +7,31 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
+## Design coverage and pending scope
+
+The [vision](vision.md) and [design answer coverage](design-requirements.md)
+retain the agreed product and architecture direction independently of milestone
+completion. The coverage record accounts for both original planning answer
+rounds, including tentative preferences and [unresolved questions](open-questions.md).
+An unscheduled capability is not a discarded requirement.
+
+The current documentation audit restores that intent before any entity-listing
+fix. The arena's browser inspection summary currently requests only the player;
+enemies are entities, but are excluded by that request. Its HUD currently draws
+text directly from game state. It does not yet fulfill the agreed direction that
+in-game UI use the same entity/component model as the world. Browser host controls
+and diagnostic panels are separate tooling; that requirement does not by itself
+require converting them into game entities.
+
+Agreed capabilities that still need future implementation or broader coverage
+include entity-based in-game UI; early save/load and serialization design;
+automatic parallel scheduling with configurable determinism/throughput policy;
+interactive playback of input recordings; the full generated/file-backed asset
+model and eventual native asset format; and the longer-term rendering and
+multiplayer directions in the vision. Existing headless replay, snapshots and
+procedural demo assets do not establish completion of those broader requirements.
+These are retained commitments, not a newly selected implementation sequence.
+
 ## Input and live-player inspection: complete
 
 The authorized input consolidation and actual-player inspection work is complete
@@ -47,8 +72,9 @@ semantics. Keep discovery authentication, browser control opt-in, field
 validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
-No speculative editor, 3D, networking, scene format, asset pipeline, parallel
-executor, or broad reflection redesign is preapproved for the next objective. Use the fixed
+The next objective does not yet schedule editor, 3D, networking, scene format,
+asset pipeline, parallel executor, or broad reflection redesign work. This is a
+scheduling boundary, not a revision of the agreed vision. Use the fixed
 arena view unless the game demonstrates a camera requirement. Keep current
 platform limitations documented rather than expanding platform scope.
 

@@ -132,6 +132,7 @@ GPU.
 ## Documentation
 
 - [Vision and principles](docs/vision.md)
+- [Original design answers and requirement coverage](docs/design-requirements.md)
 - [Current milestone: starter and arena demo](docs/second-milestone.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Open design questions](docs/open-questions.md)

@@ -1,5 +1,11 @@
 # Titan vision
 
+This document states intended capabilities and design direction, including work
+that is not implemented or scheduled. The [design requirements](design-requirements.md)
+preserve the opening planning answers and their qualifications; the
+[implementation plan](implementation-plan.md) tracks selected execution work.
+Undecided choices remain in [open questions](open-questions.md).
+
 ## Purpose
 
 Titan exists to make trying game ideas dramatically faster. Its defining
@@ -69,7 +75,8 @@ should make the actual game model discoverable without requiring web access.
 
 Documentation must be designed with limited agent context windows in mind:
 local, searchable, precise, and progressively discoverable rather than one
-large undifferentiated manual.
+large undifferentiated manual. Runtime diagnostics should also offer actionable
+repair suggestions when the engine can identify a useful correction.
 
 ### Inspectable and controllable runtime
 
@@ -81,20 +88,21 @@ The intended inspection surface includes:
 
 - registered component and resource types and their available metadata;
 - active entities, optional human-readable names, and component values;
-- systems, schedules, diagnostics, timings, logs, and emitted events;
+- systems, schedules, collision data, diagnostics, timings, logs, and emitted events;
 - input injection and deterministic frame advancement;
 - screenshots and compact diagnostic bundles;
 - explicitly exposed runtime mutations; and
 - game-defined commands such as spawning an enemy or loading a level.
 
-Mutation should require an explicitly enabled development mode. Visibility does
-not imply writability. Rejected mutations should return a structured reason,
-such as `read_only`, `mutation_disabled`, `invalid_value`, or
+Current development policy requires an explicitly enabled mode for tool-driven
+mutation. Visibility does not imply writability. The implemented protocol returns
+structured rejection reasons such as `read_only`, `mutation_disabled`, `invalid_value`, or
 `requires_command`.
 
 An agent should be able to attach to an already-running game automatically.
-Longer term, a human and an agent should be able to interact with and observe
-the same live process safely.
+A human and an agent should be able to interact with and observe the same live
+process safely. Arena now demonstrates this workflow; that does not yet make
+live-session hosting generic across all games.
 
 ### One game, multiple execution modes
 
@@ -133,7 +141,10 @@ Low-level systems should be usable as composable libraries. An opinionated
 high-level framework should assemble them into an easy default experience.
 Major subsystems should be disableable and, where the library boundary makes it
 practical, replaceable. The high-level framework may deliberately choose one
-preferred integration.
+preferred integration. The breadth of subsystem replacement remains a design
+question; disableability is a firm requirement. APIs should make game behavior
+expressible and well documented; a universal preference for constrained APIs
+or explicit operations over abstractions has not been chosen.
 
 Crate boundaries should be introduced when responsibilities are understood,
 not speculatively for every possible subsystem.
@@ -142,18 +153,37 @@ not speculatively for every possible subsystem.
 
 Titan uses a custom entity-component-system implementation with Bevy-like
 Rust authoring: derived components, typed queries and resources, deferred
-structural commands, optional entity names, and customizable schedules.
+structural commands, optional entity names, and customizable schedules. Bevy-like
+authoring is the initial direction; other models may be explored later. Optional
+human-readable names or paths should coexist with cheap unnamed entities; current
+names do not yet provide a general persistent-path system.
 
-The executor is sequential. Access metadata and explicit deferred boundaries
-provide a basis for future parallel scheduling when a concrete workload warrants
-it. Canonical traversal is available for algorithms that need deterministic
-ordering. Any future throughput policy must make its determinism tradeoffs
-explicit.
+The current executor is sequential. Automatic parallel execution where data
+access permits is an intended capability, and multithreading should arrive soon
+after the correct initial model. Access metadata and deferred boundaries provide
+a foundation; a parallel executor is not yet selected implementation work.
+Determinism versus maximum parallelism should be configurable. Canonical traversal
+is available today for algorithms that need deterministic ordering.
 
-The ECS should remain useful for both very small games and large worlds with
-large entity counts. Snapshot and rollback support is strategically important
-for debugging, replay, and multiplayer. Expand them in response to concrete
-debugging or game requirements.
+Familiar schedule stages should be defaults in the high-level framework and
+remain customizable. The low-level libraries should not impose the framework's
+fixed set of stages.
+
+The ECS should remain useful for both very small games and large worlds,
+including millions of lightweight entities as a design target, not a measured
+capacity guarantee. Save/load and serialization should be considered early in
+architecture design, even without format compatibility guarantees. This is
+distinct from the intended snapshot
+and rollback support for debugging, replay and multiplayer. These capabilities
+are not claims about current implementation.
+
+### Game UI
+
+Game UI should use the same entity/component model as the game world. This is
+an agreed architecture direction; Titan does not yet have a general UI system.
+Current browser controls and game-drawn HUDs do not fulfill that capability.
+Whether reusable gameplay primitives belong in the high-level framework remains
+open and does not change the entity-based UI commitment.
 
 ### Reflection
 
@@ -171,18 +201,23 @@ every type.
 
 Titan supports both 2D and 3D in its long-term design, with 2D implemented
 first. `wgpu` is the current GPU graphics foundation. Direct native Metal and
-Vulkan backends may be explored later. High-level rendering APIs should cover
-normal use while lower-level access remains possible.
+Vulkan backends are intended later; their implementation is not scheduled.
+High-level rendering APIs should cover normal use while lower-level access
+remains possible.
 
 Code-generated meshes, textures, materials, audio, animation, and other assets
-should be first-class alongside file-backed assets. Procedural assets may be
-created at build time, startup, or lazily at runtime and should support caching.
-Constructive solid geometry is desired both as an authoring tool and a runtime
-capability.
+should be first-class assets with the same interfaces as file-backed assets.
+Code-generated placeholder primitives, textures and simple sounds should make
+prototyping possible without external assets. Generation should support build
+time, startup and lazy runtime use, with generated assets cacheable on disk.
+Constructive solid geometry, including boolean operations, is intended both as
+an authoring tool and a runtime capability.
 
-Common external formats can use well-maintained, high-quality libraries. Titan
-may develop an engine-native asset format later. The engine does not prescribe
-whether source assets were made by humans, AI systems, or procedural code.
+Common external formats such as glTF, PNG, WAV and fonts can use well-maintained,
+high-quality libraries; otherwise prefer custom implementations. An engine-native
+asset format is also an intended future capability; its design and implementation
+are not selected. The engine does not prescribe whether source assets were made
+by humans, AI systems or procedural code.
 
 ### Determinism and verification
 
@@ -190,13 +225,15 @@ Fixed-step deterministic simulation is a foundational goal. Tests should be
 able to advance an exact number of frames, inject or replay input, inspect the
 world, and capture output.
 
-Verification can combine ordinary Rust assertions, Titan test helpers,
-deterministic input recordings, exact image comparisons, and tolerant
-perceptual comparisons. The appropriate evidence depends on the feature.
+Verification can combine ordinary Rust assertions, Titan test helpers and
+deterministic input recordings. Image comparisons should offer a configurable
+choice between exact pixels and perceptual tolerances. Recordings should support interactive replay as well as
+headless verification; current arena exports verify in a fresh headless game.
+The appropriate evidence depends on the feature.
 
-Diagnostic bundles should be produced on failure by default and optionally for
-every run. A useful bundle can contain structured errors, logs, world state,
-input history, screenshots, and timing information. Tests should support both a
+Diagnostic bundles should be produced on failure by default, optionally for
+every run, and be disableable. A useful bundle can contain structured errors,
+logs, world state, input history, screenshots, and timing information. Tests should support both a
 simulation-frame budget and a wall-clock timeout.
 
 ## Scope and evolution
@@ -205,10 +242,11 @@ Desktop platforms come first, followed by mobile and consoles. Browser support
 is unusually important early because browsers provide both a game target and a
 surface that agents can interact with effectively.
 
-Networking, multiplayer in multiple forms, procedural generation, an editor,
-and advanced content systems are legitimate long-term capabilities. They will
-be developed when concrete games or users create demand rather than all being
-implemented up front.
+Multiplayer is intended to support competitive, cooperative and local forms.
+Networking, procedural generation, an editor and advanced content systems remain
+part of the long-term scope. An editor was never ruled out; it is not an initial
+authoring dependency. Concrete games and user needs guide implementation timing
+without erasing these intended capabilities.
 
 Backward compatibility is not a current constraint. Games can pin an engine
 version. APIs and formats may be redesigned or removed when that improves the
@@ -228,9 +266,10 @@ diary.
 - CI is important from the beginning and will use GitHub Actions.
 - Formatting, Clippy, unit tests, headless integration tests, and continuously
   compiling examples should be enforced.
+- Architectural checks are intended as part of CI; their specific scope remains
+  to be selected.
 - Releases should be frequent so games can pin known engine revisions.
 - Optimize only in response to evidence, except where an early choice would be
   prohibitively expensive to reverse.
 - Initial development may optimize for a modern Apple Silicon MacBook Pro while
   preserving the intended cross-platform architecture.
-
