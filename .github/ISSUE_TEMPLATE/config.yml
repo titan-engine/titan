@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Titan Development board
+    url: https://github.com/orgs/titan-engine/projects/1
+    about: Check existing ideas, priorities, dependencies, and active work before filing a duplicate.

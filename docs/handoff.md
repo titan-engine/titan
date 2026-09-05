@@ -26,13 +26,13 @@ Hot reload, caching, other formats, difficulty settings and replay scrubbing are
 not selected work. Review the remaining plan before proposing another exercise.
 No next feature or new release tag is approved.
 
-Working preferences: use subagents for substantial independent work, keep the
-main context compact, make frequent coherent commits, and continue autonomously
-within the agreed scope until real user input is needed. Finish review and local
-verification before one batch push, then verify CI
-against the exact pushed revision. Prefer more useful engine exercises before
-another release; frequent local commits do not require individual pushes. Do not
-publish crates or create release tags without authorization.
+Working preferences and approval policy are in [workflow.md](workflow.md) and
+`AGENTS.md`. The user approved GitHub-native planning and PR integration. Use
+[Titan Development](https://github.com/orgs/titan-engine/projects/1) as the pending
+backlog. Claim only approved, unblocked work; use isolated worktrees and subagents
+for substantial independent work/review. Merge approved scope autonomously after
+independent attributed agent review and green required CI. Scope changes and
+releases return to the user. Verify exact merged-main CI, and keep context compact.
 
 Preserve RPG reference checksum `f7a298f62ad75c1c`, arena initial
 `e096abf94fd12c24` and winning `b5cf61da6f50efd7` unless an intentional visual

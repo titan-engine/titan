@@ -1,5 +1,10 @@
 # Open questions
 
+These are durable unresolved design choices. Their selection and follow-up work
+are tracked as Proposed issues in [Titan Development](https://github.com/orgs/titan-engine/projects/1).
+Use the board for priority, ownership and dependencies; update this reference when
+a decision is made. Recording a question does not approve implementation.
+
 Milestone 2's authoring, inspection, diagnosis and standalone setup questions are
 answered by the accepted [arena exercise](arena-exercise.md),
 [starter verification](starter-verification.md) and
