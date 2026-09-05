@@ -65,6 +65,12 @@ impl BrowserLiveRuntime {
             .set_action(name, pressed)
             .map_err(|error| JsValue::from_str(&error))
     }
+    pub fn pointer(&mut self, x: i32, y: i32, pressed: bool) -> bool {
+        self.session.pointer(Some((x, y)), pressed)
+    }
+    pub fn cancel_pointer(&mut self) {
+        self.session.cancel_pointer();
+    }
     pub fn tick(&mut self) {
         self.session.tick();
     }
@@ -163,6 +169,15 @@ mod player {
             self.session.cancel_action(name).map_err(js_error)
         }
 
+        /// Route a logical canvas position to the in-game UI, including while paused.
+        pub fn pointer(&mut self, x: i32, y: i32, pressed: bool) -> bool {
+            self.session.pointer(Some((x, y)), pressed)
+        }
+
+        pub fn cancel_pointer(&mut self) {
+            self.session.cancel_pointer();
+        }
+
         /// Advance fixed 60 Hz ticks, then render. Long background pauses are capped.
         /// Calling frame(0) renders current state without advancing the game.
         pub fn frame(&mut self, elapsed_ms: f64) -> Result<(), JsValue> {
@@ -198,6 +213,7 @@ mod player {
         }
 
         pub fn resize(&mut self, width: u32, height: u32) {
+            self.session.cancel_pointer();
             let (width, height) = self.renderer.resize(width, height);
             self.canvas.set_width(width);
             self.canvas.set_height(height);

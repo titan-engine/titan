@@ -19,10 +19,14 @@ export function entityRow(entity) {
   const entries = Object.entries(entity.components);
   const enemy = entries.find(([name]) => name.endsWith('::Enemy'));
   const player = entries.some(([name]) => name.endsWith('::Player'));
-  const position = entries.find(([name]) => name.endsWith('::Position'))?.[1];
+  const node = entries.find(([name]) => name.endsWith('::UiNode'))?.[1];
+  const button = entries.find(([name]) => name.endsWith('::UiButton'))?.[1];
+  const position = entries.find(([name]) => name.endsWith('::Position'))?.[1] ?? node;
   const activity = enemy
     ? (enemy[1]?.active === true ? 'Active pursuer' : enemy[1]?.active === false ? 'Inactive · awaiting spawn' : 'Activity unavailable')
-    : player ? 'Player' : 'Entity';
+    : player ? 'Player'
+      : node ? (node.visible === false ? 'Hidden UI' : button ? `UI button · ${button.enabled ? 'enabled' : 'disabled'}` : 'UI label')
+        : 'Entity';
   return [
     entity.name ?? `Entity ${entity.id.index}:${entity.id.generation}`,
     `${entity.id.index}:${entity.id.generation}`,

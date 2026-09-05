@@ -29,7 +29,7 @@ mod native {
     use winit::{
         application::ApplicationHandler,
         dpi::LogicalSize,
-        event::{ElementState, WindowEvent},
+        event::{ElementState, MouseButton, WindowEvent},
         event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowId},
@@ -43,6 +43,8 @@ mod native {
         duration: Option<Duration>,
         clock_epoch: u64,
         held_keys: HashSet<KeyCode>,
+        pointer_position: Option<(f64, f64)>,
+        pointer_pressed: bool,
         window: Option<Arc<Window>>,
         renderer: Option<SurfaceRenderer>,
         previous: Instant,
@@ -156,6 +158,8 @@ mod native {
             duration,
             clock_epoch,
             held_keys: HashSet::new(),
+            pointer_position: None,
+            pointer_pressed: false,
             window: None,
             renderer: None,
             previous: Instant::now(),
@@ -251,6 +255,8 @@ mod native {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::Resized(size) => {
+                    self.pointer_pressed = false;
+                    self.session.cancel_pointer();
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }
@@ -258,6 +264,34 @@ mod native {
                 WindowEvent::Focused(false) => {
                     self.held_keys.clear();
                     self.session.clear_input();
+                    self.pointer_pressed = false;
+                    self.session.cancel_pointer();
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.pointer_position = Some((position.x, position.y));
+                    if self.pointer_pressed {
+                        self.route_pointer();
+                    }
+                }
+                WindowEvent::CursorLeft { .. } => {
+                    self.pointer_position = None;
+                    self.pointer_pressed = false;
+                    self.session.cancel_pointer();
+                }
+                WindowEvent::MouseInput {
+                    state,
+                    button: MouseButton::Left,
+                    ..
+                } => {
+                    if state == ElementState::Released && !self.pointer_pressed {
+                        return;
+                    }
+                    if state == ElementState::Pressed {
+                        self.session.cancel_pointer();
+                    }
+                    self.pointer_pressed = state == ElementState::Pressed;
+                    self.route_pointer();
+                    self.sync_clock();
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
                     let PhysicalKey::Code(key) = event.physical_key else {
@@ -343,11 +377,22 @@ mod native {
     }
 
     impl Player {
+        fn route_pointer(&mut self) {
+            let position = self.window.as_ref().and_then(|window| {
+                let size = window.inner_size();
+                self.pointer_position
+                    .and_then(|(x, y)| surface_point(x, y, size.width, size.height))
+            });
+            self.session.pointer(position, self.pointer_pressed);
+        }
+
         fn sync_clock(&mut self) {
             let epoch = self.session.clock_epoch();
             if epoch != self.clock_epoch {
                 self.clock_epoch = epoch;
                 self.held_keys.clear();
+                self.pointer_pressed = false;
+                self.session.cancel_pointer();
                 self.accumulated = Duration::ZERO;
                 self.previous = Instant::now();
                 if let Some(window) = &self.window {
@@ -359,6 +404,17 @@ mod native {
                 }
             }
         }
+    }
+
+    fn surface_point(x: f64, y: f64, width: u32, height: u32) -> Option<(i32, i32)> {
+        titan::ui::point_from_surface(
+            x,
+            y,
+            f64::from(width),
+            f64::from(height),
+            game::WIDTH as u32,
+            game::HEIGHT as u32,
+        )
     }
 
     fn action_for_key(key: KeyCode) -> Option<&'static str> {
@@ -383,6 +439,14 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn pointer_coordinates_use_physical_surface_size_and_reject_outside() {
+            assert_eq!(surface_point(80.0, 60.0, 800, 560), Some((16, 12)));
+            assert_eq!(surface_point(160.0, 120.0, 1600, 1120), Some((16, 12)));
+            assert_eq!(surface_point(800.0, 60.0, 800, 560), None);
+            assert_eq!(surface_point(0.0, 0.0, 0, 0), None);
+        }
 
         #[test]
         fn space_tracks_dash_press_repeat_and_release() {

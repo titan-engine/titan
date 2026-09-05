@@ -27,3 +27,16 @@ test('unexposed enemy activity is not mislabeled inactive and unnamed entities r
   const entity = { id: { index: 7, generation: 2 }, components: { 'game::Enemy': null } };
   assert.deepEqual(entityRow(entity), ['Entity 7:2', '7:2', 'Activity unavailable', '—']);
 });
+
+test('UI entities expose their own position and button state', () => {
+  const entity = { id: { index: 16, generation: 0 }, name: 'ui/restart', components: {
+    'titan::ui::UiNode': { x: 4, y: 10, visible: true },
+    'titan::ui::UiText': { text: 'R RESTART' },
+    'titan::ui::UiButton': { enabled: true },
+  } };
+  assert.deepEqual(entityRow(entity), ['ui/restart', '16:0', 'UI button · enabled', '(4, 10)']);
+  entity.components['titan::ui::UiButton'].enabled = false;
+  assert.equal(entityRow(entity)[2], 'UI button · disabled');
+  entity.components['titan::ui::UiNode'].visible = false;
+  assert.equal(entityRow(entity)[2], 'Hidden UI');
+});

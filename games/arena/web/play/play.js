@@ -2,6 +2,7 @@ import init, { BrowserPlayer, verify_recording_json } from '../inspector/pkg/tit
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
 import { inspectEntities, entityRow } from './entities.mjs';
+import { bindCanvasPointer } from './pointer.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -28,16 +29,30 @@ const input = bindPlayerInput({
     event.preventDefault(); replay.click(); return true;
   },
 });
+const canvasPointer = bindCanvasPointer({
+  canvas,
+  enabled: () => Boolean(player),
+  pointer: (x, y, pressed) => {
+    try { return player.pointer(x, y, pressed); }
+    catch (error) { failure(error); return false; }
+  },
+  cancelPointer: () => player?.cancel_pointer(),
+  afterPointer: () => {
+    if (!player) return;
+    try { syncSession(); player.frame(0); updateStatus(); }
+    catch (error) { failure(error); }
+  },
+});
 function failure(error) {
   cancelAnimationFrame(animation); lastTime = undefined;
   errorPanel.hidden = false; errorPanel.textContent = `GPU player stopped: ${error.message ?? error}\nRetry starts a fresh scene.`;
   pause.disabled = true; replay.disabled = true;
   document.querySelectorAll('[data-action], [data-live], #step').forEach(button => button.disabled = true);
-  input.cancel(); player?.free(); player = undefined;
+  input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
 function updateStatus() { const {run} = JSON.parse(player.status()); status.textContent = `Health ${run.health}/3 · ${(run.elapsed/60).toFixed(1)} / 20 s · ${run.dash_ready ? 'Dash ready' : `Dash ${(Math.ceil(run.dash_cooldown/6)/10).toFixed(1)} s`}`; result.textContent = run.outcome === 'Won' ? 'You survived! Restart for another run.' : run.outcome === 'Lost' ? 'Caught! Restart and keep moving.' : 'Stay clear of the pursuers.'; }
-function resize() { if (!player) return; const scale = window.devicePixelRatio || 1; player.resize(Math.max(1, Math.round(canvas.clientWidth * scale)), Math.max(1, Math.round(canvas.clientHeight * scale))); if (player.paused()) { player.frame(0); updateStatus(); } }
+function resize() { if (!player) return; canvasPointer.cancel(); const scale = window.devicePixelRatio || 1; player.resize(Math.max(1, Math.round(canvas.clientWidth * scale)), Math.max(1, Math.round(canvas.clientHeight * scale))); if (player.paused()) { player.frame(0); updateStatus(); } }
 function syncSession() {
   if (!player) return;
   const next = player.clock_epoch();
@@ -45,6 +60,7 @@ function syncSession() {
     epoch = next;
     lastTime = undefined;
     input.cancel();
+    canvasPointer.cancel();
   }
   pause.textContent = player.paused() ? 'Resume' : 'Pause';
   document.querySelector('#enable-controls').checked = player.control_enabled();
@@ -159,7 +175,7 @@ window.addEventListener('message', event => {
   if (response) window.postMessage(response, location.origin);
 });
 new ResizeObserver(() => { try { resize(); } catch (error) { failure(error); } }).observe(canvas);
-window.addEventListener('pagehide', () => { cancelAnimationFrame(animation); input.cancel(); player?.free(); player = undefined; });
+window.addEventListener('pagehide', () => { cancelAnimationFrame(animation); input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined; });
 
 // Deliberate local integration hook. No background stepping; each request is
 // bounded, and normal pages do not expose access to the player.

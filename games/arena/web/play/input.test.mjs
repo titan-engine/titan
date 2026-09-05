@@ -1,3 +1,4 @@
+import { bindCanvasPointer } from './pointer.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -12,7 +13,10 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
     const handlers = {};
     return {
       handlers, disabled: false, textContent: '', clientWidth: 640, clientHeight: 448,
-      addEventListener(name, fn) { handlers[name] = fn; },
+      addEventListener(name, fn) {
+        const previous = handlers[name];
+        handlers[name] = previous ? event => { previous(event); fn(event); } : fn;
+      },
       closest() { return null; },
       focus() { document.handlers.focusin?.({ target: this }); },
       setPointerCapture() {},
@@ -58,6 +62,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       }
       return JSON.stringify({ request_id: envelope.request_id, status: 'success', response: { type: 'status' } });
     },
+    pointer() { return false; }, cancel_pointer() {},
     resize() {}, frame() {}, free() {},
     paused: () => paused,
     clock_epoch: () => String(epoch),
@@ -72,6 +77,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
     window, document, URLSearchParams, location: { search: '', origin: 'http://localhost' }, bridgeResponse,
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     ResizeObserver: class { observe() {} },
+    bindCanvasPointer: options => bindCanvasPointer({ ...options, window, document }),
     bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
     init: async () => {}, BrowserPlayer: { create: async () => player },
   };

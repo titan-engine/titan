@@ -1,3 +1,4 @@
+import { bindCanvasPointer } from '../../games/arena/web/play/pointer.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -12,7 +13,10 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       const handlers = {};
       return {
         handlers, clientWidth: 640, clientHeight: 448,
-        addEventListener(name, fn) { handlers[name] = fn; },
+        addEventListener(name, fn) {
+          const previous = handlers[name];
+          handlers[name] = previous ? event => { previous(event); fn(event); } : fn;
+        },
         closest() { return null; },
         focus() { document.handlers.focusin?.({ target: this }); },
         setPointerCapture() {},
@@ -38,6 +42,7 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       },
       clear_input() { held.clear(); pending.clear(); },
       cancel_action(action) { held.delete(action); pending.delete(action); },
+      pointer() { return false; }, cancel_pointer() {},
       resize() {}, frame() {}, free() {}, replay_reference() {},
       restart() { paused = true; epoch++; },
       pause() { paused = true; epoch++; },
@@ -51,6 +56,7 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       window, document, URLSearchParams, location: { search: '' },
       requestAnimationFrame: () => 1, cancelAnimationFrame() {},
       ResizeObserver: class { observe() {} },
+      bindCanvasPointer: options => bindCanvasPointer({ ...options, window, document }),
       bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
       init: async () => {}, BrowserPlayer: { create: async () => player },
     });
