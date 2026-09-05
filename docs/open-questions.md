@@ -8,9 +8,10 @@ health and outcome presentation needed no engine changes. Existing request
 history and diagnostics were sufficient to diagnose the failed route. No shared
 collision helper or reflection expansion was justified.
 
-The next objective is selected: consolidate demonstrated host setup duplication.
-The [implementation plan](implementation-plan.md) and
-[host setup audit](host-setup-audit.md) track its implementation and measurements.
+Host setup consolidation is complete, including remote CI. The next authorized
+objective is an arena dash ability with measured edit/build/run/inspect latency.
+The [implementation plan](implementation-plan.md) tracks execution; the
+[host setup audit](host-setup-audit.md) records completed consolidation evidence.
 Keep broader framework, camera and platform features demand-driven.
 
 Remaining questions require evidence from future game iteration:

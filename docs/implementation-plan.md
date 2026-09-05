@@ -7,37 +7,50 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Current objective: reduce duplicated host setup
+## Current objective: arena dash and measured iteration
 
-The user selected this objective after accepting milestone 2. Audit RPG,
-`starters/minimal`, and `games/arena`; extract only demonstrated reusable host
-responsibilities into public APIs. Game rules, action mappings, commands,
-validated fields, render extraction and presentation remain game-owned.
+The user authorized this objective on 2026-09-05. Add a short directional dash,
+a fixed-tick cooldown and a visible ready indicator to the arena game. Use Space
+in native and browser players and expose the same action through deterministic
+input. Keep rules and presentation game-owned; change the engine only for a
+demonstrated limitation.
 
-Implementation and local verification are complete:
+Execution:
 
-- Public surface presenter, button-alias helper, browser session policy and PNG
-  capture APIs replace duplicated mechanics without owning game behavior.
-- Cargo-resolved build tooling keeps both standalone games externally copyable.
-- Full native/WASM quality gates, hardware readback, all three native/browser
-  players, relocated macOS bundles and fresh independent verification passed.
-- Copied host setup fell from 1,066 to 739 lines per game. No build-speed gain is
-  claimed. The audit records scope, reproducible counts and verification evidence.
+1. Implement dash semantics and focused deterministic tests, including cooldown,
+   bounds, held input, restart and frozen outcomes.
+2. Wire native/browser controls and clear ready/cooldown presentation. Preserve
+   the existing no-dash survival route's semantic results. Review intentional
+   visual changes before updating arena image references.
+3. Exercise native CLI and actual WASM dash scenarios, GPU readback and both
+   playable hosts. Measure edit/build/run/inspect stages with cache and workload
+   context; do not infer clean-build gains from warm timings.
+4. Run the quality gates below, obtain independent review, and record evidence.
+   Commit small coherent increments. Playable user feedback is the final tuning
+   gate; do not claim user acceptance before it occurs.
 
-Remote CI is the final gate for pushed increments; inspect the main commit's
-GitHub Actions result before selecting further work. No additional engine
-objective is inferred from this consolidation; future work needs a concrete
-game requirement or the user's next priority.
-
+Use subagents for implementation and verification to keep coordination compact.
 No crate publication, visibility changes or new tags are authorized. Engine crate
-versions remain 0.1.0. See [host setup audit](host-setup-audit.md) for boundaries
-and evidence.
+versions remain 0.1.0.
+
+## Completed host consolidation
+
+Public surface presentation, input alias handling, browser session policy, PNG
+capture and Cargo-resolved build tooling replaced demonstrated duplication.
+Copied host setup fell from 1,066 to 739 lines per game (31%). Local quality,
+native/WASM, GPU, relocated bundle and independent verification passed; no
+build-speed gain is claimed. See [host setup audit](host-setup-audit.md).
+
+The final remote CI gate passed for main commit `95a4061`:
+[GitHub Actions run](https://github.com/titan-engine/titan/actions/runs/33944842147).
+Host consolidation is complete.
 
 ## Constraints and quality gates
 
 Preserve the accepted RPG behavior and software checksum `190a92085def5677` for
-changes unrelated to its visuals. Also preserve arena initial `1e5d05f547d53435`
-and winning replay `be61b1c710b101b6`. Keep discovery authentication, browser control
+changes unrelated to its visuals. Arena pre-dash visual baselines are initial `1e5d05f547d53435`
+and winning replay `be61b1c710b101b6`; update them only after reviewing the
+intentional dash HUD change, while preserving no-dash replay semantics. Keep discovery authentication, browser control
 opt-in, field validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
