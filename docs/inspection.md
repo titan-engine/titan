@@ -226,8 +226,9 @@ also distinguishes local changes at the same frame.
 
 Protocol schema 2 implements owned asynchronous capture dispatch. Existing
 software hooks complete immediately through the same boundary; GPU hosts register
-an asynchronous producer. The collection-room game's final capture wiring is
-separate from this reusable infrastructure.
+an asynchronous producer. The collection-room native and browser GPU players register this producer;
+their headless hosts report capture as unsupported. See the [known-state capture
+workflow](../games/collection-room/README.md#capture-a-known-state).
 
 `Inspector::dispatch(&mut app, &request)` returns `Dispatch::Ready(response)` or
 `Dispatch::Pending(pending)`. Both are owned: release the app/player borrow before

@@ -5,8 +5,8 @@ The same Rust simulation runs headlessly on native and actual WebAssembly. This
 package owns its rules, generated meshes, camera, input, inspection and replay;
 it imports no RPG support code. The optional `player` feature adds native and
 browser GPU hosts; default headless builds keep GPU dependencies disabled.
-Image capture remains unregistered for the later capture integration. No software 3D image is
-substituted for a GPU render.
+GPU players expose asynchronous scene-and-overlay captures; headless hosts report
+capture as unsupported. No software 3D image substitutes for a GPU render.
 
 ## Run and inspect
 
@@ -129,7 +129,43 @@ to expose the authenticated inspector on the exact played instance. Omit
 invoke `pause`, `resume`, `restart`, or `load_replay` with a `recording` argument.
 The headless instant `replay` command is disabled in players: `load_replay` and
 subsequent ticks provide interactive replay. Stepping requires pause; a step
-beyond a recording end is rejected. Capture reports unsupported.
+beyond a recording end is rejected. Capture is available even in read-only mode.
+
+## Capture a known state
+
+Launch the native player with `--paused --inspect --allow-control` and select its
+project/instance using the CLI commands above. Await each operation:
+
+```sh
+target/debug/titan --format json --project games/collection-room --instance room-player invoke pause
+target/debug/titan --format json --project games/collection-room --instance room-player capture > before.json
+target/debug/titan --format json --project games/collection-room --instance room-player invoke teleport \
+  --arguments '{"x":0,"z":-1000}'
+target/debug/titan --format json --project games/collection-room --instance room-player capture > after.json
+```
+
+Both captures identify the same completed host tick and different state revisions.
+The second shows the new position even without a tick or redraw. Capture refreshes
+from the committed world at acceptance: immutable scene meshes, ECS overlay and
+image assets belong to that request. Presentation and capture use the same
+`GpuSceneRenderer3d` composition. Readback retains no app borrow and never advances
+time. The image is always 960 × 540, independent of window/canvas size, including
+zero-size presentation suspension.
+
+Save the complete JSON response: `response.artifact` is an inline PNG data URL,
+while `response.identity` records instance, session generation, capture ID,
+completed host frame (`observed_frame`), revision and dimensions. The envelope reports acceptance
+provenance too. A byte checksum identifies the artifact; it is not a portable GPU
+reference. A paused client awaits pause/edit/step before requesting capture; a live
+client may receive an older accepted state after newer simulation ticks.
+
+One outstanding request per player is admitted; excess captures return `busy`.
+The common five-second deadline and artifact/geometry limits apply. Canceled work
+can briefly retain the busy slot until GPU resources retire; retry reads within
+a bounded deadline. Restart or
+loading a replay invalidates pending captures from the old session. Invalid
+operations are structured failures; transport timeout is not cancellation.
+Headless diagnostics remain useful without a capture artifact.
 
 ## Play in a browser
 
@@ -146,6 +182,10 @@ Check **Enable inspector control** to authorize tool-driven writes on the played
 instance. The same-page `window.collectionRoom.dispatch(JSON.stringify(envelope))`
 returns a Promise for a schema-2 response; runtime policy enforces the checkbox.
 Reload returns to disabled control. No native discovery token is exposed.
+The **Capture** button works without control permission and displays the accepted
+image and tick/revision. Download its JSON to retain the PNG and complete identity.
+The same operation is available through `dispatch` with `request: {type:"capture"}`;
+await the Promise before consuming its response.
 
 Use `?backend=webgpu` or `?backend=webgl2` to request exactly one backend; the
 ordinary page permits either. WebGL2 requires floating-point color attachments
@@ -186,11 +226,46 @@ The semantic host uses protocol schema 2. Browser clients may await
 `runtime.dispatch(JSON.stringify(envelope))`; it returns one correlated Promise
 without retaining the runtime borrow. `handle` remains an immediate-only
 convenience for semantic calls. Native requests use the same owned dispatch and
-deferred reply boundary. This package still advertises no capture capability;
-collection-room GPU capture wiring belongs to #48.
+deferred reply boundary. GPU players advertise capture; CPU-only hosts keep it unsupported.
 
 [Recorded player acceptance](evidence/player-acceptance.json) verifies native Metal
 on Apple M5 Pro, actual browser WebGPU, and Chromium WebGL2 via ANGLE Metal.
-The actual native run presented 170 GPU frames and verified a real 800 × 500
+The actual native run presented 388 GPU frames and verified a real 800 × 500
 window resize as well as zero-size suspension. Device loss was not physically
 forced; supported failure-policy branches have unit coverage.
+
+
+Capture acceptance retains a native `evidence.json` and adjacent PNGs beneath
+`target/collection-room-gpu-evidence/`.
+The native harness reuses bounded process deadlines and sanitized failure evidence;
+`TITAN_ACCEPTANCE_FAIL=collection-room-player:capture` exercises its failure path.
+The actual browser test pages display each image with accepted provenance and a
+**Download capture evidence JSON** link. Save both backend results, then compare:
+
+```sh
+python3 games/collection-room/scripts/compare-captures.py \
+  /path/to/native/evidence.json \
+  /path/to/collection-room-webgpu-evidence.json \
+  /path/to/collection-room-webgl2-evidence.json
+```
+
+The comparator extracts browser PNGs beside their JSON for inspection. Across
+native and browser backends, RGB mean absolute error must be at most 2/255 and
+at most 1% of pixels may differ by more than 12/255 in any RGB channel. Alpha
+must be opaque. These tolerances allow edge rasterization differences; simulation
+position, collection/completion, tick/revision identity and same-backend paused
+replay pixels are asserted exactly.
+
+Separate spatial probes prevent an image-wide tolerance from hiding geometry
+failures: teleport to `(0,-1000)` puts the cyan player behind the central obstacle;
+`(0,1500)` makes it visible in front. At `(-3000,-3000)` it appears smaller than
+at the initial `(-3000,3000)` pose under the fixed perspective camera. The tests
+also require the warm ECS HUD pixels. Inspect those actual images in addition to
+reading the numeric comparison. The ordinary native/actual-WASM CI remains GPU
+independent; GPU player and cross-backend image checks are explicit desktop runs.
+
+The [recorded acceptance](evidence/player-acceptance.json) covers captures on Metal,
+WebGPU and WebGL2. All ten cross-backend pose comparisons measured zero RGB
+difference on Apple M5 Pro; the declared tolerances remain authoritative across
+adapters. Physical device loss was not forced; bounded backend map failure and
+resource retirement have an explicit native GPU test.

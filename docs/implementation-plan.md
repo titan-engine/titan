@@ -33,7 +33,7 @@ Do not silently present transport timeouts as cancellation of running systems.
 
 The [3D rendering](rendering.md#3d-rendering-contract) and
 [async capture](inspection.md#asynchronous-capture-contract) contracts distinguish implemented CPU 3D primitives, low-level GPU drawing and
-owned asynchronous capture from selected game-player integration; they do not grant approval of implementation issues.
+owned asynchronous capture and collection-room player integration; they do not grant approval of implementation issues.
 Issue status and prerequisites remain on the GitHub board. Existing platform
 limitations remain in effect until the corresponding runtime evidence is added.
 
