@@ -16,7 +16,7 @@ async function initialize() {
     };
   }
   function request(body) {
-    const envelope = { schema_version: 1, request_id: `browser-ui-${++sequence}`, request: body };
+    const envelope = { schema_version: 2, request_id: `browser-ui-${++sequence}`, request: body };
     const result = JSON.parse(runtime.handle(JSON.stringify(envelope)));
     text("last-response", JSON.stringify(result, null, 2));
     currentFrame = result.observed_frame;
@@ -133,9 +133,9 @@ async function initialize() {
   $("mutation-form").addEventListener("submit", action(() => { request({ type: "set_field", entity: selectedEntity, component: $("mutation-component").value, field: $("mutation-field").value, value: JSON.parse($("mutation-value").value) }); refresh(); entityDetails(selectedEntity); }));
   try {
     const wasm = await import("./pkg/titan_game.js"); await wasm.default(); BrowserRuntime = wasm.BrowserRuntime; start(false);
-    window.addEventListener("message", (event) => {
+    window.addEventListener("message", async (event) => {
       try {
-        const response = bridgeResponse(event, { origin: location.origin, source: window, handle: (json) => runtime.handle(json) });
+        const response = await bridgeResponse(event, { origin: location.origin, source: window, handle: (json) => runtime.dispatch(json) });
         if (!response) return;
         window.postMessage(response, location.origin);
         if (response.envelope.status === "failure") showError(response.envelope.error);

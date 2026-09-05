@@ -120,6 +120,40 @@ struct Pending {
     deadline: Instant,
     response: SyncSender<ResponseEnvelope>,
 }
+/// Owned reply endpoint, detached from the runtime safe-point borrow.
+/// Dropping it cancels delivery; a transport timeout never rolls back runtime work.
+pub struct ReplyHandle {
+    response: SyncSender<ResponseEnvelope>,
+    deadline: Instant,
+    stop: Arc<AtomicBool>,
+}
+impl ReplyHandle {
+    pub fn send(self, response: ResponseEnvelope) {
+        if !self.stop.load(Ordering::Acquire) && Instant::now() < self.deadline {
+            let _ = self.response.try_send(response);
+        }
+    }
+
+    /// Drive owned completion independently of the simulation/window loop.
+    /// The transport's bounded deadline also bounds this worker. The callback
+    /// must be nonblocking and must not capture an App or runtime lock.
+    pub fn complete_when(
+        self,
+        started: Instant,
+        mut poll: impl FnMut(Duration) -> Option<ResponseEnvelope> + Send + 'static,
+    ) {
+        thread::spawn(move || {
+            while !self.stop.load(Ordering::Acquire) && Instant::now() < self.deadline {
+                if let Some(response) = poll(started.elapsed()) {
+                    self.send(response);
+                    return;
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+    }
+}
+
 pub struct RequestQueue {
     receiver: Receiver<Pending>,
     stop: Arc<AtomicBool>,
@@ -129,14 +163,29 @@ impl RequestQueue {
     /// Drain at a runtime safe point. Expired requests never begin execution.
     /// Once a handler starts, a client timeout does not roll back its effects.
     pub fn drain(&self, mut handler: impl FnMut(&RequestEnvelope) -> ResponseEnvelope) -> usize {
+        self.drain_with_reply(|request, reply| reply.send(handler(request)))
+    }
+
+    /// Accept requests at a safe point and move deferred replies out of that
+    /// borrow. Authentication and expiration are checked before dispatch.
+    pub fn drain_with_reply(
+        &self,
+        mut handler: impl FnMut(&RequestEnvelope, ReplyHandle),
+    ) -> usize {
         let mut count = 0;
         for _ in 0..self.capacity {
             let Ok(pending) = self.receiver.try_recv() else {
                 break;
             };
             if !self.stop.load(Ordering::Acquire) && Instant::now() < pending.deadline {
-                let response = handler(&pending.request);
-                let _ = pending.response.try_send(response);
+                handler(
+                    &pending.request,
+                    ReplyHandle {
+                        response: pending.response,
+                        deadline: pending.deadline,
+                        stop: self.stop.clone(),
+                    },
+                );
                 count += 1;
             }
         }
@@ -825,6 +874,36 @@ mod tests {
         assert!(matches!(client.join().unwrap(), Err(RemoteError::Busy)));
         assert_eq!(queue.drain(|_| panic!("stopped work executed")), 0);
     }
+    #[test]
+    fn deferred_reply_completes_without_another_safe_point() {
+        let fixture = Fixture::new();
+        let (server, queue) = Server::start(fixture.config()).unwrap();
+        let registration = server.registration().clone();
+        let client = thread::spawn(move || send(&registration, &request(), Duration::from_secs(2)));
+        let released = Arc::new(AtomicBool::new(false));
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let released = released.clone();
+            if queue.drain_with_reply(|request, reply| {
+                let response = response(request);
+                let released = released.clone();
+                reply.complete_when(Instant::now(), move |_| {
+                    released.load(Ordering::Acquire).then(|| response.clone())
+                });
+            }) == 1
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(!client.is_finished());
+        // A paused host performs no more queue drain or simulation tick.
+        released.store(true, Ordering::Release);
+        let result = client.join().unwrap().unwrap();
+        assert_eq!(result.request_id, request().request_id);
+    }
+
     #[test]
     fn oversized_headers_and_bodies_are_rejected() {
         let fixture = Fixture::new();

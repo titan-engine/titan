@@ -11,7 +11,7 @@ const { BrowserRuntime } = require(resolve(metadata.target_directory, 'titan/bro
 let sequence = 0;
 const call = (runtime, request, success = true) => {
   const request_id = `wasm-${++sequence}`;
-  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 1, request_id, request })));
+  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 2, request_id, request })));
   assert.equal(result.request_id, request_id);
   assert.equal(result.status, success ? 'success' : 'failure', JSON.stringify(result));
   return result;
@@ -114,3 +114,21 @@ assert.equal(mismatch.error.code, 'protocol_mismatch');
 assert.equal(mismatch.request_id, 'mismatch');
 runtime.free();
 console.log('WASM browser control loop passed: read-only policy, replay, exact capture, command, typed field writes and rejection, schema errors.');
+
+
+// The public asynchronous boundary accepts before returning and releases the
+// WASM mutable borrow: another request and free are legal before resolution.
+{
+  const asynchronous = new BrowserRuntime(true);
+  const capture = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-capture', request: { type: 'capture' } }));
+  assert.ok(capture instanceof Promise);
+  const step = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-step', request: { type: 'step', frames: 1 } }));
+  asynchronous.free();
+  const [captured, stepped] = (await Promise.all([capture, step])).map(JSON.parse);
+  assert.equal(captured.request_id, 'promise-capture');
+  assert.equal(captured.status, 'success');
+  assert.equal(captured.observed_frame, 0);
+  assert.equal(captured.response.identity.observed_frame, 0);
+  assert.equal(stepped.observed_frame, 1);
+  assert.equal(captured.response.identity.instance_id, captured.instance_id);
+}

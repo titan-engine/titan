@@ -1,6 +1,6 @@
-//! Synchronous browser inspection policy; DOM and message-origin checks stay in the host.
+//! Browser inspection policy; DOM and message-origin checks stay in the host.
 
-use super::Inspector;
+use super::{Dispatch, Inspector};
 use crate::App;
 use titan_protocol::{
     ErrorCode, Operation, ProtocolError, Request, RequestEnvelope, Response, ResponseEnvelope,
@@ -34,6 +34,16 @@ impl BrowserSession {
         }
     }
 
+    /// Accept at a safe point and release the session before awaiting completion.
+    pub fn dispatch_json(&mut self, request_json: &str) -> Dispatch {
+        dispatch_json_with_policy(
+            &mut self.app,
+            &mut self.inspector,
+            self.enable_control,
+            request_json,
+        )
+    }
+
     /// Executes a protocol envelope and returns exactly one JSON response envelope.
     pub fn handle(&mut self, request_json: &str) -> String {
         handle_json_with_policy(
@@ -54,8 +64,20 @@ pub fn handle_json_with_policy(
     enable_control: bool,
     request_json: &str,
 ) -> String {
-    let response = match serde_json::from_str::<RequestEnvelope>(request_json) {
-        Ok(request) => handle_with_policy(app, inspector, enable_control, &request),
+    let response =
+        dispatch_json_with_policy(app, inspector, enable_control, request_json).into_ready();
+    serde_json::to_string(&response).expect("serializable protocol response")
+}
+
+/// Parse and accept a request without retaining any application borrow.
+pub fn dispatch_json_with_policy(
+    app: &mut App,
+    inspector: &mut Inspector,
+    enable_control: bool,
+    request_json: &str,
+) -> Dispatch {
+    match serde_json::from_str::<RequestEnvelope>(request_json) {
+        Ok(request) => dispatch_with_policy(app, inspector, enable_control, &request),
         Err(error) => {
             let request_id = serde_json::from_str::<serde_json::Value>(request_json)
                 .ok()
@@ -66,15 +88,14 @@ pub fn handle_json_with_policy(
                         .map(str::to_owned)
                 })
                 .unwrap_or_default();
-            failure(
+            Dispatch::Ready(failure(
                 app,
                 inspector,
                 &RequestEnvelope::new(request_id, Request::Status),
                 ProtocolError::new(ErrorCode::InvalidValue, format!("invalid request: {error}")),
-            )
+            ))
         }
-    };
-    serde_json::to_string(&response).expect("protocol responses contain serializable values")
+    }
 }
 
 /// Enforce read-only/control opt-in at an exclusive caller-owned safe point.
@@ -85,6 +106,16 @@ pub fn handle_with_policy(
     enable_control: bool,
     request: &RequestEnvelope,
 ) -> ResponseEnvelope {
+    dispatch_with_policy(app, inspector, enable_control, request).into_ready()
+}
+
+/// Apply browser permissions before snapshot acceptance; queries remain synchronous.
+pub fn dispatch_with_policy(
+    app: &mut App,
+    inspector: &mut Inspector,
+    enable_control: bool,
+    request: &RequestEnvelope,
+) -> Dispatch {
     if !enable_control
         && matches!(
             request.request,
@@ -94,7 +125,7 @@ pub fn handle_with_policy(
                 | Request::SetField { .. }
         )
     {
-        return failure(
+        return Dispatch::Ready(failure(
             app,
             inspector,
             request,
@@ -102,9 +133,12 @@ pub fn handle_with_policy(
                 ErrorCode::MutationDisabled,
                 "controls were not explicitly enabled",
             ),
-        );
+        ));
     }
-    let mut response = inspector.handle(app, request);
+    let mut response = match inspector.dispatch(app, request) {
+        Dispatch::Ready(response) => response,
+        pending @ Dispatch::Pending(_) => return pending,
+    };
     if !enable_control {
         match &mut response.outcome {
             ResponseOutcome::Success {
@@ -124,7 +158,7 @@ pub fn handle_with_policy(
             _ => {}
         }
     }
-    response
+    Dispatch::Ready(response)
 }
 
 fn failure(
@@ -345,4 +379,55 @@ mod tests {
             matches!(malformed.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
         );
     }
+}
+
+/// Convert an owned dispatch into a Promise after the caller's mutable borrow ends.
+/// Timer tasks drive completion even when presentation and simulation are paused.
+#[cfg(target_arch = "wasm32")]
+pub fn response_promise(accept: impl FnOnce() -> Dispatch) -> js_sys::Promise {
+    use wasm_bindgen::{JsCast, JsValue};
+    let clock = || -> Result<(js_sys::Function, JsValue, f64), JsValue> {
+        let performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into())?;
+        let now =
+            js_sys::Reflect::get(&performance, &"now".into())?.dyn_into::<js_sys::Function>()?;
+        let started = now
+            .call0(&performance)?
+            .as_f64()
+            .ok_or_else(|| JsValue::from_str("invalid monotonic browser clock"))?;
+        Ok((now, performance, started))
+    }();
+    let dispatch = accept();
+    wasm_bindgen_futures::future_to_promise(async move {
+        let response = match dispatch {
+            Dispatch::Ready(response) => response,
+            Dispatch::Pending(mut pending) => {
+                let global = js_sys::global();
+                let (now, performance, started) = clock?;
+                let clock = || -> Result<f64, JsValue> {
+                    now.call0(&performance)?
+                        .as_f64()
+                        .ok_or_else(|| JsValue::from_str("invalid monotonic browser clock"))
+                };
+                let timer = js_sys::Reflect::get(&global, &"setTimeout".into())?
+                    .dyn_into::<js_sys::Function>()?;
+                loop {
+                    let elapsed = std::time::Duration::from_secs_f64(
+                        ((clock()? - started) / 1000.0).max(0.0),
+                    );
+                    if let Some(response) = pending.poll(elapsed) {
+                        break response;
+                    }
+                    let wait = js_sys::Promise::new(&mut |resolve, reject| {
+                        if let Err(error) = timer.call2(&global, &resolve, &4.into()) {
+                            let _ = reject.call1(&JsValue::UNDEFINED, &error);
+                        }
+                    });
+                    wasm_bindgen_futures::JsFuture::from(wait).await?;
+                }
+            }
+        };
+        Ok(JsValue::from_str(
+            &serde_json::to_string(&response).expect("serializable protocol response"),
+        ))
+    })
 }

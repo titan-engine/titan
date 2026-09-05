@@ -5,7 +5,7 @@ use serde::Deserialize;
 use titan::{
     App, FixedTime, Startup, World,
     input::InputFrame,
-    inspection::{InspectionConfig, Inspector, StepBudget, handle_with_policy},
+    inspection::{InspectionConfig, Inspector, StepBudget},
     replay::{
         Playback as ReplayState, RecordedButtons as RecordedFrame, RecordingIdentity,
         SnapshotRecorder, SnapshotRecording as Recording,
@@ -367,6 +367,7 @@ impl ArenaSession {
     /// Physical host controls do not require inspection mutation opt-in.
     pub fn load_replay(&mut self, recording: serde_json::Value) -> Result<(), ProtocolError> {
         load_replay(&mut self.app, recording)?;
+        self.inspector.reset_capture_session();
         self.reset_timing_and_input();
         self.inspector.note_external_change();
         Ok(())
@@ -374,6 +375,7 @@ impl ArenaSession {
     /// Restore the loaded origin without rewinding host time. Requires pause.
     pub fn restart_replay(&mut self) -> Result<(), ProtocolError> {
         restart_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.reset_timing_and_input();
         self.inspector.note_external_change();
         Ok(())
@@ -381,6 +383,7 @@ impl ArenaSession {
     /// Leave playback for a fresh live run. Requires pause.
     pub fn stop_replay(&mut self) -> Result<(), ProtocolError> {
         stop_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.reset_timing_and_input();
         self.inspector.note_external_change();
         Ok(())
@@ -403,6 +406,7 @@ impl ArenaSession {
     /// Queue a bounded seek while paused. Targets include both origin and EOF.
     pub fn seek_replay(&mut self, position: usize) -> Result<(), ProtocolError> {
         seek_replay(&mut self.app, position)?;
+        self.inspector.reset_capture_session();
         self.reset_timing_and_input();
         self.inspector.note_external_change();
         Ok(())
@@ -531,6 +535,7 @@ impl ArenaSession {
 
     pub fn restart(&mut self) {
         game::restart(&mut self.app);
+        self.inspector.reset_capture_session();
         self.reset_timing_and_input();
         self.inspector.note_external_change();
     }
@@ -546,6 +551,10 @@ impl ArenaSession {
     }
 
     pub fn handle(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
+        self.dispatch(request).into_ready()
+    }
+
+    pub fn dispatch(&mut self, request: &RequestEnvelope) -> titan::inspection::Dispatch {
         let was_paused = self.paused();
         let reset_epoch = game::restart_epoch(&self.app);
         self.inspector.set_controlled(was_paused);
@@ -574,12 +583,16 @@ impl ArenaSession {
                 ),
                 _ => true,
             };
-        let response = handle_with_policy(
+        let response = titan::inspection::dispatch_with_policy(
             &mut self.app,
             &mut self.inspector,
             self.enable_control && allowed,
             request,
         );
+        let response = match response {
+            titan::inspection::Dispatch::Ready(response) => response,
+            pending @ titan::inspection::Dispatch::Pending(_) => return pending,
+        };
         let replay_control_changed = matches!(&request.request, Request::Invoke { name, .. }
             if matches!(name.as_str(), "seek_replay" | "replay_speed"))
             && matches!(response.outcome, ResponseOutcome::Success { .. });
@@ -600,8 +613,25 @@ impl ArenaSession {
             }
             self.app.refresh_extracted();
         }
+        if matches!(response.outcome, ResponseOutcome::Success { .. })
+            && matches!(&request.request, Request::Invoke { name, .. } if matches!(name.as_str(), "restart" | "load_replay" | "restart_replay" | "stop_replay" | "seek_replay"))
+        {
+            self.inspector.reset_capture_session();
+        }
         self.inspector.set_controlled(self.paused());
-        response
+        titan::inspection::Dispatch::Ready(response)
+    }
+
+    pub fn dispatch_json(&mut self, json: &str) -> titan::inspection::Dispatch {
+        match serde_json::from_str(json) {
+            Ok(request) => self.dispatch(&request),
+            Err(_) => titan::inspection::dispatch_json_with_policy(
+                &mut self.app,
+                &mut self.inspector,
+                self.enable_control,
+                json,
+            ),
+        }
     }
 
     pub fn handle_json(&mut self, request_json: &str) -> String {

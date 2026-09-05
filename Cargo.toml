@@ -55,3 +55,8 @@ required-features = ["image-png"]
 [[example]]
 name = "png_fuzz"
 required-features = ["image-png"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "=0.2.127"
+wasm-bindgen-futures = "0.4"

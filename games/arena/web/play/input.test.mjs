@@ -154,7 +154,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(ids['load-save'].disabled, false, 'paused controls allow file loading');
   ids.pause.click();
   key('keydown');
-  const envelope = { schema_version: 1, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
+  const envelope = { schema_version: 2, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
   const event = { source: window, origin: 'http://localhost', data: { namespace: 'titan.inspector', type: 'request', envelope } };
   window.handlers.message({ ...event, origin: 'https://other.example' });
   window.handlers.message({ ...event, source: {} });

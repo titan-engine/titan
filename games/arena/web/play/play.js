@@ -126,7 +126,7 @@ function handle(requestJson) {
   return response;
 }
 function request(request) {
-  const envelope = JSON.parse(handle(JSON.stringify({ schema_version: 1, request_id: `live-${++requestId}`, request })));
+  const envelope = JSON.parse(handle(JSON.stringify({ schema_version: 2, request_id: `live-${++requestId}`, request })));
   if (envelope.status === 'failure') throw new Error(envelope.error.message);
   return envelope;
 }
@@ -261,9 +261,9 @@ document.querySelector('#step').addEventListener('click', () => panel(() => {
   summarize(request({ type: 'query', name: 'arena_state' }).response.value);
   showDetails(response);
 }));
-window.addEventListener('message', event => {
+window.addEventListener('message', async event => {
   if (!player) return;
-  const response = bridgeResponse(event, { origin: location.origin, source: window, handle });
+  const response = await bridgeResponse(event, { origin: location.origin, source: window, handle: json => player.dispatch(json) });
   if (response) window.postMessage(response, location.origin);
 });
 new ResizeObserver(() => { try { resize(); } catch (error) { failure(error); } }).observe(canvas);

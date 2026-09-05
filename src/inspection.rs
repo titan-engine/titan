@@ -1,7 +1,21 @@
 //! Transport-neutral inspection of a Titan [`App`](crate::App).
 
 mod browser;
-pub use browser::{BrowserSession, handle_json_with_policy, handle_with_policy};
+mod capture;
+#[cfg(target_arch = "wasm32")]
+pub use browser::response_promise;
+pub use browser::{
+    BrowserSession, dispatch_json_with_policy, dispatch_with_policy, handle_json_with_policy,
+    handle_with_policy,
+};
+pub use capture::{CaptureCompleter, CaptureLimits, Dispatch, PendingCapture};
+#[cfg(target_arch = "wasm32")]
+pub use js_sys::Promise as BrowserPromise;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
+use titan_protocol::CaptureIdentity;
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -122,6 +136,8 @@ type InputHandler = Box<
     dyn FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError> + Send,
 >;
 type CaptureHandler = Box<dyn FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send>;
+type AsyncCaptureHandler =
+    Box<dyn FnMut(&App, CaptureIdentity, CaptureCompleter) -> Result<(), ProtocolError> + Send>;
 
 type FieldGetter = Box<dyn Fn(&World, Entity) -> Result<serde_json::Value, ProtocolError> + Send>;
 type FieldSetter =
@@ -151,10 +167,16 @@ pub struct Inspector {
     fields: BTreeMap<String, BTreeMap<String, RegisteredField>>,
     input_handler: Option<InputHandler>,
     capture_handler: Option<CaptureHandler>,
+    async_capture_handler: Option<AsyncCaptureHandler>,
+    capture_dimensions: (u32, u32),
+    capture_limits: CaptureLimits,
+    capture_generation: Arc<AtomicU64>,
+    capture_outstanding: Arc<AtomicUsize>,
+    next_capture_id: u64,
 }
 
 impl Inspector {
-    pub const fn new(config: InspectionConfig) -> Self {
+    pub fn new(config: InspectionConfig) -> Self {
         Self {
             config,
             state_revision: 0,
@@ -164,6 +186,12 @@ impl Inspector {
             fields: BTreeMap::new(),
             input_handler: None,
             capture_handler: None,
+            async_capture_handler: None,
+            capture_dimensions: (1, 1),
+            capture_limits: CaptureLimits::default(),
+            capture_generation: Arc::new(AtomicU64::new(0)),
+            capture_outstanding: Arc::new(AtomicUsize::new(0)),
+            next_capture_id: 0,
         }
     }
 
@@ -442,8 +470,91 @@ impl Inspector {
         &mut self,
         handler: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
     ) -> &mut Self {
+        self.async_capture_handler = None;
         self.capture_handler = Some(Box::new(handler));
         self
+    }
+
+    /// Set bounds before registering/dispatching capture work.
+    pub fn set_capture_limits(&mut self, limits: CaptureLimits) -> &mut Self {
+        self.capture_limits = limits;
+        self
+    }
+    /// Declare output size; resizing affects only future captures.
+    pub fn set_capture_dimensions(&mut self, width: u32, height: u32) -> &mut Self {
+        self.capture_dimensions = (width, height);
+        self
+    }
+    /// Invalidate old work when replacing/resetting the runtime, even at the same tick.
+    pub fn reset_capture_session(&mut self) {
+        self.capture_generation.fetch_add(1, Ordering::AcqRel);
+    }
+    /// Freeze owned immutable frame/assets here, at the application safe point.
+    /// Keep the completer alive until asynchronous resources have been reclaimed.
+    pub fn register_async_capture_handler(
+        &mut self,
+        width: u32,
+        height: u32,
+        handler: impl FnMut(&App, CaptureIdentity, CaptureCompleter) -> Result<(), ProtocolError>
+        + Send
+        + 'static,
+    ) -> &mut Self {
+        self.capture_dimensions = (width, height);
+        self.capture_handler = None;
+        self.async_capture_handler = Some(Box::new(handler));
+        self
+    }
+    fn capture_identity(&mut self, app: &App, width: u32, height: u32) -> CaptureIdentity {
+        self.next_capture_id = self
+            .next_capture_id
+            .checked_add(1)
+            .expect("capture ID exhausted");
+        CaptureIdentity {
+            instance_id: self.config.instance_id.clone(),
+            session_generation: self.capture_generation.load(Ordering::Acquire),
+            capture_id: self.next_capture_id,
+            observed_frame: current_frame(app),
+            state_revision: self.state_revision,
+            width,
+            height,
+        }
+    }
+    /// Dispatch at a safe point; pending work owns no application reference.
+    pub fn dispatch(&mut self, app: &mut App, request: &RequestEnvelope) -> Dispatch {
+        if !matches!(request.request, Request::Capture)
+            || self.async_capture_handler.is_none()
+            || request.schema_version != SCHEMA_VERSION
+            || request
+                .target_instance
+                .as_ref()
+                .is_some_and(|target| target != &self.config.instance_id)
+        {
+            return Dispatch::Ready(self.handle(app, request));
+        }
+        let (width, height) = self.capture_dimensions;
+        if let Err(error) = self.capture_limits.validate_dimensions(width, height) {
+            return Dispatch::Ready(self.failure(app, request, error));
+        }
+        if self.capture_outstanding.load(Ordering::Acquire) >= self.capture_limits.max_outstanding {
+            let mut error = ProtocolError::new(
+                ErrorCode::Busy,
+                "capture capacity is occupied; wait for resource reclamation",
+            );
+            error.retryable = true;
+            return Dispatch::Ready(self.failure(app, request, error));
+        }
+        let identity = self.capture_identity(app, width, height);
+        let (pending, completer) = PendingCapture::new(
+            request.clone(),
+            identity.clone(),
+            self.capture_generation.clone(),
+            self.capture_outstanding.clone(),
+            self.capture_limits,
+        );
+        if let Err(error) = self.async_capture_handler.as_mut().unwrap()(app, identity, completer) {
+            return Dispatch::Ready(self.failure(app, request, error));
+        }
+        Dispatch::Pending(pending)
     }
 
     /// Returns registered command descriptions in deterministic name order.
@@ -787,7 +898,17 @@ impl Inspector {
                     .capture_handler
                     .as_mut()
                     .ok_or_else(unregistered_operation)?;
-                handler(app).map(Response::Capture)
+                let mut result = handler(app)?;
+                self.capture_limits
+                    .validate_dimensions(result.width, result.height)?;
+                if result.artifact.len() > self.capture_limits.max_artifact_bytes {
+                    return Err(ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "capture artifact exceeds limit",
+                    ));
+                }
+                result.identity = self.capture_identity(app, result.width, result.height);
+                Ok(Response::Capture(result))
             }
         }
     }
@@ -814,7 +935,7 @@ impl Inspector {
         if !self.queries.is_empty() {
             operations.push(Operation::Query);
         }
-        if self.capture_handler.is_some() {
+        if self.capture_handler.is_some() || self.async_capture_handler.is_some() {
             operations.push(Operation::Capture);
         }
         Capabilities {
@@ -1271,6 +1392,7 @@ mod tests {
         });
         inspector.register_capture_handler(|_| {
             Ok(titan_protocol::CaptureResult {
+                identity: Default::default(),
                 width: 1,
                 height: 1,
                 format: "ppm".into(),

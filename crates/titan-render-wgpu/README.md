@@ -123,3 +123,33 @@ Frame uploads are rebuilt without persistent mesh-handle caching, so replacement
 and collection changes cannot silently reuse geometry. Native/browser adapter
 acquisition, error scopes, device loss, surface presentation and readback remain
 the host's responsibility.
+
+## Owned asynchronous 3D capture
+
+`OwnedGpuCapture::three_d(device, queue, frame, width, height, clear)` submits a
+fresh immutable `RenderFrame3d`, including its resolved mesh assets, into its own
+RGBA8 target. It never reads the presentation renderer's prepared cache.
+`poll(elapsed)` is nonblocking and returns one `Image`, an error, or no result yet.
+Use a monotonic host timer while paused, including in browsers; yield between
+polls and do not depend on animation frames. Elapsed time begins at request
+acceptance, before preparation. The staging allocation (including row padding)
+is capped at 32 MiB; mapping has a five-second deadline. Frame geometry retains
+its existing validated hard caps. No GPU handles or application borrows need
+cross a wait. Drop/cancel aborts mapping and destroys staging storage. On cancellation or
+timeout, call `job.retire(move || drop(completer))` to retain admission until
+`Queue::on_submitted_work_done` confirms backend submission retirement. Keep
+polling the device until that callback fires; dropping the producer early would
+allow unbounded queued work through repeated canceled requests.
+
+Hosts retain the inspection `CaptureCompleter` alongside the job, encode the
+returned image with `titan_diagnostics::png_capture`, and complete it once. Keep
+the producer alive through cleanup, and discard canceled/late work. The common
+`PendingCapture` owns provenance, admission and the end-to-end deadline,
+including PNG encoding. GPU errors use fixed bounded diagnostics. Unsupported
+GPU hosts should not register a capture handler.
+
+The shared native/browser fixture now also exercises the common asynchronous
+dispatcher with a known accepted tick and PNG response, changes its source world
+before readback, and tests frozen pixels, padded resize, cancellation, timeout
+and subsequent capture after late callbacks. Its JSON includes capture response
+identity and an inline PNG, without runtime discovery credentials.

@@ -1981,6 +1981,7 @@ name = "titan"
 version = "0.4.0"
 dependencies = [
  "ctrlc",
+ "js-sys",
  "png",
  "pollster",
  "serde",
@@ -1991,6 +1992,8 @@ dependencies = [
  "titan-remote",
  "titan-render-wgpu",
  "trybuild",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "winit",
 ]
 

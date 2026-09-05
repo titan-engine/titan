@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use titan::{
     App, FixedTime, Startup, World,
     input::InputFrame,
-    inspection::{Inspector, StepBudget, handle_with_policy},
+    inspection::{Inspector, StepBudget},
     replay::{Playback, RecordedButtons, RecordingIdentity, SnapshotRecorder, SnapshotRecording},
 };
 use titan_protocol::{
@@ -637,23 +637,27 @@ impl RpgSession {
     }
     pub fn restart(&mut self) {
         restart(&mut self.app).expect("valid fresh RPG");
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
     }
     pub fn load_replay(&mut self, value: Value) -> Result<(), ProtocolError> {
         load_replay(&mut self.app, value)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
     }
     pub fn restart_replay(&mut self) -> Result<(), ProtocolError> {
         restart_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
     }
     pub fn stop_replay(&mut self) -> Result<(), ProtocolError> {
         stop_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
@@ -682,6 +686,10 @@ impl RpgSession {
         }
     }
     pub fn handle(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
+        self.dispatch(request).into_ready()
+    }
+
+    pub fn dispatch(&mut self, request: &RequestEnvelope) -> titan::inspection::Dispatch {
         self.inspector.set_controlled(self.paused());
         self.inspector.set_step_budget(StepBudget {
             max_frames: self
@@ -713,12 +721,16 @@ impl RpgSession {
                 _ => true,
             };
         let epoch = self.clock_epoch();
-        let response = handle_with_policy(
+        let response = titan::inspection::dispatch_with_policy(
             &mut self.app,
             &mut self.inspector,
             self.enable_control && allowed && modal_allowed,
             request,
         );
+        let response = match response {
+            titan::inspection::Dispatch::Ready(response) => response,
+            pending @ titan::inspection::Dispatch::Pending(_) => return pending,
+        };
         if self.clock_epoch() != epoch {
             self.clear_input();
         }
@@ -735,9 +747,26 @@ impl RpgSession {
         if matches!(response.outcome, ResponseOutcome::Success { .. }) {
             self.app.refresh_extracted();
         }
+        if matches!(response.outcome, ResponseOutcome::Success { .. })
+            && matches!(&request.request, Request::Invoke { name, .. } if matches!(name.as_str(), "restart" | "load_replay" | "restart_replay" | "stop_replay" | "seek_replay"))
+        {
+            self.inspector.reset_capture_session();
+        }
         self.inspector.set_controlled(self.paused());
-        response
+        titan::inspection::Dispatch::Ready(response)
     }
+    pub fn dispatch_json(&mut self, json: &str) -> titan::inspection::Dispatch {
+        match serde_json::from_str(json) {
+            Ok(request) => self.dispatch(&request),
+            Err(_) => titan::inspection::dispatch_json_with_policy(
+                &mut self.app,
+                &mut self.inspector,
+                self.enable_control,
+                json,
+            ),
+        }
+    }
+
     pub fn handle_json(&mut self, json: &str) -> String {
         match serde_json::from_str(json) {
             Ok(request) => serde_json::to_string(&self.handle(&request)).unwrap(),

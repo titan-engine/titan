@@ -8,7 +8,8 @@ and no playable world. See [asset behavior](assets.md) for limits and replay rul
 
 The browser adapter runs the same procedural RPG as the native example, using
 `examples/support/procedural_rpg.rs`. It executes the same protocol envelopes
-through a synchronous WASM call. No simulation tick runs between requests.
+through a safe-point WASM dispatch. Acceptance is synchronous; asynchronous
+capture completion owns its immutable snapshot and releases the player borrow.
 
 Build and serve locally:
 
@@ -46,15 +47,23 @@ Captures are PNG data URIs in the existing `CaptureResult.artifact` field.
 The checksum is computed from the uncompressed RGBA image, so native PPM and
 browser PNG captures share the same exact reference checksum.
 
-## Reusing the synchronous host
+## Reusing the browser host
 
 The RPG, starter and arena delegate JSON handling to
 `titan::inspection::BrowserSession::new(app, inspector, enable_control)` and
-`session.handle(request_json)`. Construct the game and run `Startup` first;
+`session.dispatch_json(request_json)`. Construct the game and run `Startup` first;
 register its commands, validated fields, input and capture hook on its inspector.
 The session sets browser run mode, paused execution and the opt-in mutation
 policy consistently. It owns the app and inspector so handling is exclusive.
 The WASM export and same-origin JavaScript bridge remain in each game.
+Export `dispatch` by returning
+`titan::inspection::response_promise(|| session.dispatch_json(request_json))`.
+The closure accepts immediately, before the Promise is returned; no mutable
+session borrow crosses the wait. Timer tasks (using a monotonic clock sampled
+before acceptance) poll completion independently of animation frames or ticks.
+The old `handle` convenience supports immediate software responses only; an
+asynchronous provider requires `dispatch`. Await `runtime.dispatch(json)` for
+new browser integrations, including software captures.
 
 For an inline image capture, pass the game-rendered `Image` to
 `titan_diagnostics::png_capture(&image)`. `titan-diagnostics` is consequently an
@@ -63,8 +72,8 @@ artifact destinations; native bundle permissions and size bounds remain in the
 bundle writer. Games retain their rendering hooks and presentation choices.
 
 Migration from milestone 2 removes the local JSON parsing/control-policy helpers
-and PNG encoder; no protocol envelope, exported JavaScript method or checksum
-changes. The standalone starter shows the complete small wrapper.
+and PNG encoder; protocol schema 2 adds capture identity metadata; migrate request envelopes
+and use the Promise-returning `dispatch` export. Reference checksums are unchanged. The standalone starter shows the complete small wrapper.
 
 ## Message bridge
 
@@ -75,7 +84,7 @@ window.postMessage({
   namespace: "titan.inspector",
   type: "request",
   envelope: {
-    schema_version: 1,
+    schema_version: 2,
     request_id: "example-status",
     request: { type: "status" }
   }
@@ -83,7 +92,8 @@ window.postMessage({
 ```
 
 Responses use the same namespace, `type: "response"`, and the unchanged
-protocol response envelope in `envelope`. Match responses by `request_id`.
+protocol response envelope in `envelope`. Match responses by `request_id`; pending captures can complete after later queries.
+The bridge awaits the runtime Promise and emits exactly one eventual envelope.
 Only messages from the same window and the exact non-null page origin are
 accepted. Cross-origin messages and messages from embedded frames are ignored.
 The bridge cannot enable controls; that is an explicit action in the page.

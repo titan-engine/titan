@@ -20,7 +20,7 @@ async function initialize() {
   }
   function request(body) {
     if (!runtime) throw new Error("Runtime unavailable. Retry loading sprites before inspection.");
-    const envelope = { schema_version: 1, request_id: `browser-ui-${++sequence}`, request: body };
+    const envelope = { schema_version: 2, request_id: `browser-ui-${++sequence}`, request: body };
     const result = JSON.parse(runtime.handle(JSON.stringify(envelope)));
     text("last-response", JSON.stringify(result, null, 2));
     currentFrame = result.observed_frame;
@@ -171,10 +171,10 @@ async function initialize() {
   }));
   try {
     const wasm = await import("./pkg/titan_browser.js"); await wasm.default(); BrowserRuntime = wasm.BrowserRuntime; await start(false).catch(showError);
-    window.addEventListener("message", (event) => {
+    window.addEventListener("message", async (event) => {
       try {
         if (!runtime) return;
-        const response = bridgeResponse(event, { origin: location.origin, source: window, handle: (json) => runtime.handle(json) });
+        const response = await bridgeResponse(event, { origin: location.origin, source: window, handle: (json) => runtime.dispatch(json) });
         if (!response) return;
         window.postMessage(response, location.origin);
         if (response.envelope.status === "failure") showError(response.envelope.error);
