@@ -20,8 +20,9 @@ pub use ecs::{
     Bundle, Commands, Component, ComponentMetadata, DeferredCommandError, DeferredOperation,
     Entity, FindNameError, InsertError, Name, QueryAccessError, World,
 };
+pub use inspection::Inspect;
 pub use time::FixedTime;
-pub use titan_macros::Component;
+pub use titan_macros::{Component, Inspect};
 
 pub use ecs::{AccessMode, AccessTarget, Query, QueryData, Res, ResMut, SystemAccess, SystemError};
 pub use system::{ApplyDeferred, IntoSystem, SystemMetadata};

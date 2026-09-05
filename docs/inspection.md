@@ -102,6 +102,43 @@ The original direct replay remains an independent exact-image reference.
 
 ## Explicit component fields
 
+The RPG's `Position` uses the opt-in `Inspect` derive to register its two tile
+coordinates. This minimal slice supports named, nongeneric component structs
+and explicitly annotated `i32` fields:
+
+```rust
+use titan::{Component, Inspect, inspection::{InspectionConfig, Inspector}};
+
+#[derive(Component, Inspect)]
+struct Position {
+    /// Map tile coordinate
+    #[inspect(writable, minimum = 0, maximum = 19, unit = "tile")]
+    x: i32,
+    /// Map tile coordinate
+    #[inspect(writable, minimum = 0, maximum = 13, unit = "tile")]
+    y: i32,
+}
+
+let mut inspector = Inspector::new(InspectionConfig::controlled("game", "project"));
+inspector.register_inspectable::<Position>()?;
+# Ok::<(), titan::inspection::ProtocolError>(())
+```
+
+Field names and `i32` type labels are generated; field Rust doc comments become
+descriptions. `minimum`, `maximum`, and `unit` are optional enrichments. Bounds
+accept Rust expressions convertible through `f64::from`, including map constants.
+An annotated field is read-only unless it includes `writable`; unannotated fields
+are not registered and need no serialization support. The derive does not expose
+anything until explicitly registered with an inspector, and registration does
+not enable mutation. `Component` itself still permits opaque types.
+
+Generated registration uses the same typed decoding, numeric bounds, permissions,
+and getters/setters as the manual API below. Use manual registration for other
+field types, computed values, or validators enforcing additional game invariants.
+This slice does not generate type-level documentation, nested reflection, or
+component serialization. Registration is sequential; an error leaves any earlier
+successful field registrations in place, just as repeated manual calls do.
+
 Games expose individual fields with `Inspector::register_field::<Component, Value>`.
 This opt-in API does not require component serialization or derived reflection:
 
