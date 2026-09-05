@@ -148,6 +148,7 @@ GPU.
 - [Copy the minimal game starter](starters/minimal/README.md)
 - [Starter boundary audit](docs/starter-audit.md)
 - [ECS authoring](docs/ecs-authoring.md)
+- [Deterministic swarm workload and measurements](docs/swarm.md)
 - [CLI workflow](docs/cli.md)
 - [In-process inspection](docs/inspection.md)
 - [Browser inspection](docs/browser.md)
