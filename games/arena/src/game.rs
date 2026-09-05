@@ -1,4 +1,7 @@
 //! Replace this module with your game. Hosts depend only on the functions below.
+mod save;
+pub use save::{MAX_SAVE_BYTES, export_save, load_save};
+
 use serde::Deserialize;
 use std::collections::BTreeMap;
 #[cfg(not(target_arch = "wasm32"))]
@@ -107,6 +110,7 @@ enum HudKind {
 }
 #[derive(Component)]
 struct RestartButton;
+/// Increments whenever restart or load replaces gameplay and resets host input.
 #[derive(Default)]
 struct RestartEpoch(u64);
 #[derive(Default)]

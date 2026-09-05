@@ -8,8 +8,8 @@ use titan::{
     inspection::{InspectionConfig, Inspector, handle_with_policy},
 };
 use titan_protocol::{
-    CommandMetadata, ErrorCode, ProtocolError, QueryMetadata, Request, RequestEnvelope,
-    ResponseEnvelope, ResponseOutcome, RunMode,
+    CommandMetadata, ErrorCode, FieldMetadata, ProtocolError, QueryMetadata, Request,
+    RequestEnvelope, ResponseEnvelope, ResponseOutcome, RunMode,
 };
 
 use crate::game::{self, Action};
@@ -98,6 +98,23 @@ pub(crate) fn begin_recording(world: &mut World) {
         invalid_reason: None,
         expected_positions,
     });
+}
+
+/// A loaded mid-run state is not the beginning of a replay from restart.
+/// Keep the existing diagnostic input history and origin, but invalidate exact replay
+/// until a real restart. Loading does not manufacture a new recording segment.
+pub(crate) fn invalidate_after_load(world: &mut World) {
+    let expected_positions = positions(world);
+    let recording = world.resource_mut::<RecordingState>().unwrap();
+    recording.invalid_reason =
+        Some("loaded save state; restart before recording an exact replay".into());
+    recording.expected_positions = expected_positions;
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LoadSaveArgs {
+    save: serde_json::Value,
 }
 
 /// Runs after the scheduled-input override and before the simulation consumes it.
@@ -198,6 +215,38 @@ pub(crate) fn register_queries(inspector: &mut Inspector) {
             |app, _: NoArguments| recording_value(app),
         )
         .expect("unique recording query");
+    inspector
+        .register_query(
+            QueryMetadata {
+                name: "save".into(),
+                description: "Export a bounded, versioned arena gameplay save; excludes host, UI and transient input state.".into(),
+                arguments: BTreeMap::new(),
+            },
+            |app, _: NoArguments| game::export_save(app),
+        )
+        .expect("unique save query");
+    inspector
+        .register_command(
+            CommandMetadata {
+                name: "load_save".into(),
+                description: "Restore a validated arena save at a safe point. Live players must be paused with controls enabled; host clock stays monotonic and replay history is invalidated.".into(),
+                arguments: [("save".into(), FieldMetadata {
+                    type_name: "ArenaSaveV1".into(),
+                    description: "Raw versioned gameplay object returned by the save query, at most 64 KiB.".into(),
+                    writable: false,
+                    minimum: None,
+                    maximum: None,
+                    unit: None,
+                })].into(),
+            },
+            |app, args: LoadSaveArgs| {
+                if app.world().resource::<PlaybackControl>().is_some_and(|control| !control.paused) {
+                    return Err(ProtocolError::new(ErrorCode::NotControlled, "pause the live player before loading a save"));
+                }
+                game::load_save(app, args.save)
+            },
+        )
+        .expect("unique load command");
 }
 
 /// The same app is ticked, rendered, queried and captured by both playable hosts.
@@ -347,7 +396,7 @@ impl ArenaSession {
 
     pub fn handle(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
         let was_paused = self.paused();
-        let restart_epoch = game::restart_epoch(&self.app);
+        let reset_epoch = game::restart_epoch(&self.app);
         self.inspector.set_controlled(was_paused);
         let response = handle_with_policy(
             &mut self.app,
@@ -355,7 +404,7 @@ impl ArenaSession {
             self.enable_control,
             request,
         );
-        if game::restart_epoch(&self.app) != restart_epoch || was_paused != self.paused() {
+        if game::restart_epoch(&self.app) != reset_epoch || was_paused != self.paused() {
             self.reset_timing_and_input();
         }
         if matches!(response.outcome, ResponseOutcome::Success { .. }) {
@@ -869,5 +918,175 @@ mod tests {
             "command activation clears pending injected input"
         );
         assert!(verify_recording(query(&mut live, "recording")).is_ok());
+    }
+    #[test]
+    fn save_query_and_paused_load_restore_state_ui_and_preserve_session_identity() {
+        let mut live = session(true);
+        live.resume();
+        live.set_action("right", true).unwrap();
+        live.set_action("dash", true).unwrap();
+        live.tick();
+        let before_query = request(&mut live, Request::Status);
+        let save = query(&mut live, "save");
+        let after_query = request(&mut live, Request::Status);
+        assert_eq!(before_query.state_revision, after_query.state_revision);
+        let expected_state = comparable_state(live.app());
+        let expected_image = game::image_checksum(&game::render_image(live.app().world()).unwrap());
+        let load = |save| Request::Invoke {
+            name: "load_save".into(),
+            arguments: [("save".into(), save)].into(),
+        };
+        let denied = request(&mut live, load(save.clone()));
+        assert!(
+            matches!(denied.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::NotControlled)
+        );
+        assert_eq!(denied.state_revision, after_query.state_revision);
+        live.pause();
+        success(request(&mut live, Request::Step { frames: 20 }));
+        let before_load = request(&mut live, Request::Status);
+        let recording_before = query(&mut live, "recording");
+        let epoch = live.clock_epoch();
+        let loaded = request(&mut live, load(save));
+        success(loaded.clone());
+        assert_eq!(loaded.observed_frame, before_load.observed_frame);
+        assert!(loaded.state_revision > before_load.state_revision);
+        assert!(live.clock_epoch() > epoch);
+        assert!(live.paused());
+        assert_eq!(comparable_state(live.app()), expected_state);
+        assert_eq!(
+            game::image_checksum(&game::render_image(live.app().world()).unwrap()),
+            expected_image
+        );
+        let dash_label = live
+            .app()
+            .world()
+            .iter::<titan::Name>()
+            .find(|(_, name)| name.as_str() == "ui/dash")
+            .unwrap()
+            .0;
+        assert_eq!(
+            live.app()
+                .world()
+                .get::<titan::ui::UiText>(dash_label)
+                .unwrap()
+                .text,
+            "DASH 2.0S"
+        );
+        let recording_after = query(&mut live, "recording");
+        assert_eq!(
+            recording_after["start_host_frame"],
+            recording_before["start_host_frame"]
+        );
+        assert_eq!(
+            recording_after["recorded_ticks"],
+            recording_before["recorded_ticks"]
+        );
+        assert!(
+            recording_after["invalid_reason"]
+                .as_str()
+                .unwrap()
+                .contains("loaded save")
+        );
+        assert!(verify_recording(recording_after).is_err());
+        live.restart();
+        assert!(query(&mut live, "recording")["invalid_reason"].is_null());
+    }
+
+    #[test]
+    fn invalid_or_disabled_load_does_not_mutate_and_valid_load_clears_stale_input() {
+        let mut live = session(false);
+        let save = query(&mut live, "save");
+        let load = |save| Request::Invoke {
+            name: "load_save".into(),
+            arguments: [("save".into(), save)].into(),
+        };
+        let before = request(&mut live, Request::Status);
+        let disabled = request(&mut live, load(save.clone()));
+        assert!(
+            matches!(disabled.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::MutationDisabled)
+        );
+        assert_eq!(disabled.state_revision, before.state_revision);
+        live.set_control_enabled(true);
+        let before = request(&mut live, Request::Status);
+        let state = query(&mut live, "save");
+        let epoch = live.clock_epoch();
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!([]),
+            serde_json::json!({"padding":"x".repeat(game::MAX_SAVE_BYTES + 1)}),
+        ] {
+            let rejected = request(&mut live, load(bad));
+            assert!(
+                matches!(rejected.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
+            );
+            assert_eq!(
+                (rejected.observed_frame, rejected.state_revision),
+                (before.observed_frame, before.state_revision)
+            );
+            assert_eq!(live.clock_epoch(), epoch);
+            assert_eq!(query(&mut live, "save"), state);
+            assert!(query(&mut live, "recording")["invalid_reason"].is_null());
+        }
+        live.set_action("right", true).unwrap();
+        live.set_action("dash", true).unwrap();
+        live.pointer(Some((8, 12)), true);
+        success(request(
+            &mut live,
+            Request::Invoke {
+                name: "ui_pointer".into(),
+                arguments: [
+                    ("x".into(), 8.into()),
+                    ("y".into(), 12.into()),
+                    ("pressed".into(), true.into()),
+                ]
+                .into(),
+            },
+        ));
+        success(request(
+            &mut live,
+            Request::InjectInput {
+                frame: before.observed_frame + 1,
+                actions: [("left".into(), InputValue::Button(true))].into(),
+            },
+        ));
+        success(request(&mut live, load(save)));
+        let epoch = live.clock_epoch();
+        live.pointer(Some((8, 12)), false);
+        success(request(
+            &mut live,
+            Request::Invoke {
+                name: "ui_pointer".into(),
+                arguments: [
+                    ("x".into(), 8.into()),
+                    ("y".into(), 12.into()),
+                    ("pressed".into(), false.into()),
+                ]
+                .into(),
+            },
+        ));
+        assert_eq!(
+            live.clock_epoch(),
+            epoch,
+            "orphaned pre-load pointer releases must not restart"
+        );
+        success(request(&mut live, Request::Step { frames: 1 }));
+        assert_eq!(
+            query(&mut live, "arena_state")["position"]["x"],
+            80,
+            "load clears injected input"
+        );
+        live.resume();
+        live.tick();
+        assert_eq!(
+            query(&mut live, "arena_state")["position"]["x"],
+            80,
+            "load clears buffered physical input"
+        );
+        assert!(
+            query(&mut live, "recording")["invalid_reason"]
+                .as_str()
+                .unwrap()
+                .contains("loaded save")
+        );
     }
 }
