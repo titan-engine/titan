@@ -9,8 +9,8 @@ history and diagnostics were sufficient to diagnose the failed route. No shared
 collision helper or reflection expansion was justified.
 
 Host setup consolidation is complete, including remote CI. The arena dash
-is implemented and locally verified; user feedback on its distance and cooldown
-is pending.
+was accepted by the user. Difficulty settings remain a future possibility;
+current work is input cancellation consistency followed by live-player inspection.
 The [implementation plan](implementation-plan.md) tracks execution; the
 [host setup audit](host-setup-audit.md) records completed consolidation evidence.
 Keep broader framework, camera and platform features demand-driven.

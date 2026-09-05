@@ -1,8 +1,8 @@
 # Arena dash verification — 2026-09-05
 
-The arena dash is implemented and automated acceptance passes. User playtesting
-remains the tuning gate; this report does not claim user acceptance. No shared
-engine API change was needed.
+The arena dash is implemented and accepted by the user after playtesting. The
+user noted the cooldown may be short and suggested future difficulty settings;
+no tuning change was requested. No shared engine API change was needed.
 
 ## Behavior and images
 
@@ -59,7 +59,8 @@ visually inspected; the fixture now scales to narrow browser panels.
 The actual browser play page also responded to Space and its pointer Dash
 button, showing the shifted player and a 1.9-second cooldown. Restart restored
 health3, elapsed0 and dash readiness, with the game paused for user review.
-These are agent play checks; user feedback on distance and cooldown is pending.
+The user subsequently accepted playability, with difficulty settings suggested
+as a possible future extension.
 
 
 ## Iteration measurements

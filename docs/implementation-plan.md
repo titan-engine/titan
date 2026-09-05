@@ -7,34 +7,34 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Current objective: arena dash and measured iteration
+## Current objective: consistent input and live-player inspection
 
-The user authorized this objective on 2026-09-05. Add a short directional dash,
-a fixed-tick cooldown and a visible ready indicator to the arena game. Use Space
-in native and browser players and expose the same action through deterministic
-input. Keep rules and presentation game-owned; change the engine only for a
-demonstrated limitation.
+Authorized on 2026-09-05 after the user accepted arena dash playability. Keep the
+current cooldown; difficulty settings are a possible future game feature, not
+part of this objective. Dash evidence lives in [arena-dash.md](arena-dash.md).
 
-Implementation is committed in `de60f84`. All 21 local gates passed, including
-native/actual-WASM dash scenarios, unchanged no-dash survival semantics, GPU
-readback and standalone/relocated bundle checks. Independent game and host
-reviews found no actionable issues. Computer Use verified native Space input,
-browser keyboard/pointer input, restart, cooldown and the browser winning replay.
-The [dash verification report](arena-dash.md) records reviewed images and timings.
+Execution order:
 
-Cached game-source rebuild samples were 0.538s native and 1.227s browser;
-inspection roundtrips were about 6ms and captures about 9ms. These are small-game
-incremental samples, not clean-build or general productivity claims. No engine
-API change was required.
+1. Reproduce and fix browser buffered-input cancellation across pause/focus loss.
+   Consolidate demonstrated browser keyboard/pointer lifecycle and optional
+   event-to-tick button accumulation. Keep bindings, buffering choices, RPG pulse
+   cadence and game rules local. Preserve externally copied starter/game builds.
+2. Attach inspection to the actual arena native/browser player. Pause at a fixed
+   tick boundary, inspect entities and run state, and capture that same state.
+   Keep inspection read-only by default and make remote control explicit.
+3. Record consumed live input from restart, export a bounded reproducible run,
+   and replay it headlessly to verify a suspicious contact, including dash edges.
+   Report unsupported or incomplete recordings explicitly; do not claim replay
+   fidelity when external mutations or missing history make it impossible.
+4. Verify native/actual-WASM behavior, live host safe points, frame/revision
+   correlation, controls, capture and replay. Run quality gates and independent
+   review. Document APIs and a concrete playable diagnosis workflow.
 
-Pending: user playtest and feedback on dash distance/cooldown. Tune only in
-response to that feedback or a concrete defect. Commits are local; remote CI
-must be inspected if these increments are subsequently pushed. No next engine
-objective is selected.
-
-Use subagents for implementation and verification to keep coordination compact.
-No crate publication, visibility changes or new tags are authorized. Engine crate
-versions remain 0.1.0.
+Use subagents for implementation and verification; commit small coherent
+increments. No broad application framework, rollback system, new game genre or
+difficulty setting is implied. Local commits have not been pushed; inspect remote
+CI if increments are subsequently pushed. No crate publication, visibility
+changes or new tags are authorized. Engine crate versions remain 0.1.0.
 
 ## Completed host consolidation
 
@@ -51,10 +51,10 @@ Host consolidation is complete.
 ## Constraints and quality gates
 
 Preserve the accepted RPG behavior and software checksum `190a92085def5677` for
-changes unrelated to its visuals. Arena pre-dash visual baselines are initial `1e5d05f547d53435`
-and winning replay `be61b1c710b101b6`; update them only after reviewing the
-intentional dash HUD change, while preserving no-dash replay semantics. Keep discovery authentication, browser control
-opt-in, field validation, deterministic safe points, and bounded diagnostics.
+changes unrelated to its visuals. Preserve arena initial `e096abf94fd12c24`
+and winning replay `b5cf61da6f50efd7`, including existing no-dash survival
+semantics. Keep discovery authentication, browser control opt-in, field
+validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
 No speculative editor, 3D, networking, scene format, asset pipeline, parallel
