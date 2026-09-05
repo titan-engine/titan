@@ -15,6 +15,14 @@
 <div class="scene"><canvas id="game" width="640" height="448" tabindex="0" aria-label="Procedural RPG game. Move with arrow keys or W A S D."></canvas><p class="hint">Move with arrow keys or W A S D. Click the scene to focus.</p></div>
 <div class="directions" aria-label="Movement controls"><button data-action="left" aria-label="Move left" disabled>←</button><button data-action="up" aria-label="Move up" disabled>↑</button><button data-action="down" aria-label="Move down" disabled>↓</button><button data-action="right" aria-label="Move right" disabled>→</button></div>
 <p id="result" role="status"></p>
+<section aria-label="Record and replay">
+<h2>Record and replay</h2>
+<p>Export up to 3,600 consumed ticks from the latest restart or loaded snapshot. Pause before loading a recording (JSON, up to 2 MiB). Playback ignores live movement and stops at its verified end.</p>
+<div class="toolbar"><button id="recording" disabled>Export recording</button><label>Load recording <input id="load-recording" type="file" accept=".json,application/json" disabled></label><button id="step" disabled>Step playback</button><button id="restart-playback" disabled>Restart playback</button><button id="exit-playback" disabled>Exit to fresh game</button></div>
+<p id="playback-status" role="status">Live game</p>
+<p id="recording-result" role="status"></p>
+<details><summary>Inspect this game</summary><p>Read-only inspection uses this same scene. Enable controls to allow local inspection commands and snapshot loading.</p><label><input id="enable-controls" type="checkbox"> Enable inspection controls</label><button id="inspect" disabled>Inspect quest</button><pre id="live-output" style="max-height:22rem;overflow:auto;white-space:pre-wrap"></pre></details>
+</section>
 <footer>60 fixed ticks per second · GPU sprite rendering · Same game as the headless and browser inspection tests.</footer>
 <script type="module" src="play.js"></script>
 </body>

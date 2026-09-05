@@ -38,6 +38,110 @@ impl BrowserRuntime {
     }
 }
 
+/// Headless adapter for exercising the same live session under actual WASM.
+/// GPU presentation is verified separately through BrowserPlayer.
+#[wasm_bindgen]
+pub struct BrowserLiveRuntime {
+    session: game::live::RpgSession,
+}
+
+#[wasm_bindgen]
+impl BrowserLiveRuntime {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            session: live_session(),
+        }
+    }
+    pub fn handle(&mut self, request_json: &str) -> String {
+        self.session.handle_json(request_json)
+    }
+    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), JsValue> {
+        self.session
+            .set_action(name, pressed)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+    pub fn paused(&self) -> bool {
+        self.session.paused()
+    }
+    pub fn clock_epoch(&self) -> String {
+        self.session.clock_epoch().to_string()
+    }
+    pub fn tick(&mut self) {
+        self.session.tick();
+    }
+    pub fn resume(&mut self) {
+        self.session.resume();
+    }
+    pub fn pause(&mut self) {
+        self.session.pause();
+    }
+    pub fn set_control_enabled(&mut self, enabled: bool) {
+        self.session.set_control_enabled(enabled);
+    }
+    pub fn load_recording(&mut self, json: &str) -> Result<(), JsValue> {
+        self.session
+            .load_replay(parse_recording_json(json)?)
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn playback_active(&self) -> bool {
+        self.session.replay_active()
+    }
+    pub fn playback_status(&self) -> String {
+        self.session.replay_status().to_string()
+    }
+    pub fn step_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .step_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn restart_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .restart_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn exit_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .stop_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+}
+
+impl Default for BrowserLiveRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Replay an exported recording in a fresh headless game, with a bounded input.
+#[wasm_bindgen]
+pub fn verify_recording_json(recording_json: &str) -> Result<String, JsValue> {
+    if recording_json.len() > 2 * 1024 * 1024 {
+        return Err(JsValue::from_str("recording exceeds the 2 MiB size bound"));
+    }
+    let result = serde_json::from_str(recording_json)
+        .map_err(|error| error.to_string())
+        .and_then(game::live::verify_recording)
+        .and_then(|value| serde_json::to_string(&value).map_err(|error| error.to_string()));
+    result.map_err(|error| JsValue::from_str(&error))
+}
+
+fn parse_recording_json(json: &str) -> Result<serde_json::Value, JsValue> {
+    if json.len() > 2 * 1024 * 1024 {
+        return Err(JsValue::from_str("recording exceeds the 2 MiB size bound"));
+    }
+    serde_json::from_str(json).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+fn live_session() -> game::live::RpgSession {
+    let mut app = game::build_game();
+    app.update_schedule(Startup);
+    let mut config = InspectionConfig::controlled("rpg-live-browser", "procedural-rpg");
+    config.run_mode = titan_protocol::RunMode::Browser;
+    let inspector = game::inspector_with_capture(config, capture);
+    game::live::RpgSession::new(app, inspector, false)
+}
+
 fn capture(app: &App) -> Result<CaptureResult, ProtocolError> {
     let image = game::render_image(app.world())?;
     titan_diagnostics::png_capture(&image)
@@ -78,7 +182,7 @@ mod tests {
         };
         assert_eq!(
             capabilities.operations,
-            [Operation::Inspect, Operation::Capture]
+            [Operation::Inspect, Operation::Query, Operation::Capture]
         );
         assert_eq!(capabilities.run_mode, RunMode::Browser);
         assert!(!capabilities.mutation_enabled);

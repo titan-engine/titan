@@ -1,21 +1,16 @@
-use titan::{
-    App, Startup,
-    render::{ImageAssets, RenderFrame},
-};
+use crate::game;
+use titan::render::{ImageAssets, RenderFrame};
 use titan_render_wgpu::{SurfaceRenderer, wgpu};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
-
-use crate::game;
-
 /// Interactive canvas runner. The browser owns keyboard events and animation timing.
 #[wasm_bindgen]
 pub struct BrowserPlayer {
-    app: App,
-    input: game::InteractiveInput,
+    session: game::live::RpgSession,
     renderer: SurfaceRenderer,
     canvas: HtmlCanvasElement,
     accumulated_ms: f64,
+    clock_epoch: u64,
 }
 
 #[wasm_bindgen]
@@ -32,29 +27,29 @@ impl BrowserPlayer {
         let (width, height) = renderer.resize(canvas.width(), canvas.height());
         canvas.set_width(width);
         canvas.set_height(height);
-        let mut app = game::build_game();
-        app.update_schedule(Startup);
+        let session = crate::live_session();
+        let clock_epoch = session.clock_epoch();
         Ok(Self {
-            app,
-            input: game::InteractiveInput::default(),
+            session,
             renderer,
             canvas,
             accumulated_ms: 0.0,
+            clock_epoch,
         })
     }
 
     pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), JsValue> {
-        self.input.set_action(name, pressed).map_err(js_error)
+        self.session.set_action(name, pressed).map_err(js_error)
     }
 
     /// Cancel held actions and buffered taps on focus loss or pause.
     pub fn clear_input(&mut self) {
-        self.input = game::InteractiveInput::default();
+        self.session.clear_input();
     }
 
     /// Cancel one interrupted gesture without dropping other buffered actions.
     pub fn cancel_action(&mut self, name: &str) -> Result<(), JsValue> {
-        self.input.cancel_action(name).map_err(js_error)
+        self.session.cancel_action(name).map_err(js_error)
     }
 
     /// Advance fixed 60 Hz ticks, then render. Long background pauses are capped.
@@ -65,17 +60,25 @@ impl BrowserPlayer {
                 "elapsed milliseconds must be finite and nonnegative",
             ));
         }
-        self.accumulated_ms += elapsed_ms.min(250.0);
-        while self.accumulated_ms >= 1000.0 / 60.0 {
-            self.input.tick(&mut self.app);
-            self.accumulated_ms -= 1000.0 / 60.0;
+        if self.clock_epoch != self.session.clock_epoch() {
+            self.accumulated_ms = 0.0;
+            self.clock_epoch = self.session.clock_epoch();
+        }
+        if !self.session.paused() {
+            self.accumulated_ms += elapsed_ms.min(250.0);
+            while self.accumulated_ms >= 1000.0 / 60.0 {
+                self.session.tick();
+                self.accumulated_ms -= 1000.0 / 60.0;
+            }
         }
         let frame = self
-            .app
+            .session
+            .app()
             .extracted::<RenderFrame>()
             .ok_or_else(|| js_error("game render extraction unavailable"))?;
         let assets = self
-            .app
+            .session
+            .app()
             .world()
             .resource::<ImageAssets>()
             .ok_or_else(|| js_error("game image assets unavailable"))?;
@@ -90,14 +93,67 @@ impl BrowserPlayer {
     }
 
     pub fn replay_reference(&mut self) {
-        self.app = game::build_game();
-        self.input = game::InteractiveInput::default();
+        self.session.replay_reference();
         self.accumulated_ms = 0.0;
-        game::replay(&mut self.app, &game::recorded_walk());
+    }
+    pub fn restart(&mut self) {
+        self.session.pause();
+        self.session.restart();
+        self.accumulated_ms = 0.0;
     }
 
     pub fn status(&self) -> String {
-        game::status(&self.app)
+        game::status(self.session.app())
+    }
+
+    pub fn pause(&mut self) {
+        self.session.pause();
+    }
+    pub fn resume(&mut self) {
+        self.session.resume();
+    }
+    pub fn paused(&self) -> bool {
+        self.session.paused()
+    }
+    pub fn clock_epoch(&self) -> String {
+        self.session.clock_epoch().to_string()
+    }
+    pub fn control_enabled(&self) -> bool {
+        self.session.control_enabled()
+    }
+    pub fn set_control_enabled(&mut self, enabled: bool) {
+        self.session.set_control_enabled(enabled);
+    }
+    pub fn load_recording(&mut self, json: &str) -> Result<(), JsValue> {
+        self.session
+            .load_replay(crate::parse_recording_json(json)?)
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn playback_active(&self) -> bool {
+        self.session.replay_active()
+    }
+    pub fn playback_status(&self) -> String {
+        self.session.replay_status().to_string()
+    }
+    pub fn step_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .step_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn restart_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .restart_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn exit_playback(&mut self) -> Result<(), JsValue> {
+        self.session
+            .stop_replay()
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+
+    /// Inspect and control the exact session presented on this canvas.
+    pub fn handle(&mut self, request_json: &str) -> String {
+        self.session.handle_json(request_json)
     }
 }
 
