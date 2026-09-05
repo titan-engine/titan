@@ -13,7 +13,7 @@ try {
  check(player.frame(0),'initial GPU frame presented');
  check((await request({type:'step',frames:1})).error.code==='mutation_disabled','browser controls default disabled');
  player.set_control_enabled(true);
- check((await request({type:'capture'})).error.code==='unsupported','capture remains unregistered');
+ check((await request({type:'capture'})).error.code==='unsupported_operation','capture remains unregistered');
  player.resume();
  for(const [key,ticks] of [['ArrowRight',8],['ArrowUp',20],['ArrowRight',16]]) {
    player.set_key(key,true,false);

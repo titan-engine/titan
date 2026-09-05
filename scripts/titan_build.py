@@ -119,7 +119,7 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None, featu
     copy_assets(resources, root / "web/assets")
 
 
-def macos_app(root, metadata, argv=None, *, assets_source=None):
+def macos_app(root, metadata, argv=None, *, assets_source=None, features=()):
     """Bundle a binary/example and replace Resources/assets when a source exists."""
     root = Path(root).resolve()
     parser = argparse.ArgumentParser(description="Bundle a native Cargo binary as an unsigned local-development macOS app.")
@@ -145,6 +145,8 @@ def macos_app(root, metadata, argv=None, *, assets_source=None):
         parser.error(f"no executable {target_kind} target named {target_name!r} in {package['name']}")
     resources = asset_source(root, assets_source)
     command = ["cargo", "build", "--package", package["name"], f"--{target_kind}", target_name, "--message-format=json-render-diagnostics"]
+    if features:
+        command.extend(["--features", ",".join(features)])
     if args.release:
         command.append("--release")
     executable = None
