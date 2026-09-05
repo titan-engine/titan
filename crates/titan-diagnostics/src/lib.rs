@@ -9,9 +9,16 @@ pub use capture::{png_capture, write_png};
 mod compare;
 mod history;
 #[cfg(not(target_arch = "wasm32"))]
+mod report;
+#[cfg(not(target_arch = "wasm32"))]
 mod writer;
 pub use compare::{ComparisonError, ComparisonOptions, ImageComparison, compare_images};
 pub use history::{HistoryEntry, HistorySnapshot, InputEvent, RequestHistory};
+#[cfg(not(target_arch = "wasm32"))]
+pub use report::{
+    ComparisonReportArtifacts, ComparisonReportError, DifferenceVisualization,
+    ImageComparisonReport, WrittenComparisonReport, write_comparison_report,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
