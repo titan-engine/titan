@@ -236,7 +236,8 @@ At acceptance, validate permissions and size limits, then freeze the current
 committed world's immutable render frame and exact asset versions. Re-extract
 from the current world if needed, including edits since the last tick, without
 running schedules, draining deferred mutations or advancing simulation. Attach
-runtime-instance identity, a unique capture ID, completed tick, inspection state
+runtime-instance identity, a session/reset generation, a unique capture ID,
+completed tick, inspection state
 revision and output dimensions to the snapshot. Tick/revision alone are not a
 world checksum: failed operations can partially change state. Every capture
 freezes new data even when those counters match a previous request.
@@ -256,12 +257,15 @@ Read back on demand from an offscreen target using the same scene/overlay path
 as presentation. No previously presented frame may substitute for the accepted
 snapshot. Resize or a later mutation cannot change that snapshot or its requested
 size. Zero-sized requests fail validation; a suspended window need not prevent a
-positive-sized offscreen capture. A runtime reset/replacement invalidates pending
-jobs from the old instance; do not attach their results to a new session.
+positive-sized offscreen capture. A runtime reset/replacement increments the session generation and invalidates
+pending jobs from the old generation, even when the runtime instance ID remains
+unchanged. Do not attach old results to the new session.
 
 Start with a configurable maximum of one outstanding GPU capture per instance,
 2048 pixels per dimension, 16 MiB raw RGBA and a five-second host deadline, further
-restricted by device/transport/artifact limits. Check padded staging sizes,
+restricted by device/transport/artifact limits. Bound snapshot draw count and
+aggregate retained/uploaded geometry bytes before admission as well as image
+output; per-mesh limits alone do not bound a whole frame. Check padded staging sizes,
 encoded artifact and envelope sizes as well as raw pixels before allocating or
 publishing. Reject excess work with an actionable busy/limit error rather than
 an unbounded queue. The deadline includes encoding and response preparation;

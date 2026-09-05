@@ -143,7 +143,8 @@ identity, importer, general asset graph or persistent GPU cache is implied.
 An immutable 3D frame owns camera, lighting and ordered draw data (mesh reference,
 transform and opaque base color). Its asset references retain the exact immutable
 mesh versions used by the frame, so later replacement cannot alter an in-flight
-render or capture. Missing/stale handles are errors. Extract from `&World` using
+render or capture. Missing/stale handles are errors. Bound draw count and aggregate retained/uploaded
+geometry bytes per frame, not only each mesh in isolation. Extract from `&World` using
 `App`'s existing snapshot boundary; do not put GPU objects, windows or transport
 state in the frame. Fix draw order during extraction, including a stable tie
 break for equal depth. CPU construction, validation and extraction work without
