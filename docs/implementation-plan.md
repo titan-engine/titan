@@ -69,6 +69,7 @@ Standalone and tooling gates:
 
 ```sh
 python3 scripts/test-build-tools.py
+python3 scripts/test-generated-assets.py
 python3 scripts/test-starter.py --browser
 cargo fmt --manifest-path games/arena/Cargo.toml --all --check
 cargo test --manifest-path games/arena/Cargo.toml --all-targets

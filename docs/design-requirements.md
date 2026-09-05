@@ -30,7 +30,8 @@ players, alongside headless verification. Scrubbing and speed controls remain
 future work. The [file-backed sprite exercise](assets.md) verifies shared
 procedural/decoded image consumption, loose-file delivery and bounded startup
 failures. It covers two independently replaceable sprite paths within R2.57–62; broader asset requirements
-remain pending.
+remain pending. A dedicated [generated image fixture](generated-assets.md)
+exercises build-time/lazy generation and disk caching within R2.58–59.
 
 ## Round one: product and initial scope
 
