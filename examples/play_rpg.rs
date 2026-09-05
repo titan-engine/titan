@@ -235,16 +235,7 @@ mod native {
         key: KeyCode,
         pressed: bool,
     ) -> Option<(&'static str, bool)> {
-        let action = action_for_key(key)?;
-        if pressed {
-            held.insert(key);
-        } else {
-            held.remove(&key);
-        }
-        Some((
-            action,
-            held.iter().any(|key| action_for_key(*key) == Some(action)),
-        ))
+        titan::input::update_button_alias(held, key, pressed, action_for_key)
     }
 
     #[cfg(test)]

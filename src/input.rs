@@ -1,6 +1,32 @@
 //! Deterministic logical input frames and recordings.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::hash::Hash;
+
+/// Updates a physical button and returns its logical action's combined state.
+///
+/// The caller owns the bindings and held set; clear the set on focus loss and
+/// reset the game's input sampler. Releasing one alias leaves the action pressed
+/// while another alias is held. Unmapped buttons are ignored. Bindings must stay
+/// stable while buttons are held; clear the set before changing them.
+/// This helper has no dependency on a window library or game action schema.
+pub fn update_button_alias<K: Copy + Eq + Hash, A: PartialEq>(
+    held: &mut HashSet<K>,
+    key: K,
+    pressed: bool,
+    action_for_key: impl Fn(K) -> Option<A>,
+) -> Option<(A, bool)> {
+    let action = action_for_key(key)?;
+    if pressed {
+        held.insert(key);
+    } else {
+        held.remove(&key);
+    }
+    let active = held
+        .iter()
+        .any(|key| action_for_key(*key).as_ref() == Some(&action));
+    Some((action, active))
+}
 
 /// A deterministic signed action value.
 ///
@@ -173,6 +199,32 @@ impl<A: Ord> InputRecording<A> {
 #[cfg(test)]
 mod tests {
     use super::{ActionValue, InputRecording, InputTracker, RecordingHeader};
+
+    #[test]
+    fn physical_aliases_repeat_release_and_focus_reset() {
+        let mut held = std::collections::HashSet::new();
+        let mapping = |key| match key {
+            1 | 2 => Some("move"),
+            3 => Some("jump"),
+            _ => None,
+        };
+        let mut update =
+            |key, pressed| super::update_button_alias(&mut held, key, pressed, mapping);
+        assert_eq!(update(1, true), Some(("move", true)));
+        assert_eq!(update(1, true), Some(("move", true)));
+        assert_eq!(update(2, true), Some(("move", true)));
+        assert_eq!(update(3, true), Some(("jump", true)));
+        assert_eq!(update(1, false), Some(("move", true)));
+        assert_eq!(update(2, false), Some(("move", false)));
+        assert_eq!(update(9, true), None);
+        assert_eq!(held.len(), 1);
+        held.clear();
+        assert_eq!(
+            super::update_button_alias(&mut held, 3, false, mapping),
+            Some(("jump", false))
+        );
+        assert!(held.is_empty());
+    }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     enum Action {
