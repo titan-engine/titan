@@ -115,6 +115,17 @@ fn mix(mut value: u64, rounds: u32) -> u64 {
     }
     value
 }
+
+// Keep the oracle independent from the measured callback helper. This spells
+// the recurrence differently and deliberately does not call `mix` or black_box.
+fn reference_mix(initial: u64, rounds: u32) -> u64 {
+    (0..rounds).fold(initial, |value, round| {
+        let multiplied = value.wrapping_mul(6_364_136_223_846_793_005);
+        multiplied
+            .wrapping_add(1_442_695_040_888_963_407)
+            .wrapping_add(u64::from(round))
+    })
+}
 fn uneven_a(mut q: Query<&mut UnevenA>, work: titan::Res<Work>) {
     q.for_each(|_, v| v.0 = mix(v.0, work.0));
 }
@@ -424,7 +435,7 @@ fn uneven(config: Config) -> Result<ScenarioRun, String> {
             config.work_iterations,
             config.work_iterations * 4,
         ]
-        .map(|rounds| (0..config.steps).fold(initial, |v, _| mix(v, rounds)));
+        .map(|rounds| (0..config.steps).fold(initial, |v, _| reference_mix(v, rounds)));
         let actual = [
             app.world()
                 .get::<UnevenA>(entity)
@@ -706,6 +717,22 @@ mod tests {
             vec!["--wat"],
         ] {
             assert!(parse_args(args.into_iter().map(str::to_owned)).is_err());
+        }
+    }
+
+    #[test]
+    fn uneven_kernel_and_independent_oracle_match_external_vectors() {
+        // Values were calculated independently with integer arithmetic modulo
+        // 2^64, so coupled edits to the workload and oracle cannot self-confirm.
+        for (initial, rounds, expected) in [
+            (1, 1, 0x6c57_6fac_43fd_007c),
+            (1, 4, 0x7b06_d6c9_ac4e_040b),
+            (1, 8, 0x0de9_b312_8619_0ce5),
+            (17, 16, 0xec17_83c3_566d_9519),
+            (2, 32, 0xe211_15bc_bbfb_eb92),
+        ] {
+            assert_eq!(mix(initial, rounds), expected);
+            assert_eq!(reference_mix(initial, rounds), expected);
         }
     }
 }

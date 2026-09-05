@@ -80,6 +80,18 @@ def hoist_schedule_shapes(report, sample, threads):
                     f'schedule shape changed for {scenario["name"]} at thread limit {threads}')
 
 
+def verify_checksums(report, sample, entities):
+    """Require every world, outer repeat, and executor policy to agree."""
+    checksums = report['checksums_by_entity_count'].setdefault(str(entities), {})
+    for run in sample['workload']['runs']:
+        for scenario in run:
+            previous = checksums.setdefault(scenario['name'], scenario['checksum'])
+            if previous != scenario['checksum']:
+                raise RuntimeError(
+                    f'checksum changed for {scenario["name"]} at {entities} entities: '
+                    f'{previous} != {scenario["checksum"]}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--counts', nargs='+', type=integer(0), default=[0, 64, 1000, 10000])
@@ -124,6 +136,7 @@ def main():
         'memory_scope': 'whole child process high-water RSS, including all scenarios, repeated worlds and validation; excludes Cargo and this runner',
         'wall_scope': 'whole child lifetime including launch and checks; polling resolution approximately 10ms',
         'schedule_shapes_by_thread_limit': {},
+        'checksums_by_entity_count': {},
         'samples': [],
     }
     sample_sequence = 0
@@ -139,6 +152,7 @@ def main():
                            '--work-iterations', str(args.work_iterations), '--threads', str(threads)]
                 sample = measure(command, args.timeout_seconds)
                 hoist_schedule_shapes(report, sample, threads)
+                verify_checksums(report, sample, count)
                 sample.update(entities=count, max_threads=threads, repeat=repeat + 1,
                               sample_sequence=sample_sequence,
                               load_average_before=list(os.getloadavg()))

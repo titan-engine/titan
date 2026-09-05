@@ -52,6 +52,23 @@ class MeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'schedule shape changed'):
             measurement.hoist_schedule_shapes(report, changed, 2)
 
+    def test_checksums_must_match_across_worlds_repeats_and_policies(self):
+        report = {'checksums_by_entity_count': {}}
+        sample = {'workload': {'runs': [[
+            {'name': 'small_compatible', 'checksum': 'abc'},
+        ], [
+            {'name': 'small_compatible', 'checksum': 'abc'},
+        ]]}}
+        measurement.verify_checksums(report, sample, 64)
+        self.assertEqual(report['checksums_by_entity_count']['64'],
+                         {'small_compatible': 'abc'})
+
+        changed = {'workload': {'runs': [[
+            {'name': 'small_compatible', 'checksum': 'def'},
+        ]]}}
+        with self.assertRaisesRegex(RuntimeError, 'checksum changed'):
+            measurement.verify_checksums(report, changed, 64)
+
 
 if __name__ == '__main__':
     unittest.main()

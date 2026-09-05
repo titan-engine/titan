@@ -63,7 +63,10 @@ produces `[2,2]` for the compatible schedules, `[1,2,1]` for conflicts, and
 `[1,1,1,2]` around command barriers. The example tests these shapes so a fixture
 edit cannot silently relabel the evidence. The fresh-process runner verifies that
 the shapes stay invariant and hoists them into `schedule_shapes_by_thread_limit`
-instead of repeating identical metadata in every raw sample.
+instead of repeating identical metadata in every raw sample. It also enforces and
+hoists each scenario checksum by entity count, so any world, outer repetition, or
+executor policy divergence aborts the report instead of publishing inconsistent
+evidence.
 
 Compare medians and ranges from repeated release samples on the same machine and
 toolchain; do not turn local results into a CI timing threshold. In particular:
