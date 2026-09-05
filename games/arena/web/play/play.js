@@ -1,6 +1,7 @@
 import init, { BrowserPlayer, verify_recording_json } from '../inspector/pkg/titan_game.js';
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
+import { inspectEntities, entityRow } from './entities.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -108,7 +109,19 @@ function panel(action) {
 document.querySelector('#inspect').addEventListener('click', () => panel(() => {
   const state = request({ type: 'query', name: 'arena_state', arguments: {} });
   summarize(state.response.value);
-  showDetails({ state, player: request({ type: 'entities', query: { name: 'player' } }) });
+  const snapshot = inspectEntities(request);
+  const body = document.querySelector('#live-entity-body');
+  const rows = snapshot.entities.map(entity => {
+    const row = document.createElement('tr');
+    for (const value of entityRow(entity)) {
+      const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
+    }
+    return row;
+  });
+  body.replaceChildren(...rows);
+  document.querySelector('#live-entity-caption').textContent = `${snapshot.entities.length} entities at frame ${snapshot.observed_frame}${snapshot.truncated ? ' · display limited to 1,000 entities' : ''}`;
+  document.querySelector('#live-entities').hidden = false;
+  showDetails({ state, entities: snapshot });
 }));
 document.querySelector('#capture').addEventListener('click', () => panel(() => {
   const response = request({ type: 'capture' });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { inspectEntities, entityRow } from '../web/play/entities.mjs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
@@ -25,6 +26,12 @@ for (const [change, code] of [[{ schema_version: 999 }, 'protocol_mismatch'], [{
   assert.equal(result.error.code, code);
 }
 assert.equal(JSON.parse(readonly.handle('no JSON')).error.code, 'invalid_value');
+const inactiveEntities = inspectEntities(request => raw(readonly, request));
+assert.equal(inactiveEntities.entities.length, 15);
+assert.equal(inactiveEntities.truncated, false);
+assert.equal(inactiveEntities.entities.filter(entity => entityRow(entity)[2] === 'Player').length, 1);
+assert.equal(inactiveEntities.entities.filter(entity => entityRow(entity)[2] === 'Inactive · awaiting spawn').length, 14);
+assert.deepEqual(inactiveEntities.entities.map(entity => entity.name), ['player', ...Array.from({length:14}, (_, index) => `enemy-${index}`)]);
 readonly.free();
 const game = new BrowserRuntime(true);
 assert.equal(ok(game, { type: 'capabilities' }).mutation_enabled, true);
@@ -41,6 +48,12 @@ const before = position();
 ok(game, { type: 'inject_input', frame: 1, actions: { right: { kind: 'button', value: true } } });
 ok(game, { type: 'step', frames: 1 });
 assert.equal(position().x, before.x + 1);
+const pursuingEntities = inspectEntities(request => raw(game, request));
+assert.equal(pursuingEntities.entities.length, 15);
+assert.equal(pursuingEntities.entities.filter(entity => entityRow(entity)[2] === 'Active pursuer').length, 1);
+assert.equal(pursuingEntities.entities.filter(entity => entityRow(entity)[2] === 'Inactive · awaiting spawn').length, 13);
+assert.equal(ok(game, {type:'status'}).current_frame, 1, 'entity inspection does not advance simulation');
+
 assert.notEqual(ok(game, { type: 'capture' }).checksum, initial.checksum);
 const edit = value => ({ type: 'set_field', entity, component, field: 'x', value });
 fail(game, edit(-1), 'invalid_value');

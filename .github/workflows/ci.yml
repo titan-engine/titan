@@ -85,6 +85,7 @@ jobs:
           node games/arena/scripts/test-browser.mjs
           node --test games/arena/web/inspector/bridge.test.mjs
           node --test games/arena/web/play/*.test.mjs
+          node --test games/arena/web/play/*.test.mjs
 
   macos-bundles:
     name: macOS development app bundles

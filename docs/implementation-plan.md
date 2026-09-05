@@ -140,7 +140,7 @@ cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown
 python3 games/arena/scripts/build-browser.py
 node games/arena/scripts/test-browser.mjs
 node --test games/arena/web/inspector/bridge.test.mjs
-node --test games/arena/web/play/input.test.mjs
+node --test games/arena/web/play/*.test.mjs
 python3 scripts/test-macos-bundles.py # macOS
 python3 games/arena/scripts/test-live-player.py # desktop GPU/window required
 ```

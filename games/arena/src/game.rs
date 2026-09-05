@@ -170,6 +170,20 @@ pub fn inspector_with_capture(
     capture: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
 ) -> Inspector {
     let mut inspector = Inspector::new(config);
+    inspector
+        .register_read_only_field::<Enemy, bool>(
+            "active",
+            FieldMetadata {
+                type_name: "bool".into(),
+                description: "Whether this pooled enemy is active in the arena".into(),
+                writable: false,
+                minimum: None,
+                maximum: None,
+                unit: None,
+            },
+            |enemy| enemy.active,
+        )
+        .expect("unique enemy active field");
     for (field, maximum) in [("x", WIDTH - DOT_SIZE), ("y", HEIGHT - DOT_SIZE)] {
         inspector
             .register_field::<Position, i32>(
