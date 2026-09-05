@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use titan::{App, Entity};
+use titan::{App, Entity, World};
 use titan_protocol::{ErrorCode, ProtocolError};
 
 use super::{
@@ -231,8 +231,7 @@ struct Target {
 }
 
 /// Preflight all fallible target assumptions before touching an initialized game.
-fn target(app: &App) -> Result<Target, ProtocolError> {
-    let world = app.world();
+fn target(world: &World) -> Result<Target, ProtocolError> {
     let error = || {
         ProtocolError::new(
             ErrorCode::Busy,
@@ -276,8 +275,11 @@ fn target(app: &App) -> Result<Target, ProtocolError> {
 
 /// Export bounded gameplay data from an initialized arena. Host time is excluded.
 pub fn export_save(app: &App) -> Result<Value, ProtocolError> {
-    let target = target(app)?;
-    let world = app.world();
+    export_save_world(app.world())
+}
+
+pub(crate) fn export_save_world(world: &World) -> Result<Value, ProtocolError> {
+    let target = target(world)?;
     let save = Save {
         format_version: 1,
         game_seed: SEED,
@@ -302,7 +304,7 @@ pub fn load_save(app: &mut App, value: Value) -> Result<(), ProtocolError> {
     let save: Save = serde_json::from_value(value)
         .map_err(|error| invalid(format!("invalid arena save: {error}")))?;
     validate(&save)?;
-    let target = target(app)?;
+    let target = target(app.world())?;
     // Everything below is infallible for the validated initialized target.
     *app.world_mut().get_mut::<Position>(target.player).unwrap() = save.player.into();
     for (entity, enemy) in target.enemies.into_iter().zip(save.enemies) {
@@ -314,7 +316,7 @@ pub fn load_save(app: &mut App, value: Value) -> Result<(), ProtocolError> {
     cancel_ui_pointer(app);
     let epoch = app.world_mut().resource_mut::<RestartEpoch>().unwrap();
     epoch.0 = epoch.0.wrapping_add(1);
-    crate::live::invalidate_after_load(app.world_mut());
+    crate::live::begin_recording(app.world_mut());
     sync_hud(app.world_mut());
     app.refresh_extracted();
     Ok(())

@@ -1,11 +1,14 @@
 //! Inspection and bounded recordings of the actual playable arena instance.
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    io::{self, Write},
+};
 
 use serde::{Deserialize, Serialize};
 use titan::{
     App, FixedTime, Startup, World,
     input::{ActionValue, InputFrame, InputTracker},
-    inspection::{InspectionConfig, Inspector, handle_with_policy},
+    inspection::{InspectionConfig, Inspector, StepBudget, handle_with_policy},
 };
 use titan_protocol::{
     CommandMetadata, ErrorCode, FieldMetadata, ProtocolError, QueryMetadata, Request,
@@ -51,11 +54,24 @@ pub struct Recording {
     truncated: bool,
     invalid_reason: Option<String>,
     frames: Vec<RecordedFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    initial_snapshot: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    final_snapshot: Option<serde_json::Value>,
     final_state: serde_json::Value,
     final_checksum: String,
 }
 
+struct ReplayState {
+    recording: Recording,
+    position: usize,
+    verified: Option<bool>,
+    error: Option<String>,
+    expected_save: serde_json::Value,
+}
+
 struct RecordingState {
+    initial_snapshot: serde_json::Value,
     start_host_frame: u64,
     frames: Vec<RecordedFrame>,
     truncated: bool,
@@ -85,30 +101,33 @@ pub(crate) fn finish_recording(world: &mut World) {
         .resource_mut::<RecordingState>()
         .unwrap()
         .expected_positions = expected;
+    finish_replay(world);
 }
 
-/// Restart is the only recording origin; a truncated recording retains its prefix.
+/// Each fresh run or restored save begins a snapshot-backed recording segment.
 pub(crate) fn begin_recording(world: &mut World) {
+    world.remove_resource::<ReplayState>();
+    let buttons: Vec<_> = world
+        .iter::<titan::ui::UiButton>()
+        .map(|(entity, _)| entity)
+        .collect();
+    for entity in buttons {
+        world
+            .get_mut::<titan::ui::UiButton>(entity)
+            .unwrap()
+            .enabled = true;
+    }
+    let initial_snapshot = game::export_save_world(world).expect("initialized arena snapshot");
     let start_host_frame = world.resource::<FixedTime>().map_or(0, |time| time.tick());
     let expected_positions = positions(world);
     world.insert_resource(RecordingState {
+        initial_snapshot,
         start_host_frame,
         frames: Vec::new(),
         truncated: false,
         invalid_reason: None,
         expected_positions,
     });
-}
-
-/// A loaded mid-run state is not the beginning of a replay from restart.
-/// Keep the existing diagnostic input history and origin, but invalidate exact replay
-/// until a real restart. Loading does not manufacture a new recording segment.
-pub(crate) fn invalidate_after_load(world: &mut World) {
-    let expected_positions = positions(world);
-    let recording = world.resource_mut::<RecordingState>().unwrap();
-    recording.invalid_reason =
-        Some("loaded save state; restart before recording an exact replay".into());
-    recording.expected_positions = expected_positions;
 }
 
 #[derive(Deserialize)]
@@ -119,6 +138,14 @@ struct LoadSaveArgs {
 
 /// Runs after the scheduled-input override and before the simulation consumes it.
 pub(crate) fn record_consumed(world: &mut World) {
+    if let Some(replay) = world.resource_mut::<ReplayState>() {
+        if let Some(frame) = replay.recording.frames.get(replay.position) {
+            let input = decode_frame(frame).expect("validated replay frame");
+            replay.position += 1;
+            world.insert_resource(input);
+        }
+        return;
+    }
     let invalid_reason = invalid_reason(world);
     let input = world.resource::<InputFrame<Action>>().unwrap();
     let frame = RecordedFrame {
@@ -154,10 +181,13 @@ fn comparable_state(app: &App) -> serde_json::Value {
 }
 
 fn recording_value(app: &App) -> Result<serde_json::Value, ProtocolError> {
+    if let Some(replay) = app.world().resource::<ReplayState>() {
+        return serde_json::to_value(&replay.recording).map_err(|error| invalid(error.to_string()));
+    }
     let source = app.world().resource::<RecordingState>().unwrap();
     let image = game::render_image(app.world())?;
     serde_json::to_value(Recording {
-        format_version: 1,
+        format_version: 2,
         game_seed: game::SEED,
         action_schema: ACTION_SCHEMA.to_owned(),
         fixed_step_nanos: 16_666_667,
@@ -167,10 +197,18 @@ fn recording_value(app: &App) -> Result<serde_json::Value, ProtocolError> {
         truncated: source.truncated,
         invalid_reason: invalid_reason(app.world()),
         frames: source.frames.clone(),
+        initial_snapshot: Some(source.initial_snapshot.clone()),
+        final_snapshot: game::export_save(app).ok(),
         final_state: comparable_state(app),
         final_checksum: format!("{:016x}", game::image_checksum(&image)),
     })
     .map_err(|error| ProtocolError::new(ErrorCode::Internal, error.to_string()))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LoadReplayArgs {
+    recording: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -193,14 +231,14 @@ pub(crate) fn register_queries(inspector: &mut Inspector) {
                     .resource::<PlaybackControl>()
                     .is_none_or(|control| control.paused)
                     .into();
-                let recording = app.world().resource::<RecordingState>().unwrap();
-                value["recording"] = serde_json::json!({
-                    "start_host_frame": recording.start_host_frame,
-                    "recorded_ticks": recording.frames.len(),
-                    "max_ticks": MAX_RECORDING_TICKS,
-                    "truncated": recording.truncated,
-                    "invalid_reason": invalid_reason(app.world()),
-                });
+                value["replay"] = replay_status(app.world());
+                value["recording"] = if let Some(replay) = app.world().resource::<ReplayState>() {
+                    let recording = &replay.recording;
+                    serde_json::json!({"start_host_frame":recording.start_host_frame,"recorded_ticks":recording.frames.len(),"max_ticks":MAX_RECORDING_TICKS,"truncated":recording.truncated,"invalid_reason":recording.invalid_reason})
+                } else {
+                    let recording = app.world().resource::<RecordingState>().unwrap();
+                    serde_json::json!({"start_host_frame":recording.start_host_frame,"recorded_ticks":recording.frames.len(),"max_ticks":MAX_RECORDING_TICKS,"truncated":recording.truncated,"invalid_reason":invalid_reason(app.world())})
+                };
                 Ok(value)
             },
         )
@@ -209,7 +247,7 @@ pub(crate) fn register_queries(inspector: &mut Inspector) {
         .register_query(
             QueryMetadata {
                 name: "recording".into(),
-                description: "Export consumed fixed-tick inputs from the latest restart, bounded to 3600 ticks.".into(),
+                description: "Export consumed fixed-tick inputs from the latest restart or save snapshot, bounded to 3600 ticks.".into(),
                 arguments: BTreeMap::new(),
             },
             |app, _: NoArguments| recording_value(app),
@@ -229,7 +267,7 @@ pub(crate) fn register_queries(inspector: &mut Inspector) {
         .register_command(
             CommandMetadata {
                 name: "load_save".into(),
-                description: "Restore a validated arena save at a safe point. Live players must be paused with controls enabled; host clock stays monotonic and replay history is invalidated.".into(),
+                description: "Restore a validated arena save at a safe point. Live players must be paused with controls enabled; host clock stays monotonic and a new snapshot recording begins.".into(),
                 arguments: [("save".into(), FieldMetadata {
                     type_name: "ArenaSaveV1".into(),
                     description: "Raw versioned gameplay object returned by the save query, at most 64 KiB.".into(),
@@ -271,6 +309,48 @@ impl ArenaSession {
         let mut inspector = game::inspector_with_capture(config, |app| {
             titan_diagnostics::png_capture(&game::render_image(app.world())?)
         });
+        inspector
+            .register_command(
+                CommandMetadata {
+                    name: "load_replay".into(),
+                    description: "Load a validated bounded recording while paused.".into(),
+                    arguments: [(
+                        "recording".into(),
+                        FieldMetadata {
+                            type_name: "ArenaRecording".into(),
+                            description: "Raw recording or query response, at most 2 MiB.".into(),
+                            writable: false,
+                            minimum: None,
+                            maximum: None,
+                            unit: None,
+                        },
+                    )]
+                    .into(),
+                },
+                |app, args: LoadReplayArgs| load_replay(app, args.recording),
+            )
+            .expect("unique replay load");
+        for (name, callback) in [
+            (
+                "restart_replay",
+                restart_replay as fn(&mut App) -> Result<(), ProtocolError>,
+            ),
+            ("stop_replay", stop_replay),
+        ] {
+            inspector
+                .register_command(
+                    CommandMetadata {
+                        name: name.into(),
+                        description: format!(
+                            "{name} while paused; stop returns to a fresh live run."
+                        ),
+                        arguments: BTreeMap::new(),
+                    },
+                    move |app, _: NoArguments| callback(app),
+                )
+                .expect("unique replay command");
+        }
+
         for (name, paused) in [("pause", true), ("resume", false)] {
             inspector
                 .register_command(
@@ -280,6 +360,7 @@ impl ArenaSession {
                         arguments: BTreeMap::new(),
                     },
                     move |app, _: NoArguments| {
+                        if !paused && replay_complete(app.world()) { return Ok(()); }
                         app.world_mut().resource_mut::<PlaybackControl>().unwrap().paused = paused;
                         Ok(())
                     },
@@ -293,6 +374,45 @@ impl ArenaSession {
             enable_control,
             clock_epoch: 0,
         }
+    }
+
+    pub fn replay_active(&self) -> bool {
+        self.app.world().resource::<ReplayState>().is_some()
+    }
+    pub fn replay_status(&self) -> serde_json::Value {
+        replay_status(self.app.world())
+    }
+    /// Validate and dry-run a bounded recording before replacing paused gameplay.
+    /// Physical host controls do not require inspection mutation opt-in.
+    pub fn load_replay(&mut self, recording: serde_json::Value) -> Result<(), ProtocolError> {
+        load_replay(&mut self.app, recording)?;
+        self.reset_timing_and_input();
+        self.inspector.note_external_change();
+        Ok(())
+    }
+    /// Restore the loaded origin without rewinding host time. Requires pause.
+    pub fn restart_replay(&mut self) -> Result<(), ProtocolError> {
+        restart_replay(&mut self.app)?;
+        self.reset_timing_and_input();
+        self.inspector.note_external_change();
+        Ok(())
+    }
+    /// Leave playback for a fresh live run. Requires pause.
+    pub fn stop_replay(&mut self) -> Result<(), ProtocolError> {
+        stop_replay(&mut self.app)?;
+        self.reset_timing_and_input();
+        self.inspector.note_external_change();
+        Ok(())
+    }
+    /// Consume exactly one recorded frame while paused; rejects completion.
+    pub fn step_replay(&mut self) -> Result<(), ProtocolError> {
+        require_paused(&self.app)?;
+        if !self.replay_active() || replay_complete(self.app.world()) {
+            return Err(invalid("no remaining replay frames"));
+        }
+        self.app.advance_fixed(1);
+        self.inspector.note_external_change();
+        Ok(())
     }
 
     pub fn app(&self) -> &App {
@@ -324,6 +444,9 @@ impl ArenaSession {
     }
 
     pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
+        if self.replay_active() {
+            return Ok(());
+        }
         self.input.set_action(name, pressed)
     }
 
@@ -341,6 +464,9 @@ impl ArenaSession {
 
     /// Returns whether the in-game UI consumed this primary-pointer update.
     pub fn pointer(&mut self, position: Option<(i32, i32)>, pressed: bool) -> bool {
+        if self.replay_active() {
+            return true;
+        }
         let before = game::restart_epoch(&self.app);
         let result = game::handle_ui_pointer(&mut self.app, position, pressed);
         if game::restart_epoch(&self.app) != before {
@@ -369,6 +495,9 @@ impl ArenaSession {
     }
 
     fn set_paused(&mut self, paused: bool) {
+        if !paused && replay_complete(self.app.world()) {
+            return;
+        }
         if self.paused() != paused {
             self.app
                 .world_mut()
@@ -390,6 +519,9 @@ impl ArenaSession {
     pub fn tick(&mut self) {
         if !self.paused() {
             self.input.tick(&mut self.app);
+            if self.paused() {
+                self.reset_timing_and_input();
+            }
             self.inspector.note_external_change();
         }
     }
@@ -398,10 +530,34 @@ impl ArenaSession {
         let was_paused = self.paused();
         let reset_epoch = game::restart_epoch(&self.app);
         self.inspector.set_controlled(was_paused);
+        self.inspector.set_step_budget(StepBudget {
+            max_frames: self
+                .app
+                .world()
+                .resource::<ReplayState>()
+                .map_or(StepBudget::DEFAULT.max_frames, |r| {
+                    (r.recording.frames.len() - r.position) as u64
+                }),
+            ..StepBudget::DEFAULT
+        });
+        let allowed = !self.replay_active()
+            || match &request.request {
+                Request::SetField { .. } | Request::InjectInput { .. } => false,
+                Request::Invoke { name, .. } => matches!(
+                    name.as_str(),
+                    "pause"
+                        | "resume"
+                        | "restart"
+                        | "load_replay"
+                        | "restart_replay"
+                        | "stop_replay"
+                ),
+                _ => true,
+            };
         let response = handle_with_policy(
             &mut self.app,
             &mut self.inspector,
-            self.enable_control,
+            self.enable_control && allowed,
             request,
         );
         if game::restart_epoch(&self.app) != reset_epoch || was_paused != self.paused() {
@@ -478,7 +634,27 @@ fn decode_frame(frame: &RecordedFrame) -> Result<InputFrame<Action>, String> {
 
 /// Replay a raw recording or a saved CLI query response in a fresh headless app.
 /// The captured state and software pixels must both agree before success is returned.
-pub fn verify_recording(mut value: serde_json::Value) -> Result<serde_json::Value, String> {
+pub fn verify_recording(value: serde_json::Value) -> Result<serde_json::Value, String> {
+    let recording = parse_recording(value)?;
+    verify_parsed(&recording)
+}
+
+fn parse_recording(mut value: serde_json::Value) -> Result<Recording, String> {
+    struct BoundedWriter(usize);
+    impl Write for BoundedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_add(bytes.len())
+                .filter(|n| *n <= MAX_RECORDING_BYTES)
+                .ok_or_else(|| io::Error::other("recording exceeds 2 MiB"))?;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    serde_json::to_writer(BoundedWriter(0), &value).map_err(|error| error.to_string())?;
     if value.get("response").is_some() {
         value = value
             .get_mut("response")
@@ -489,14 +665,21 @@ pub fn verify_recording(mut value: serde_json::Value) -> Result<serde_json::Valu
     } else if value.get("value").is_some() {
         value = value.get_mut("value").unwrap().take();
     }
-    let recording: Recording = serde_json::from_value(value).map_err(|error| error.to_string())?;
-    if recording.format_version != 1
+    let recording: Recording = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    if !matches!(recording.format_version, 1 | 2)
         || recording.game_seed != game::SEED
         || recording.action_schema != ACTION_SCHEMA
         || recording.fixed_step_nanos != 16_666_667
         || recording.max_ticks != MAX_RECORDING_TICKS
     {
         return Err("unsupported recording header".into());
+    }
+    if (recording.format_version == 2)
+        != (recording.initial_snapshot.is_some() && recording.final_snapshot.is_some())
+        || (recording.format_version == 1
+            && (recording.initial_snapshot.is_some() || recording.final_snapshot.is_some()))
+    {
+        return Err("recording snapshot/version mismatch".into());
     }
     if recording.truncated || recording.invalid_reason.is_some() {
         return Err("recording is truncated or invalidated; exact replay is unavailable".into());
@@ -506,39 +689,293 @@ pub fn verify_recording(mut value: serde_json::Value) -> Result<serde_json::Valu
     {
         return Err("recording frame count exceeds bounds or differs from header".into());
     }
-    let frames = recording
-        .frames
-        .iter()
-        .map(decode_frame)
-        .collect::<Result<Vec<_>, _>>()?;
+    for frame in &recording.frames {
+        decode_frame(frame)?;
+    }
+    Ok(recording)
+}
+
+fn restore_origin(app: &mut App, recording: &Recording) -> Result<(), ProtocolError> {
+    if let Some(snapshot) = &recording.initial_snapshot {
+        game::load_save(app, snapshot.clone())
+    } else {
+        game::restart(app);
+        Ok(())
+    }
+}
+
+fn verify_parsed(recording: &Recording) -> Result<serde_json::Value, String> {
     let mut app = game::build_game();
     app.update_schedule(Startup);
-    for frame in frames {
-        app.world_mut().insert_resource(frame);
+    restore_origin(&mut app, recording).map_err(|e| e.message)?;
+    for frame in &recording.frames {
+        app.world_mut().insert_resource(decode_frame(frame)?);
         app.advance_fixed(1);
     }
     let state = comparable_state(&app);
-    let image = game::render_image(app.world()).map_err(|error| error.message)?;
+    let save = game::export_save(&app).map_err(|e| e.message)?;
+    let image = game::render_image(app.world()).map_err(|e| e.message)?;
     let checksum = format!("{:016x}", game::image_checksum(&image));
-    if state != recording.final_state || checksum != recording.final_checksum {
+    if state != recording.final_state
+        || checksum != recording.final_checksum
+        || recording
+            .final_snapshot
+            .as_ref()
+            .is_some_and(|expected| *expected != save)
+    {
         return Err(format!(
             "replay mismatch: state or image differs (actual checksum {checksum})"
         ));
     }
-    Ok(serde_json::json!({
-        "verified": true,
-        "ticks": recording.recorded_ticks,
-        "source_start_host_frame": recording.start_host_frame,
-        "replay_frame": app.world().resource::<FixedTime>().unwrap().tick(),
-        "state": state,
-        "checksum": checksum,
-    }))
+    Ok(
+        serde_json::json!({"verified":true,"ticks":recording.recorded_ticks,"source_start_host_frame":recording.start_host_frame,"replay_frame":app.world().resource::<FixedTime>().unwrap().tick(),"state":state,"save":save,"checksum":checksum}),
+    )
+}
+
+fn invalid(message: impl Into<String>) -> ProtocolError {
+    ProtocolError::new(ErrorCode::InvalidValue, message)
+}
+fn require_paused(app: &App) -> Result<(), ProtocolError> {
+    if app
+        .world()
+        .resource::<PlaybackControl>()
+        .is_none_or(|c| !c.paused)
+    {
+        return Err(ProtocolError::new(
+            ErrorCode::NotControlled,
+            "replay playback requires a paused interactive session",
+        ));
+    }
+    Ok(())
+}
+fn replay_complete(world: &World) -> bool {
+    world
+        .resource::<ReplayState>()
+        .is_some_and(|r| r.position == r.recording.frames.len())
+}
+fn replay_status(world: &World) -> serde_json::Value {
+    match world.resource::<ReplayState>() {
+        Some(r) => {
+            serde_json::json!({"active":true,"position":r.position,"total":r.recording.frames.len(),"complete":r.position == r.recording.frames.len(),"verified":r.verified,"error":r.error})
+        }
+        None => {
+            serde_json::json!({"active":false,"position":0,"total":0,"complete":false,"verified":null,"error":null})
+        }
+    }
+}
+fn load_replay(app: &mut App, value: serde_json::Value) -> Result<(), ProtocolError> {
+    require_paused(app)?;
+    let recording = parse_recording(value).map_err(invalid)?;
+    let verified = verify_parsed(&recording).map_err(invalid)?;
+    install_replay(app, recording, verified["save"].clone())
+}
+fn install_replay(
+    app: &mut App,
+    recording: Recording,
+    expected_save: serde_json::Value,
+) -> Result<(), ProtocolError> {
+    restore_origin(app, &recording)?;
+    app.world_mut().insert_resource(ReplayState {
+        recording,
+        position: 0,
+        verified: None,
+        error: None,
+        expected_save,
+    });
+    let buttons: Vec<_> = app
+        .world()
+        .iter::<titan::ui::UiButton>()
+        .map(|(entity, _)| entity)
+        .collect();
+    for entity in buttons {
+        app.world_mut()
+            .get_mut::<titan::ui::UiButton>(entity)
+            .unwrap()
+            .enabled = false;
+    }
+    finish_replay(app.world_mut());
+    Ok(())
+}
+fn restart_replay(app: &mut App) -> Result<(), ProtocolError> {
+    require_paused(app)?;
+    let replay = app
+        .world()
+        .resource::<ReplayState>()
+        .ok_or_else(|| invalid("no replay loaded"))?;
+    let recording = replay.recording.clone();
+    let expected_save = replay.expected_save.clone();
+    install_replay(app, recording, expected_save)
+}
+fn stop_replay(app: &mut App) -> Result<(), ProtocolError> {
+    require_paused(app)?;
+    if app.world().resource::<ReplayState>().is_none() {
+        return Err(invalid("no replay loaded"));
+    }
+    game::restart(app);
+    Ok(())
+}
+fn finish_replay(world: &mut World) {
+    if !replay_complete(world) || world.resource::<ReplayState>().unwrap().verified.is_some() {
+        return;
+    }
+    let result = game::render_image(world).and_then(|image| {
+        let r = world.resource::<ReplayState>().unwrap();
+        let save = game::export_save_world(world)?;
+        let matched = format!("{:016x}", game::image_checksum(&image))
+            == r.recording.final_checksum
+            && r.expected_save == save;
+        if matched {
+            Ok(())
+        } else {
+            Err(invalid("playback final state or pixels differ"))
+        }
+    });
+    let r = world.resource_mut::<ReplayState>().unwrap();
+    r.verified = Some(result.is_ok());
+    r.error = result.err().map(|e| e.message);
+    if let Some(control) = world.resource_mut::<PlaybackControl>() {
+        control.paused = true;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use titan_protocol::{EntityId, InputValue, Response};
+
+    #[test]
+    fn snapshot_origin_playback_matches_complete_state_and_pixels() {
+        for origin_ticks in [1, 194] {
+            let mut source = session(false);
+            source.resume();
+            if origin_ticks == 1 {
+                source.set_action("dash", true).unwrap();
+            }
+            for _ in 0..origin_ticks {
+                source.tick();
+            }
+            source.pause();
+            let origin = game::export_save(source.app()).unwrap();
+            game::load_save(&mut source.app, origin.clone()).unwrap();
+            source.resume();
+            source.set_action("right", true).unwrap();
+            source.set_action("dash", true).unwrap();
+            for _ in 0..8 {
+                source.tick();
+            }
+            source.pause();
+            let recording = recording_value(source.app()).unwrap();
+            assert_eq!(recording["format_version"], 2);
+            assert_eq!(recording["initial_snapshot"], origin);
+            let verified = verify_recording(recording.clone()).unwrap();
+            let mut target = session(false);
+            target.resume();
+            target.tick();
+            target.pause();
+            let frame = target.app.world().resource::<FixedTime>().unwrap().tick();
+            target.load_replay(recording.clone()).unwrap();
+            assert_eq!(game::export_save(target.app()).unwrap(), origin);
+            assert_eq!(recording_value(target.app()).unwrap(), recording);
+            target.set_action("left", true).unwrap();
+            assert!(target.pointer(Some((8, 12)), true));
+            assert!(target.pointer(Some((8, 12)), false));
+            target.step_replay().unwrap();
+            target.resume();
+            for _ in 0..20 {
+                target.tick();
+            }
+            assert!(target.paused());
+            assert_eq!(target.replay_status()["position"], 8);
+            assert_eq!(target.replay_status()["verified"], true);
+            assert_eq!(
+                target.app.world().resource::<FixedTime>().unwrap().tick(),
+                frame + 8
+            );
+            assert_eq!(game::export_save(target.app()).unwrap(), verified["save"]);
+            assert_eq!(recording_value(target.app()).unwrap(), recording);
+            assert!(target.step_replay().is_err());
+            target.resume();
+            assert!(target.paused());
+            target.restart_replay().unwrap();
+            assert_eq!(game::export_save(target.app()).unwrap(), origin);
+            assert_eq!(
+                target.app.world().resource::<FixedTime>().unwrap().tick(),
+                frame + 8
+            );
+            target.stop_replay().unwrap();
+            assert!(!target.replay_active());
+            assert!(verify_recording(recording_value(target.app()).unwrap()).is_ok());
+        }
+    }
+
+    #[test]
+    fn replay_protocol_locks_live_mutation_and_rejects_overshoot_before_advancing() {
+        let mut source = session(false);
+        source.resume();
+        source.tick();
+        source.tick();
+        source.pause();
+        let recording = recording_value(source.app()).unwrap();
+        let mut target = session(true);
+        target.load_replay(recording.clone()).unwrap();
+        let before = request(&mut target, Request::Status);
+        for action in [
+            Request::Step { frames: 3 },
+            Request::InjectInput {
+                frame: 1,
+                actions: [("dash".into(), InputValue::Button(true))].into(),
+            },
+            Request::Invoke {
+                name: "load_save".into(),
+                arguments: [("save".into(), recording["initial_snapshot"].clone())].into(),
+            },
+            Request::Invoke {
+                name: "ui_pointer".into(),
+                arguments: [
+                    ("x".into(), 8.into()),
+                    ("y".into(), 12.into()),
+                    ("pressed".into(), true.into()),
+                ]
+                .into(),
+            },
+        ] {
+            let response = request(&mut target, action);
+            assert!(matches!(response.outcome, ResponseOutcome::Failure { .. }));
+            assert_eq!(response.observed_frame, before.observed_frame);
+            assert_eq!(response.state_revision, before.state_revision);
+            assert_eq!(target.replay_status()["position"], 0);
+        }
+        let mut bad = recording.clone();
+        bad["final_snapshot"]["run"]["random"] = 0.into();
+        assert!(target.load_replay(bad).is_err());
+        assert_eq!(recording_value(target.app()).unwrap(), recording);
+        success(request(&mut target, Request::Step { frames: 2 }));
+        assert_eq!(target.replay_status()["verified"], true);
+        let completed = request(&mut target, Request::Status);
+        assert!(matches!(
+            request(&mut target, Request::Step { frames: 1 }).outcome,
+            ResponseOutcome::Failure { .. }
+        ));
+        assert_eq!(
+            request(&mut target, Request::Status).observed_frame,
+            completed.observed_frame
+        );
+    }
+
+    #[test]
+    fn legacy_recording_verifies_and_plays_without_remote_opt_in() {
+        let value: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/recording-v1.json")).unwrap();
+        let verified = verify_recording(value.clone()).unwrap();
+        let mut live = session(false);
+        live.load_replay(value).unwrap();
+        live.resume();
+        for _ in 0..MAX_RECORDING_TICKS {
+            live.tick();
+        }
+        assert_eq!(live.replay_status()["verified"], true);
+        assert_eq!(game::export_save(live.app()).unwrap(), verified["save"]);
+    }
 
     fn session(control: bool) -> ArenaSession {
         ArenaSession::new("live-test", "arena", RunMode::Interactive, control)
@@ -944,7 +1381,7 @@ mod tests {
         live.pause();
         success(request(&mut live, Request::Step { frames: 20 }));
         let before_load = request(&mut live, Request::Status);
-        let recording_before = query(&mut live, "recording");
+        let _recording_before = query(&mut live, "recording");
         let epoch = live.clock_epoch();
         let loaded = request(&mut live, load(save));
         success(loaded.clone());
@@ -975,19 +1412,11 @@ mod tests {
         let recording_after = query(&mut live, "recording");
         assert_eq!(
             recording_after["start_host_frame"],
-            recording_before["start_host_frame"]
+            before_load.observed_frame
         );
-        assert_eq!(
-            recording_after["recorded_ticks"],
-            recording_before["recorded_ticks"]
-        );
-        assert!(
-            recording_after["invalid_reason"]
-                .as_str()
-                .unwrap()
-                .contains("loaded save")
-        );
-        assert!(verify_recording(recording_after).is_err());
+        assert_eq!(recording_after["recorded_ticks"], 0);
+        assert!(recording_after["invalid_reason"].is_null());
+        assert!(verify_recording(recording_after).is_ok());
         live.restart();
         assert!(query(&mut live, "recording")["invalid_reason"].is_null());
     }
@@ -1082,11 +1511,6 @@ mod tests {
             80,
             "load clears buffered physical input"
         );
-        assert!(
-            query(&mut live, "recording")["invalid_reason"]
-                .as_str()
-                .unwrap()
-                .contains("loaded save")
-        );
+        assert!(query(&mut live, "recording")["invalid_reason"].is_null());
     }
 }

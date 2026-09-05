@@ -1,5 +1,6 @@
 //! Replace this module with your game. Hosts depend only on the functions below.
 mod save;
+pub(crate) use save::export_save_world;
 pub use save::{MAX_SAVE_BYTES, export_save, load_save};
 
 use serde::Deserialize;
@@ -494,7 +495,6 @@ fn setup(world: &mut World) {
     world.insert_resource(Run::default());
     world.insert_resource(RestartEpoch::default());
     world.insert_resource(UiPointers::default());
-    crate::live::begin_recording(world);
     world.spawn_with((initial_position(), Player, Name::new("player")));
     for index in 0..14 {
         world.spawn_with((
@@ -525,6 +525,7 @@ fn setup(world: &mut World) {
         Name::new("ui/dash"),
     ));
     sync_hud(world);
+    crate::live::begin_recording(world);
     crate::live::finish_recording(world);
 }
 
