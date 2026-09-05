@@ -308,6 +308,7 @@ jobs:
       - name: Verify native 3D shaders and offscreen readback
         env:
           TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
+          TITAN_COMPOSITION_EVIDENCE_DIR: ${{ runner.temp }}/titan-composition-evidence
         run: |
           cargo test -p titan-render-wgpu --test three_d -- --ignored
           cargo test -p titan-render-wgpu --test composition -- --ignored
@@ -317,7 +318,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: three-d-gpu-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/titan-3d-evidence/
+          path: |
+            ${{ runner.temp }}/titan-3d-evidence/
+            ${{ runner.temp }}/titan-composition-evidence/
           retention-days: 7
           if-no-files-found: ignore
 
