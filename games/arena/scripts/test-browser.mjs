@@ -167,3 +167,66 @@ assert.equal(restarted.recording.recorded_ticks, 0);
 assert.equal(ok(live, {type:'capture'}).checksum, 'e096abf94fd12c24');
 live.free();
 console.log('live headless WASM session: read-only inspection, opt-in, same-instance step and exact recording replay passed');
+
+// Mid-dash persistence uses the same paused live session and clears transient input.
+const sourceSaveGame = new BrowserLiveRuntime();
+sourceSaveGame.resume();
+sourceSaveGame.set_action('right', true);
+sourceSaveGame.set_action('dash', true);
+sourceSaveGame.tick();
+sourceSaveGame.pause();
+const saveStatusBefore = raw(sourceSaveGame, {type:'status'});
+const saveData = ok(sourceSaveGame, {type:'query', name:'save'}).value;
+const saveImage = ok(sourceSaveGame, {type:'capture'}).checksum;
+assert.ok(Buffer.byteLength(JSON.stringify(saveData)) < 64 * 1024);
+assert.equal(raw(sourceSaveGame, {type:'status'}).state_revision, saveStatusBefore.state_revision, 'save is read-only');
+const loadRequest = save => ({type:'invoke', name:'load_save', arguments:{save}});
+fail(sourceSaveGame, loadRequest(saveData), 'mutation_disabled');
+
+const restoredSaveGame = new BrowserLiveRuntime();
+restoredSaveGame.set_control_enabled(true);
+restoredSaveGame.resume();
+for (let tick = 0; tick < 3; tick++) restoredSaveGame.tick();
+fail(restoredSaveGame, loadRequest(saveData), 'not_controlled');
+restoredSaveGame.pause();
+const invalidBefore = raw(restoredSaveGame, {type:'status'});
+const invalidState = ok(restoredSaveGame, {type:'query', name:'save'}).value;
+for (const invalidSave of [{}, [], {...saveData, format_version:999}, {padding:'x'.repeat(64 * 1024)}]) {
+  const rejected = fail(restoredSaveGame, loadRequest(invalidSave), 'invalid_value');
+  assert.equal(rejected.observed_frame, invalidBefore.observed_frame);
+  assert.equal(rejected.state_revision, invalidBefore.state_revision);
+  assert.deepEqual(ok(restoredSaveGame, {type:'query', name:'save'}).value, invalidState);
+}
+const loadFrame = ok(restoredSaveGame, {type:'status'}).current_frame;
+ok(restoredSaveGame, {type:'inject_input', frame:loadFrame+1, actions:{left:{kind:'button',value:true}}});
+restoredSaveGame.set_action('down', true);
+restoredSaveGame.set_action('dash', true);
+restoredSaveGame.pointer(8, 12, true);
+const loadBefore = raw(restoredSaveGame, {type:'status'});
+const loaded = raw(restoredSaveGame, loadRequest(saveData));
+assert.equal(loaded.status, 'success');
+assert.equal(loaded.observed_frame, loadFrame);
+assert.ok(loaded.state_revision > loadBefore.state_revision);
+restoredSaveGame.pointer(8, 12, false);
+assert.deepEqual(ok(restoredSaveGame, {type:'query', name:'save'}).value, saveData, 'loaded state and canceled pointer preserve snapshot');
+assert.equal(ok(restoredSaveGame, {type:'capture'}).checksum, saveImage, 'rebuilt HUD and world match');
+assert.equal(ok(restoredSaveGame, {type:'query', name:'arena_state'}).value.paused, true);
+const loadedRecording = ok(restoredSaveGame, {type:'query', name:'recording'}).value;
+assert.match(loadedRecording.invalid_reason, /loaded save/);
+assert.throws(() => verify_recording_json(JSON.stringify(loadedRecording)), /invalidated/);
+sourceSaveGame.resume(); restoredSaveGame.resume();
+sourceSaveGame.tick(); restoredSaveGame.tick();
+assert.deepEqual(ok(restoredSaveGame, {type:'query', name:'save'}).value, ok(sourceSaveGame, {type:'query', name:'save'}).value, 'load clears held and scheduled input');
+for (let tick = 0; tick < 90; tick++) {
+  for (const action of ['up','down','left','right','dash']) {
+    const pressed = action === (tick < 30 ? 'up' : 'right');
+    sourceSaveGame.set_action(action, pressed);
+    restoredSaveGame.set_action(action, pressed);
+  }
+  sourceSaveGame.tick(); restoredSaveGame.tick();
+}
+sourceSaveGame.pause(); restoredSaveGame.pause();
+assert.deepEqual(ok(restoredSaveGame, {type:'query', name:'save'}).value, ok(sourceSaveGame, {type:'query', name:'save'}).value);
+assert.equal(ok(restoredSaveGame, {type:'capture'}).checksum, ok(sourceSaveGame, {type:'capture'}).checksum);
+sourceSaveGame.free(); restoredSaveGame.free();
+console.log('arena save/load actual-WASM: bounded validation, paused policy, monotonic host clock, input reset and deterministic continuation passed');

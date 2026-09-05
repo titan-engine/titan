@@ -58,6 +58,8 @@ def scenario(control):
             call(instance, 'invoke', 'pause', error='mutation_disabled')
             call(instance, 'step', 1, error='mutation_disabled')
             call(instance, 'invoke', 'restart', error='mutation_disabled')
+            readonly_save = call(instance, 'query', 'save')['response']['value']
+            call(instance, 'invoke', 'load_save', '--arguments', json.dumps({'save': readonly_save}), error='mutation_disabled')
             call(instance, 'capture')
             return
         paused = call(instance, 'invoke', 'pause')
@@ -87,6 +89,27 @@ def scenario(control):
         assert paused_again['state_revision'] > resumed['state_revision'], paused_again
         state = call(instance, 'query', 'arena_state')['response']['value']
         assert state['paused'] and state['run']['dash_cooldown'] > 0, state
+        # Restore the exact paused live scene, preserving host frame/revision identity.
+        saved = call(instance, 'query', 'save')['response']['value']
+        saved_checksum = call(instance, 'capture')['response']['checksum']
+        call(instance, 'step', 20)
+        before_load = call(instance, 'status')
+        rejected = call(instance, 'invoke', 'load_save', '--arguments', '{"save":{}}', error='invalid_value')
+        assert (rejected['observed_frame'], rejected['state_revision']) == (before_load['observed_frame'], before_load['state_revision']), rejected
+        evidence = GAME / 'target' / 'arena-evidence'
+        evidence.mkdir(parents=True, exist_ok=True)
+        load_arguments = evidence / 'live-load-arguments.json'
+        load_arguments.write_text(json.dumps({'save': saved}))
+        loaded = call(instance, 'invoke', 'load_save', '--arguments-file', load_arguments)
+        assert loaded['observed_frame'] == before_load['observed_frame'], loaded
+        assert loaded['state_revision'] > before_load['state_revision'], loaded
+        assert call(instance, 'status')['response']['paused']
+        assert call(instance, 'capture')['response']['checksum'] == saved_checksum
+        assert call(instance, 'query', 'save')['response']['value'] == saved
+        assert 'loaded save' in call(instance, 'query', 'recording')['response']['value']['invalid_reason']
+        call(instance, 'invoke', 'resume')
+        call(instance, 'invoke', 'load_save', '--arguments', json.dumps({'save': saved}), error='not_controlled')
+        call(instance, 'invoke', 'pause')
         # Reproduce a real continuously ticking contact, not just injected input.
         call(instance, 'invoke', 'restart')
         call(instance, 'invoke', 'resume')
@@ -120,4 +143,4 @@ def scenario(control):
 
 scenario(False)
 scenario(True)
-print('Native GPU live-player read-only policy, safe-point pause, stable inspection, dash step, capture, resume, live contact headless replay and registration cleanup passed.')
+print('Native GPU live-player read-only policy, safe-point pause, stable inspection, dash step, capture, resume, save/load, live contact headless replay and registration cleanup passed.')

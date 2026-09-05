@@ -3,6 +3,7 @@ import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
 import { inspectEntities, entityRow, inspectionDetails } from './entities.mjs';
 import { bindCanvasPointer } from './pointer.mjs';
+import { readSaveForSession } from './save.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -15,6 +16,7 @@ const keys = new Map([['ArrowUp', 'up'], ['w', 'up'], ['W', 'up'], ['ArrowDown',
 let player;
 let epoch;
 let requestId = 0;
+let importingSave = false;
 let lastTime;
 let animation;
 const input = bindPlayerInput({
@@ -47,7 +49,7 @@ function failure(error) {
   cancelAnimationFrame(animation); lastTime = undefined;
   errorPanel.hidden = false; errorPanel.textContent = `GPU player stopped: ${error.message ?? error}\nRetry starts a fresh scene.`;
   pause.disabled = true; replay.disabled = true;
-  document.querySelectorAll('[data-action], [data-live], #step').forEach(button => button.disabled = true);
+  document.querySelectorAll('[data-action], [data-live], #step, #load-save').forEach(button => button.disabled = true);
   input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
@@ -65,6 +67,7 @@ function syncSession() {
   pause.textContent = player.paused() ? 'Resume' : 'Pause';
   document.querySelector('#enable-controls').checked = player.control_enabled();
   document.querySelector('#step').disabled = !player.control_enabled() || !player.paused();
+  document.querySelector('#load-save').disabled = !player.control_enabled() || !player.paused() || importingSave;
   document.querySelector('#live-mode').textContent = `${player.paused() ? 'Paused' : 'Playing'} · Inspection ${player.control_enabled() ? 'controls enabled' : 'read-only'}`;
 }
 function loop(time) {
@@ -147,16 +150,42 @@ document.querySelector('#capture').addEventListener('click', () => panel(() => {
   image.alt = `Live arena capture at frame ${response.observed_frame}`;
   showDetails({ ...response, response: { ...response.response, artifact: '(shown below)' } });
 }));
+function downloadJson(value, filename) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+document.querySelector('#save').addEventListener('click', () => panel(() => {
+  const response = request({ type: 'query', name: 'save' });
+  downloadJson(response.response.value, 'arena-save.json');
+  liveSummary.textContent = `Saved snapshot at host frame ${response.observed_frame}.`;
+  showDetails(response);
+}));
+document.querySelector('#load-save').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file || importingSave) return;
+  importingSave = true; syncSession();
+  try {
+    const save = await readSaveForSession(file, player, () => player);
+    const response = request({ type: 'invoke', name: 'load_save', arguments: { save } });
+    summarize(request({ type: 'query', name: 'arena_state' }).response.value);
+    document.querySelector('#live-entities').hidden = true;
+    document.querySelector('#live-capture').hidden = true;
+    showDetails(response);
+  } catch (error) {
+    liveSummary.textContent = `Load failed: ${error.message ?? error}`;
+  } finally {
+    event.target.value = ''; importingSave = false; syncSession();
+  }
+});
 document.querySelector('#recording').addEventListener('click', () => panel(() => {
   const response = request({ type: 'query', name: 'recording', arguments: {} });
   const recording = response.response.value;
   let verification;
   try { verification = JSON.parse(verify_recording_json(JSON.stringify(recording))); }
   catch (error) { verification = { verified: false, reason: error.message ?? String(error) }; }
-  const blob = new Blob([JSON.stringify(recording, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a'); link.href = url; link.download = 'arena-recording.json'; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadJson(recording, 'arena-recording.json');
   liveSummary.textContent = `Exported ${recording.recorded_ticks}/${recording.max_ticks} ticks · ${verification.verified ? `Headless replay verified: state and image match (${verification.checksum})` : `Replay unavailable: ${verification.reason}`}`;
   const { frames, ...header } = recording;
   showDetails({ recording: header, verification });

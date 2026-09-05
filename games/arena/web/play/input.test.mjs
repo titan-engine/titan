@@ -23,7 +23,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       click() { return handlers.click?.(); },
     };
   }
-  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'live-summary'].map(key => [key, surface()]));
+  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'save', 'load-save', 'live-summary'].map(key => [key, surface()]));
   const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
   const window = surface();
   const document = Object.assign(surface(), {
@@ -145,6 +145,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(enabled, true);
   assert.equal(restartCount, 1, 'control opt-in preserves the instance');
   assert.equal(ids.step.disabled, false);
+  assert.equal(ids['load-save'].disabled, false, 'paused controls allow file loading');
   ids.pause.click();
   key('keydown');
   const envelope = { schema_version: 1, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
@@ -158,6 +159,8 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(ids.pause.textContent, 'Resume', 'remote pause updates local controls');
   assert.equal(pending, false, 'remote epoch change cancels pending input');
   assert.equal(ids.step.disabled, false);
+  assert.equal(ids['load-save'].disabled, false, 'paused controls allow file loading');
   ids['enable-controls'].handlers.change({ target: { checked: false } });
   assert.equal(ids.step.disabled, true, 'revoking controls disables step');
+  assert.equal(ids['load-save'].disabled, true, 'revoking controls disables file loading');
 });

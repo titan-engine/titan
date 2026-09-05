@@ -22,6 +22,8 @@
 <p>Inspect the session shown above. Captures and input recordings are available while you play. Enabling inspection controls lets the local page bridge pause, step and change this same session.</p>
 <p id="live-mode" role="status">Start the game to inspect it.</p>
 <div class="toolbar"><button id="inspect" data-live disabled>Inspect state</button><button id="capture" data-live disabled>Capture</button><button id="recording" data-live disabled>Verify &amp; export recording</button><label><input id="enable-controls" type="checkbox" data-live disabled>Enable inspection controls</label><button id="step" disabled>Step one tick</button></div>
+<div class="toolbar"><button id="save" data-live disabled>Save snapshot</button><label>Load snapshot <input id="load-save" type="file" accept=".json,application/json" disabled></label></div>
+<p>Snapshots resume gameplay from the saved point. To load a local JSON file (up to 64 KiB), pause and enable inspection controls. Loading preserves the host clock and requires a restart before recording an exact replay.</p>
 <p>Recordings contain at most 3,600 ticks from the latest restart. Replay an export from the arena directory with <code>cargo run --bin replay -- RECORDING.json</code>.</p>
 <p id="live-summary" role="status">Read-only inspection is the default.</p>
 <div id="live-entities" class="entity-list" hidden><table><caption id="live-entity-caption"></caption><thead><tr><th scope="col">Name</th><th scope="col">ID</th><th scope="col">Activity</th><th scope="col">Position</th></tr></thead><tbody id="live-entity-body"></tbody></table></div>

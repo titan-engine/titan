@@ -83,6 +83,31 @@ try:
     won=call('capture')['response']; assert won['checksum']=='b5cf61da6f50efd7',won
     shutil.copy(won['artifact'],evidence/'won.ppm')
     (evidence/'verified.json').write_text(json.dumps({'initial_checksum':initial['checksum'],'won':won,'seed':41700,'ticks':1200,'dash_active_checksum':active['checksum'],'dash_cooldown_checksum':cooldown['checksum'],'timings_seconds':{'arena_debug_build':build_seconds,'registration_poll':startup_seconds,'dash_cli_scenario':dash_seconds}},indent=2))
+    # Save/load through the standalone native controlled runtime, without a window.
+    call('invoke','restart')
+    save_clock=call('status')['response']['current_frame']
+    call('input',save_clock+1,'--actions','{"dash":{"kind":"button","value":true}}');call('step',1)
+    saved=call('query','save')['response']['value']
+    saved_capture=call('capture')['response']['checksum']
+    (evidence/'native-save.json').write_text(json.dumps(saved,indent=2))
+    call('step',20)
+    before_load=call('status')
+    rejected=call('invoke','load_save','--arguments','{"save":{}}',error='invalid_value')
+    assert (rejected['observed_frame'],rejected['state_revision'])==(before_load['observed_frame'],before_load['state_revision'])
+    load_arguments=evidence/'native-load-arguments.json'
+    load_arguments.write_text(json.dumps({'save':saved}))
+    malformed_arguments=evidence/'malformed-load-arguments.json'
+    malformed_arguments.write_text('{')
+    malformed=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'invoke','load_save','--arguments-file',str(malformed_arguments)],capture_output=True,text=True,timeout=10)
+    assert malformed.returncode != 0,malformed
+    unchanged=call('status')
+    assert (unchanged['observed_frame'],unchanged['state_revision'])==(before_load['observed_frame'],before_load['state_revision'])
+    loaded=call('invoke','load_save','--arguments-file',load_arguments)
+    assert loaded['observed_frame']==before_load['observed_frame']
+    assert loaded['state_revision']>before_load['state_revision']
+    assert call('capture')['response']['checksum']==saved_capture
+    assert call('query','save')['response']['value']==saved
+    assert 'loaded save' in call('query','recording')['response']['value']['invalid_reason']
     call('invoke','restart');call('step',310)
     lost=call('invoke','verify_survival',error='invalid_value')
     data=json.loads(Path(lost['error']['details']['diagnostic_bundle']).read_text())
@@ -97,4 +122,4 @@ try:
     call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
 finally:
     p.terminate();p.wait(timeout=5)
-print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, capture and bounded diagnostics passed.')
+print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, save/load, capture and bounded diagnostics passed.')
