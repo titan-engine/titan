@@ -167,3 +167,18 @@ retain the normal response envelope, including observed frame and revision.
 Read-only attachment permits queries; command invocation and other controls
 still require the live host's explicit opt-in. See the arena README for starting
 an actual native player with inspection and verifying its exported recording.
+
+Both `query` and `invoke` also accept `--arguments-file PATH`, mutually exclusive
+with inline `--arguments`. The path is relative to the CLI's current directory,
+not `--project`. The file must contain a UTF-8 JSON object and be a regular file
+of at most 1 MiB; the runtime may enforce smaller game-specific limits. File and
+JSON errors are reported before runtime discovery. This supports larger payloads
+such as saved game state without shell interpolation:
+
+```sh
+target/debug/titan --format json --project games/arena --instance arena-live invoke load_save --arguments-file arena-load.json
+```
+
+`arena-load.json` contains the command argument object (`{"save": ...}`), rather
+than a CLI response envelope. Query responses still include their envelope;
+extract the returned value explicitly when preparing a later command.

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::env;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
@@ -92,6 +93,9 @@ enum CliCommand {
         name: String,
         #[arg(long, default_value = "{}")]
         arguments: String,
+        /// Read a JSON argument object from a regular file (at most 1 MiB).
+        #[arg(long, conflicts_with = "arguments")]
+        arguments_file: Option<PathBuf>,
     },
     Step {
         frames: u64,
@@ -107,6 +111,9 @@ enum CliCommand {
         name: String,
         #[arg(long, default_value = "{}")]
         arguments: String,
+        /// Read a JSON argument object from a regular file (at most 1 MiB).
+        #[arg(long, conflicts_with = "arguments")]
+        arguments_file: Option<PathBuf>,
     },
     Capture,
     /// Checks all workspace targets with Cargo.
@@ -230,6 +237,64 @@ fn request_for(command: &CliCommand) -> Result<Request, LocalError> {
             )
         })
     }
+    fn arguments(
+        inline: &str,
+        file: &Option<PathBuf>,
+    ) -> Result<BTreeMap<String, serde_json::Value>, LocalError> {
+        let Some(path) = file else {
+            return object(inline);
+        };
+        const LIMIT: u64 = 1024 * 1024;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        // Opening a FIFO must not block before we can reject its file type.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NONBLOCK);
+        }
+        let input = options.open(path).map_err(|error| {
+            (
+                "invalid_value".into(),
+                format!("cannot open arguments file: {error}"),
+            )
+        })?;
+        let metadata = input.metadata().map_err(|error| {
+            (
+                "invalid_value".into(),
+                format!("cannot inspect arguments file: {error}"),
+            )
+        })?;
+        if !metadata.is_file() || metadata.len() > LIMIT {
+            return Err((
+                "invalid_value".into(),
+                "arguments file must be a regular file of at most 1 MiB".into(),
+            ));
+        }
+        let mut bytes = Vec::new();
+        input
+            .take(LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| {
+                (
+                    "invalid_value".into(),
+                    format!("cannot read arguments file: {error}"),
+                )
+            })?;
+        if bytes.len() as u64 > LIMIT {
+            return Err((
+                "invalid_value".into(),
+                "arguments file exceeds 1 MiB".into(),
+            ));
+        }
+        let text = std::str::from_utf8(&bytes).map_err(|_| {
+            (
+                "invalid_value".into(),
+                "arguments file must contain UTF-8 JSON".into(),
+            )
+        })?;
+        object(text)
+    }
     Ok(match command {
         CliCommand::Capabilities => Request::Capabilities,
         CliCommand::Status => Request::Status,
@@ -276,18 +341,26 @@ fn request_for(command: &CliCommand) -> Result<Request, LocalError> {
         },
         CliCommand::Commands => Request::Commands,
         CliCommand::Queries => Request::Queries,
-        CliCommand::Query { name, arguments } => Request::Query {
+        CliCommand::Query {
+            name,
+            arguments: inline,
+            arguments_file,
+        } => Request::Query {
             name: name.clone(),
-            arguments: object(arguments)?,
+            arguments: arguments(inline, arguments_file)?,
         },
         CliCommand::Step { frames } => Request::Step { frames: *frames },
         CliCommand::Input { frame, actions } => Request::InjectInput {
             frame: *frame,
             actions: object::<InputValue>(actions)?,
         },
-        CliCommand::Invoke { name, arguments } => Request::Invoke {
+        CliCommand::Invoke {
+            name,
+            arguments: inline,
+            arguments_file,
+        } => Request::Invoke {
             name: name.clone(),
-            arguments: object(arguments)?,
+            arguments: arguments(inline, arguments_file)?,
         },
         CliCommand::Capture => Request::Capture,
         _ => return Err(("unsupported".into(), "not an inspection request".into())),
@@ -573,6 +646,49 @@ mod tests {
     use clap::Parser;
 
     use super::{Cli, CliCommand, CommandData, execute};
+
+    #[test]
+    fn argument_files_are_bounded_objects_and_conflict_with_inline_arguments() {
+        let path =
+            std::env::temp_dir().join(format!("titan-argument-file-{}.json", std::process::id()));
+        let path_str = path.to_str().unwrap();
+        for command in ["query", "invoke"] {
+            std::fs::write(&path, br#"{"save":{"format_version":1}}"#).unwrap();
+            let cli = Cli::try_parse_from(["titan", command, "save", "--arguments-file", path_str])
+                .unwrap();
+            let request = super::request_for(&cli.command).unwrap();
+            let values = match request {
+                titan_protocol::Request::Query { arguments, .. }
+                | titan_protocol::Request::Invoke { arguments, .. } => arguments,
+                other => panic!("unexpected request {other:?}"),
+            };
+            assert_eq!(values["save"]["format_version"], 1);
+            assert!(
+                Cli::try_parse_from([
+                    "titan",
+                    command,
+                    "save",
+                    "--arguments",
+                    "{}",
+                    "--arguments-file",
+                    path_str
+                ])
+                .is_err()
+            );
+            for invalid in [b"[]".to_vec(), vec![0xff], vec![b' '; 1024 * 1024 + 1]] {
+                std::fs::write(&path, invalid).unwrap();
+                assert_eq!(
+                    super::request_for(&cli.command).unwrap_err().0,
+                    "invalid_value"
+                );
+            }
+            std::fs::remove_file(&path).unwrap();
+            assert_eq!(
+                super::request_for(&cli.command).unwrap_err().0,
+                "invalid_value"
+            );
+        }
+    }
 
     #[test]
     fn info_is_a_structured_result() {
