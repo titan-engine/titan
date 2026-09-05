@@ -1,9 +1,9 @@
 # Public browser demos
 
 The public site is designed for <https://titan-engine.github.io/titan/>. It contains
-both the RPG and arena players and their paused inspectors, with a short landing
-page linking to the source, contribution guide and questions. Initial publication
-requires the Pages workflow to merge; a PR build alone does not publish a site.
+the RPG and arena players and their paused inspectors, plus the 3D collection-room
+player at `collection-room/play/`, with a short landing page linking to the source,
+contribution guide and questions. Publication requires the Pages workflow to merge; a PR build alone does not publish a site.
 The demo tracks `main`, so it is an experimental preview rather than a release.
 
 ## Build and preview
@@ -16,14 +16,30 @@ python3 scripts/test-pages.py
 python3 scripts/build-pages.py
 node scripts/test-browser.mjs
 node games/arena/scripts/test-browser.mjs
+node games/collection-room/scripts/test-browser.mjs
 python3 -m http.server 8000 --bind 127.0.0.1 --directory target
 ```
 
 Open <http://127.0.0.1:8000/pages/>. Previewing under `/pages/` exercises the relative
-links and assets needed by the deployed `/titan/` project URL. Try each player,
-its inspector and the RPG reference replay. GPU play requires a compatible
-browser/device; paused inspectors render software captures. A browser failure
-should show its existing retry/error UI rather than a blank playable world.
+links and assets needed by the deployed `/titan/` project URL. Open and reload all
+three player routes directly, and try the RPG and arena paused inspectors.
+The full build invokes each game's existing browser builder; the Pages workflow
+runs all three actual-WASM acceptance scripts before uploading the package.
+
+For the [collection room](../games/collection-room/README.md#play-in-a-browser),
+open `/pages/collection-room/play/`, click Play and focus the canvas. Use WASD or
+arrows to move, Space to pause/resume, N to step and R to restart. Click Replay
+route and verify completion with three collected objects at game tick 44; test
+Restart and Capture, including the displayed image and tick/revision identity.
+Repeat with `?backend=webgpu` and `?backend=webgl2` on available supported adapters.
+WebGL2 needs floating-point color attachments. Record the browser, adapter,
+backend and any unsupported-capability error; a Node/WASM pass does not verify GPU
+rendering. Reload should start a fresh session with inspector control disabled.
+
+GPU play requires a compatible browser/device. Only RPG and arena offer on-screen
+movement and paused inspectors with software captures. Collection room requires
+a keyboard and GPU, has no standalone inspector page and no software 3D fallback.
+Unsupported GPU capability must show the player's existing error UI.
 
 `--no-build` restages existing compiled browser packages for layout iteration.
 Do a full build before publishing. The script replaces only `target/pages`,
@@ -50,7 +66,10 @@ repository code. No personal token, custom domain, analytics or external backend
 is required. Existing main protection and engine CI gates remain in place.
 
 After a reviewed merge, check the **Browser demos** workflow's deployment URL and
-open both games on the public HTTPS site. If hosting fails, inspect that run;
-a green PR package build is not evidence of a successful deployment. To republish
+record the exact merged-main SHA, its engine CI result and successful deployment
+run. Open the public HTTPS landing page and all three players, repeat the smoke
+checks above under `/titan/`, and record results against that deployed revision.
+These post-merge checks remain pending while a PR awaits maintainer review.
+If hosting fails, inspect that run; a green PR package build is not evidence of a successful deployment. To republish
 the current main revision, use **Actions → Browser demos → Run workflow → main**.
 Keep fixes in reviewed PRs rather than editing the generated site directly.
