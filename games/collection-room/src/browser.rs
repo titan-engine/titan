@@ -25,6 +25,14 @@ impl BrowserRuntime {
             session: BrowserSession::new(app, inspector, enable_control),
         }
     }
+    /// Accept at a safe point; completion releases the runtime borrow before awaiting.
+    #[cfg(target_arch = "wasm32")]
+    pub fn dispatch(&mut self, request_json: &str) -> titan::inspection::BrowserPromise {
+        titan::inspection::response_promise(self.session.capture_timeout(), || {
+            self.session.dispatch_json(request_json)
+        })
+    }
+
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle(request_json)
     }

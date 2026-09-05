@@ -182,3 +182,9 @@ requested backend; an unavailable backend is a failure, not a fallback pass.
 The shared composition test checks linear-light alpha and UI color conversion
 for sRGB and non-sRGB targets with per-channel tolerance 2, retaining expected,
 actual and difference images. Exact portable 3D pixel equality is not claimed.
+The semantic host uses protocol schema 2. Browser clients may await
+`runtime.dispatch(JSON.stringify(envelope))`; it returns one correlated Promise
+without retaining the runtime borrow. `handle` remains an immediate-only
+convenience for semantic calls. Native requests use the same owned dispatch and
+deferred reply boundary. This package still advertises no capture capability;
+collection-room GPU capture wiring belongs to #48.

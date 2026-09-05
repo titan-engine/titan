@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 pub type RequestId = String;
 pub type InstanceId = String;
@@ -278,8 +278,21 @@ pub struct FieldMetadata {
     pub unit: Option<String>,
 }
 
+/// Immutable provenance sampled when a capture is accepted.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CaptureIdentity {
+    pub instance_id: InstanceId,
+    pub session_generation: u64,
+    pub capture_id: u64,
+    pub observed_frame: u64,
+    pub state_revision: u64,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CaptureResult {
+    pub identity: CaptureIdentity,
     pub width: u32,
     pub height: u32,
     pub format: String,
@@ -319,6 +332,7 @@ pub enum ErrorCode {
     AmbiguousTarget,
     ProtocolMismatch,
     Timeout,
+    Cancelled,
     Busy,
     Unsupported,
     Internal,
@@ -327,6 +341,36 @@ pub enum ErrorCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_provenance_round_trips_and_requires_new_schema_shape() {
+        let capture = CaptureResult {
+            identity: CaptureIdentity {
+                instance_id: "runtime".into(),
+                session_generation: 3,
+                capture_id: 8,
+                observed_frame: 11,
+                state_revision: 4,
+                width: 8,
+                height: 4,
+            },
+            width: 8,
+            height: 4,
+            format: "png".into(),
+            artifact: "data:image/png;base64,fixture".into(),
+            checksum: "rgba".into(),
+        };
+        let json = serde_json::to_value(&capture).unwrap();
+        assert_eq!(json["identity"]["capture_id"], 8);
+        assert_eq!(
+            serde_json::from_value::<CaptureResult>(json.clone()).unwrap(),
+            capture
+        );
+        let mut legacy = json;
+        legacy.as_object_mut().unwrap().remove("identity");
+        assert!(serde_json::from_value::<CaptureResult>(legacy).is_err());
+        assert_eq!(SCHEMA_VERSION, 2);
+    }
 
     #[test]
     fn request_wire_shape_is_tagged_and_stable() {

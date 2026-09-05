@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use titan::{
     App, FixedTime, Startup, World,
     input::InputFrame,
-    inspection::{Inspector, StepBudget, handle_with_policy},
+    inspection::{Inspector, StepBudget},
     replay::{Playback, RecordedButtons, RecordingIdentity, SnapshotRecorder, SnapshotRecording},
 };
 use titan_protocol::{
@@ -32,6 +32,7 @@ struct Control {
     paused: bool,
     epoch: u64,
     journal_was_paused: bool,
+    capture_generation: u64,
 }
 struct Expected(Value);
 fn invalid(message: impl Into<String>) -> ProtocolError {
@@ -61,6 +62,7 @@ pub fn begin_recording(world: &mut World) {
             paused: true,
             epoch: 0,
             journal_was_paused: true,
+            capture_generation: 0,
         });
     }
 }
@@ -251,6 +253,10 @@ fn load_save(app: &mut App, value: Value) -> Result<(), ProtocolError> {
         return Err(invalid("exit replay before loading a save"));
     }
     snapshot::load(app, value)?;
+    app.world_mut()
+        .resource_mut::<Control>()
+        .unwrap()
+        .capture_generation += 1;
     begin_recording(app.world_mut());
     reset_input(app);
     Ok(())
@@ -261,6 +267,10 @@ fn load_replay(app: &mut App, value: Value) -> Result<(), ProtocolError> {
     verify_parsed(&r, game::images(app.world()).clone()).map_err(invalid)?;
     let expected = r.final_snapshot.clone().unwrap();
     snapshot::load(app, r.initial_snapshot.clone().unwrap())?;
+    app.world_mut()
+        .resource_mut::<Control>()
+        .unwrap()
+        .capture_generation += 1;
     app.world_mut().insert_resource(Playback::new(r, expected));
     reset_input(app);
     finish_playback(app.world_mut());
@@ -275,6 +285,10 @@ fn restart_replay(app: &mut App) -> Result<(), ProtocolError> {
         .recording()
         .clone();
     snapshot::load(app, r.initial_snapshot.clone().unwrap())?;
+    app.world_mut()
+        .resource_mut::<Control>()
+        .unwrap()
+        .capture_generation += 1;
     let expected = r.final_snapshot.clone().unwrap();
     app.world_mut().insert_resource(Playback::new(r, expected));
     reset_input(app);
@@ -285,6 +299,10 @@ fn restart(app: &mut App) -> Result<(), ProtocolError> {
     let mut fresh = game::build_game_with_images(game::images(app.world()).clone());
     fresh.update_schedule(Startup);
     snapshot::load(app, snapshot::export(&fresh)?)?;
+    app.world_mut()
+        .resource_mut::<Control>()
+        .unwrap()
+        .capture_generation += 1;
     begin_recording(app.world_mut());
     reset_input(app);
     Ok(())
@@ -575,6 +593,12 @@ impl RpgSession {
         journal::is_open(self.app.world())
     }
     pub fn journal_key(&mut self, key: &str) -> bool {
+        let generation = self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation;
         let epoch = self.clock_epoch();
         let consumed = journal_key(&mut self.app, key);
         if epoch != self.clock_epoch() {
@@ -583,10 +607,26 @@ impl RpgSession {
         if consumed {
             self.inspector.note_external_change();
         }
+        if self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation
+            != generation
+        {
+            self.inspector.reset_capture_session();
+        }
         self.inspector.set_controlled(self.paused());
         consumed
     }
     pub fn journal_pointer(&mut self, point: Option<(i32, i32)>, pressed: bool) -> bool {
+        let generation = self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation;
         let epoch = self.clock_epoch();
         let consumed = journal_pointer(&mut self.app, point, pressed, true);
         if epoch != self.clock_epoch() {
@@ -594,6 +634,16 @@ impl RpgSession {
         }
         if consumed {
             self.inspector.note_external_change();
+        }
+        if self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation
+            != generation
+        {
+            self.inspector.reset_capture_session();
         }
         self.inspector.set_controlled(self.paused());
         consumed
@@ -637,23 +687,27 @@ impl RpgSession {
     }
     pub fn restart(&mut self) {
         restart(&mut self.app).expect("valid fresh RPG");
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
     }
     pub fn load_replay(&mut self, value: Value) -> Result<(), ProtocolError> {
         load_replay(&mut self.app, value)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
     }
     pub fn restart_replay(&mut self) -> Result<(), ProtocolError> {
         restart_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
     }
     pub fn stop_replay(&mut self) -> Result<(), ProtocolError> {
         stop_replay(&mut self.app)?;
+        self.inspector.reset_capture_session();
         self.clear_input();
         self.inspector.note_external_change();
         Ok(())
@@ -682,6 +736,16 @@ impl RpgSession {
         }
     }
     pub fn handle(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
+        self.dispatch(request).into_ready()
+    }
+
+    pub fn dispatch(&mut self, request: &RequestEnvelope) -> titan::inspection::Dispatch {
+        let generation = self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation;
         self.inspector.set_controlled(self.paused());
         self.inspector.set_step_budget(StepBudget {
             max_frames: self
@@ -713,12 +777,16 @@ impl RpgSession {
                 _ => true,
             };
         let epoch = self.clock_epoch();
-        let response = handle_with_policy(
+        let response = titan::inspection::dispatch_with_policy(
             &mut self.app,
             &mut self.inspector,
             self.enable_control && allowed && modal_allowed,
             request,
         );
+        let response = match response {
+            titan::inspection::Dispatch::Ready(response) => response,
+            pending @ titan::inspection::Dispatch::Pending(_) => return pending,
+        };
         if self.clock_epoch() != epoch {
             self.clear_input();
         }
@@ -735,9 +803,35 @@ impl RpgSession {
         if matches!(response.outcome, ResponseOutcome::Success { .. }) {
             self.app.refresh_extracted();
         }
+        if self
+            .app
+            .world()
+            .resource::<Control>()
+            .unwrap()
+            .capture_generation
+            != generation
+        {
+            self.inspector.reset_capture_session();
+        }
         self.inspector.set_controlled(self.paused());
-        response
+        titan::inspection::Dispatch::Ready(response)
     }
+    pub fn capture_timeout(&self) -> std::time::Duration {
+        self.inspector.capture_timeout()
+    }
+
+    pub fn dispatch_json(&mut self, json: &str) -> titan::inspection::Dispatch {
+        match serde_json::from_str(json) {
+            Ok(request) => self.dispatch(&request),
+            Err(_) => titan::inspection::dispatch_json_with_policy(
+                &mut self.app,
+                &mut self.inspector,
+                self.enable_control,
+                json,
+            ),
+        }
+    }
+
     pub fn handle_json(&mut self, json: &str) -> String {
         match serde_json::from_str(json) {
             Ok(request) => serde_json::to_string(&self.handle(&request)).unwrap(),
@@ -763,6 +857,42 @@ mod tests {
         );
         RpgSession::new(app, inspector, true)
     }
+    #[test]
+    fn pending_capture_survives_pause_but_is_invalidated_by_world_replacement() {
+        let mut session = session();
+        let work = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let sink = work.clone();
+        session
+            .inspector
+            .register_async_capture_handler(2, 2, move |_, _, completion| {
+                *sink.lock().unwrap() = Some(completion);
+                Ok(())
+            });
+        let titan::inspection::Dispatch::Pending(mut pending) =
+            session.dispatch(&RequestEnvelope::new("delayed", Request::Capture))
+        else {
+            panic!("capture must defer");
+        };
+        session.pause();
+        assert!(pending.poll(std::time::Duration::ZERO).is_none());
+        let restarted = session.handle(&RequestEnvelope::new(
+            "reset",
+            Request::Invoke {
+                name: "restart".into(),
+                arguments: Default::default(),
+            },
+        ));
+        assert!(matches!(restarted.outcome, ResponseOutcome::Success { .. }));
+        let canceled = pending.poll(std::time::Duration::ZERO).unwrap();
+        assert_eq!(canceled.request_id, "delayed");
+        assert!(
+            matches!(canceled.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::Cancelled)
+        );
+        let producer = work.lock().unwrap().take().unwrap();
+        producer.complete(Err(ProtocolError::new(ErrorCode::Internal, "late result")));
+        assert!(pending.poll(std::time::Duration::ZERO).is_none());
+    }
+
     #[test]
     fn paused_spawn_refreshes_the_presented_frame_and_invalidates_recording() {
         let mut session = session();

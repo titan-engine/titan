@@ -1,4 +1,4 @@
-//! PNG artifacts for native diagnostics and synchronous browser captures.
+//! PNG artifacts for native diagnostics and owned protocol captures.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use titan::render::Image;
@@ -21,10 +21,28 @@ pub fn write_png(
 /// Encode an image as an inline PNG protocol capture, with an FNV-1a checksum
 /// of its unencoded RGBA8 pixels. Rendering and capture selection remain game-owned.
 pub fn png_capture(image: &Image) -> Result<CaptureResult, ProtocolError> {
-    let mut bytes = Vec::new();
-    write_png(image, &mut bytes).map_err(|error| {
+    titan::inspection::CaptureLimits::default()
+        .validate_dimensions(image.width(), image.height())?;
+    struct BoundedPng(Vec<u8>);
+    impl std::io::Write for BoundedPng {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() > (2 * 1024 * 1024usize).saturating_sub(self.0.len()) {
+                return Err(std::io::Error::other(
+                    "encoded PNG exceeds inline capture limit",
+                ));
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut encoded = BoundedPng(Vec::new());
+    write_png(image, &mut encoded).map_err(|error| {
         ProtocolError::new(ErrorCode::Internal, format!("PNG capture failed: {error}"))
     })?;
+    let bytes = encoded.0;
     let checksum = image
         .pixels()
         .iter()
@@ -32,6 +50,7 @@ pub fn png_capture(image: &Image) -> Result<CaptureResult, ProtocolError> {
             (hash ^ u64::from(*byte)).wrapping_mul(0x100_0000_01b3)
         });
     Ok(CaptureResult {
+        identity: Default::default(),
         width: image.width(),
         height: image.height(),
         format: "png".into(),

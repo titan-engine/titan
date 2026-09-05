@@ -312,6 +312,7 @@ jobs:
         run: |
           cargo test -p titan-render-wgpu --test three_d -- --ignored
           cargo test -p titan-render-wgpu --test composition -- --ignored
+          cargo test -p titan-render-wgpu --lib aborted_backend_map -- --ignored
 
       - name: Retain native 3D GPU comparison evidence
         if: always()

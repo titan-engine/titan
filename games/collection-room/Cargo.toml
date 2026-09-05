@@ -21,7 +21,7 @@ required-features = ["player"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-titan = { path = "../..", default-features = false }
+titan = { path = "../..", default-features = false, features = ["browser-capture"] }
 titan-protocol = { path = "../../crates/titan-protocol" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

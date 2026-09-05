@@ -7,7 +7,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const metadata = JSON.parse(await execFile('cargo', ['metadata', '--format-version', '1', '--no-deps'], { phase: 'build', cwd: root, encoding: 'utf8' }));
 const { BrowserRuntime } = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_game.js'));
 let sequence = 0;
-const envelope = request => ({ schema_version: 1, request_id: `test-${++sequence}`, request });
+const envelope = request => ({ schema_version: 2, request_id: `test-${++sequence}`, request });
 const raw = (runtime, request) => JSON.parse(runtime.handle(JSON.stringify(envelope(request))));
 function ok(runtime, request) { const response = raw(runtime, request); assert.equal(response.status, 'success', JSON.stringify(response)); return response.response; }
 function fail(runtime, request, code) { const response = raw(runtime, request); assert.equal(response.status, 'failure'); assert.equal(response.error.code, code); return response; }
@@ -55,3 +55,21 @@ ok(game, { type: 'step', frames: 1 });
 assert.deepEqual(position(), before);
 game.free();
 console.log('Starter actual-WASM policy, input, capture, fields and restart checks passed.');
+
+
+// The public asynchronous boundary accepts before returning and releases the
+// WASM mutable borrow: another request and free are legal before resolution.
+{
+  const asynchronous = new BrowserRuntime(true);
+  const capture = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-capture', request: { type: 'capture' } }));
+  assert.ok(capture instanceof Promise);
+  const step = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-step', request: { type: 'step', frames: 1 } }));
+  asynchronous.free();
+  const [captured, stepped] = (await Promise.all([capture, step])).map(JSON.parse);
+  assert.equal(captured.request_id, 'promise-capture');
+  assert.equal(captured.status, 'success');
+  assert.equal(captured.observed_frame, 0);
+  assert.equal(captured.response.identity.observed_frame, 0);
+  assert.equal(stepped.observed_frame, 1);
+  assert.equal(captured.response.identity.instance_id, captured.instance_id);
+}

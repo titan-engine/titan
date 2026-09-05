@@ -242,6 +242,7 @@ pub fn configured_inspector(output_path: PathBuf, config: InspectionConfig) -> I
             )
         })?;
         Ok(CaptureResult {
+            identity: Default::default(),
             width: image.width(),
             height: image.height(),
             format: "ppm".into(),

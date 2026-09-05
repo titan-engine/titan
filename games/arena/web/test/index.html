@@ -75,7 +75,7 @@ document.querySelector('#live').onclick = async () => {
     player.frame(1000 / 60); player.pause(); player.frame(0);
     const visible = JSON.parse(player.status());
     let requestId = 0;
-    const call = request => JSON.parse(player.handle(JSON.stringify({ schema_version: 1, request_id: `fixture-${++requestId}`, request })));
+    const call = request => JSON.parse(player.handle(JSON.stringify({ schema_version: 2, request_id: `fixture-${++requestId}`, request })));
     const state = call({type:'query', name:'arena_state'});
     if (state.status !== 'success' || state.observed_frame !== visible.frame) throw new Error('Inspection is not at the presented frame');
     const denied = call({type:'step', frames:1});
@@ -115,7 +115,7 @@ document.querySelector('#seeking').onclick = async () => {
     player.pause();
     let requestId = 0;
     const call = request => {
-      const response = JSON.parse(player.handle(JSON.stringify({schema_version:1, request_id:`seek-${++requestId}`, request})));
+      const response = JSON.parse(player.handle(JSON.stringify({schema_version: 2, request_id:`seek-${++requestId}`, request})));
       if (response.status !== 'success') throw new Error(JSON.stringify(response));
       return response.response;
     };
@@ -185,7 +185,7 @@ document.querySelector('#import-responsiveness').onclick = async () => {
     player.set_control_enabled(true);
     let requestId = 0;
     const call = request => {
-      const response = JSON.parse(player.handle(JSON.stringify({schema_version:1, request_id:`import-${++requestId}`, request})));
+      const response = JSON.parse(player.handle(JSON.stringify({schema_version: 2, request_id:`import-${++requestId}`, request})));
       if (response.status !== 'success') throw new Error(JSON.stringify(response));
       return response.response;
     };
@@ -235,7 +235,7 @@ document.querySelector('#import-responsiveness').onclick = async () => {
       return {label, samples};
     }
     const report = {
-      schema_version: 1,
+      schema_version: 2,
       measured_at_utc: new Date().toISOString(),
       revision,
       working_tree_dirty: dirty === 'true',

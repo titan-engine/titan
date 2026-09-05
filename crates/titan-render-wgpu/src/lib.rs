@@ -1,7 +1,9 @@
 //! App-independent sprite and opaque 3D rendering for native and browser wgpu.
 //! Sprites use a logical framebuffer and nearest presentation; 3D owns bounded
 //! offscreen color/depth targets.
+mod capture;
 mod composition;
+pub use capture::{GpuCaptureError, MAX_CAPTURE_BYTES, MAX_CAPTURE_WAIT, OwnedGpuCapture};
 mod surface;
 pub use composition::GpuSceneRenderer3d;
 mod three_d;

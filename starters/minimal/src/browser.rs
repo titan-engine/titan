@@ -35,6 +35,13 @@ impl BrowserRuntime {
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle(request_json)
     }
+    /// Accept synchronously; the returned Promise owns completion, not the player.
+    #[cfg(target_arch = "wasm32")]
+    pub fn dispatch(&mut self, request_json: &str) -> titan::inspection::BrowserPromise {
+        titan::inspection::response_promise(self.session.capture_timeout(), || {
+            self.session.dispatch_json(request_json)
+        })
+    }
 }
 
 fn capture(app: &App) -> Result<CaptureResult, ProtocolError> {

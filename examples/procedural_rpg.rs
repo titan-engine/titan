@@ -191,9 +191,15 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         && duration.is_none_or(|duration| started.elapsed() < duration)
     {
         // This thread alone owns the game, and fixed time advances only on Step.
-        queue.drain(|request| {
+        queue.drain_with_reply(|request, reply| {
             let request_started = Instant::now();
-            let response = session.handle(request);
+            let response = match session.dispatch(request) {
+                titan::inspection::Dispatch::Ready(response) => response,
+                titan::inspection::Dispatch::Pending(mut capture) => {
+                    reply.complete_when(request_started, move |elapsed| capture.poll(elapsed));
+                    return;
+                }
+            };
             let elapsed_us =
                 u64::try_from(request_started.elapsed().as_micros()).unwrap_or(u64::MAX);
             let result = diagnostics.record_response(
@@ -232,7 +238,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             if let Some(written) = result.written {
                 eprintln!("diagnostic bundle: {}", written.manifest.display());
             }
-            result.response
+            reply.send(result.response);
         });
         std::thread::sleep(Duration::from_millis(1));
     }

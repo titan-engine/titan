@@ -11,7 +11,7 @@ const { BrowserRuntime } = require(resolve(metadata.target_directory, 'titan/bro
 let sequence = 0;
 const call = (runtime, request, success = true) => {
   const request_id = `wasm-${++sequence}`;
-  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 1, request_id, request })));
+  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 2, request_id, request })));
   assert.equal(result.request_id, request_id);
   assert.equal(result.status, success ? 'success' : 'failure', JSON.stringify(result));
   return result;
@@ -114,3 +114,43 @@ assert.equal(mismatch.error.code, 'protocol_mismatch');
 assert.equal(mismatch.request_id, 'mismatch');
 runtime.free();
 console.log('WASM browser control loop passed: read-only policy, replay, exact capture, command, typed field writes and rejection, schema errors.');
+
+
+// The public asynchronous boundary accepts before returning and releases the
+// WASM mutable borrow: another request and free are legal before resolution.
+{
+  const asynchronous = new BrowserRuntime(true);
+  const capture = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-capture', request: { type: 'capture' } }));
+  assert.ok(capture instanceof Promise);
+  const step = asynchronous.dispatch(JSON.stringify({ schema_version: 2, request_id: 'promise-step', request: { type: 'step', frames: 1 } }));
+  asynchronous.free();
+  const [captured, stepped] = (await Promise.all([capture, step])).map(JSON.parse);
+  assert.equal(captured.request_id, 'promise-capture');
+  assert.equal(captured.status, 'success');
+  assert.equal(captured.observed_frame, 0);
+  assert.equal(captured.response.identity.observed_frame, 0);
+  assert.equal(stepped.observed_frame, 1);
+  assert.equal(captured.response.identity.instance_id, captured.instance_id);
+}
+
+// A capture may meet its GPU/encoding budget but expire while preparing its
+// final JSON. Drive the host monotonic clock at that boundary deterministically.
+{
+  const originalPerformance = globalThis.performance;
+  let finalizing = false;
+  let reads = 0;
+  globalThis.performance = { now: () => finalizing && ++reads > 1 ? 6000 : 0 };
+  const runtime = new BrowserRuntime(true);
+  try {
+    const promise = runtime.dispatch(JSON.stringify({ schema_version: 2, request_id: 'serialization-timeout', request: { type: 'capture' } }));
+    finalizing = true;
+    const response = JSON.parse(await promise);
+    assert.equal(response.request_id, 'serialization-timeout');
+    assert.equal(response.status, 'failure');
+    assert.equal(response.error.code, 'timeout');
+    assert.equal(response.observed_frame, 0);
+  } finally {
+    runtime.free();
+    globalThis.performance = originalPerformance;
+  }
+}

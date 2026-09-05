@@ -110,9 +110,11 @@ handle. No RPG dependency or game-specific rendering policy enters this API.
 
 The CPU data/math boundary is implemented in `titan::render::three_d` alongside
 unchanged 2D APIs. `titan_render_wgpu::GpuRenderer3d` consumes these frames into
-bounded offscreen color and depth targets. Collection-room players and UI composition use this renderer through shared
-surface/device lifecycle. Asynchronous game capture integration remains agreed
-design, **not yet an implemented collection-room capability**. Their execution scope lives in the linked issues of
+bounded offscreen color and depth targets. `OwnedGpuCapture` submits fresh owned
+frames for asynchronous readback through the common inspection capture contract.
+Collection-room players and UI composition use shared surface/device lifecycle.
+Game capture integration remains agreed design, **not yet an implemented
+collection-room capability**. Execution scope lives in the linked issues of
 [#42](https://github.com/titan-engine/titan/issues/42).
 
 The [standalone collection room](../games/collection-room/README.md) now supplies
