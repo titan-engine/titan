@@ -1,10 +1,10 @@
 /** Same-window bridge. Returns only the runtime's original response envelope. */
-export function bridgeResponse(event, { origin, source, handle }) {
+export async function bridgeResponse(event, { origin, source, handle }) {
   if (origin === "null" || event.source !== source || event.origin !== origin) return null;
   const data = event.data;
   if (!data || data.namespace !== "titan.inspector" || data.type !== "request") return null;
   if (!data.envelope || typeof data.envelope.request_id !== "string" || !data.envelope.request) return null;
-  return { namespace: "titan.inspector", type: "response", envelope: JSON.parse(handle(JSON.stringify(data.envelope))) };
+  return { namespace: "titan.inspector", type: "response", envelope: JSON.parse(await handle(JSON.stringify(data.envelope))) };
 }
 
 export function typedArgument(value, typeName) {

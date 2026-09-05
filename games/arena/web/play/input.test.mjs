@@ -54,6 +54,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       if (action === 'dash' && pressed && !held[action]) pending = true;
       held[action] = pressed;
     },
+    async dispatch(json) { return this.handle(json); },
     handle(json) {
       handleCount++;
       const envelope = JSON.parse(json);
@@ -154,12 +155,12 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(ids['load-save'].disabled, false, 'paused controls allow file loading');
   ids.pause.click();
   key('keydown');
-  const envelope = { schema_version: 1, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
+  const envelope = { schema_version: 2, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
   const event = { source: window, origin: 'http://localhost', data: { namespace: 'titan.inspector', type: 'request', envelope } };
-  window.handlers.message({ ...event, origin: 'https://other.example' });
-  window.handlers.message({ ...event, source: {} });
+  await window.handlers.message({ ...event, origin: 'https://other.example' });
+  await window.handlers.message({ ...event, source: {} });
   assert.equal(handleCount, 0, 'bridge rejects foreign origins and windows');
-  window.handlers.message(event);
+  await window.handlers.message(event);
   assert.equal(handleCount, 1);
   assert.equal(messages[0].envelope.request_id, 'live-pause');
   assert.equal(ids.pause.textContent, 'Resume', 'remote pause updates local controls');

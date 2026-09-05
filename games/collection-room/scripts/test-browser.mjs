@@ -17,7 +17,7 @@ if (!process.argv.includes('--wasm-worker')) {
   const { BrowserRuntime } = createRequire(import.meta.url)(process.argv[3]);
   let sequence = 0;
   const raw = (runtime, request) => JSON.parse(runtime.handle(JSON.stringify({
-    schema_version: 1, request_id: `collection-test-${++sequence}`, request,
+    schema_version: 2, request_id: `collection-test-${++sequence}`, request,
   })));
   function ok(runtime, request) {
     const response = raw(runtime, request);
@@ -32,6 +32,27 @@ if (!process.argv.includes('--wasm-worker')) {
   }
   const invoke = (name, args = {}) => ({ type: 'invoke', name, arguments: args });
   const state = runtime => ok(runtime, { type: 'query', name: 'state' }).value;
+  // Promise dispatch accepts before returning and keeps no player borrow while awaited.
+  const dispatched = new BrowserRuntime(false);
+  const requests = [
+    { type: 'status' }, { type: 'capabilities' }, { type: 'capture' }, { type: 'step', frames: 1 },
+  ];
+  const promises = requests.map((request, index) => dispatched.dispatch(JSON.stringify({
+    schema_version: 2, request_id: `dispatch-${index}`, request,
+  })));
+  assert.ok(promises.every(promise => typeof promise.then === 'function'));
+  dispatched.free();
+  const responses = (await Promise.all(promises)).map(JSON.parse);
+  for (const [index, response] of responses.entries()) {
+    assert.equal(response.request_id, `dispatch-${index}`);
+    assert.equal(response.observed_frame, 0);
+    assert.equal(response.state_revision, 0);
+  }
+  assert.equal(responses[0].status, 'success');
+  assert.ok(!responses[1].response.operations.includes('capture'));
+  assert.equal(responses[2].error.code, 'unsupported');
+  assert.equal(responses[3].error.code, 'mutation_disabled');
+
   const readonly = new BrowserRuntime(false);
   try {
     const initial = state(readonly);

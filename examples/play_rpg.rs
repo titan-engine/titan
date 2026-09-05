@@ -266,7 +266,15 @@ mod native {
             // Only this window thread touches the game. Requests run between
             // complete ticks, including while paused or the window is minimized.
             if let Some(queue) = &self.queue {
-                queue.drain(|request| self.session.handle(request));
+                queue.drain_with_reply(|request, reply| {
+                    let started = std::time::Instant::now();
+                    match self.session.dispatch(request) {
+                        titan::inspection::Dispatch::Ready(response) => reply.send(response),
+                        titan::inspection::Dispatch::Pending(mut capture) => {
+                            reply.complete_when(started, move |elapsed| capture.poll(elapsed));
+                        }
+                    }
+                });
             }
             self.sync_clock();
             self.update_title();

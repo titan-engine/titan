@@ -142,7 +142,11 @@ removed. Local parsing, discovery, or transport failures return a structured
 the `CommandResult` format described above. Help and version requests remain
 ordinary CLI text.
 
-Captures return an absolute artifact path, dimensions, format, and checksum.
+Captures return an artifact path or inline PNG, dimensions, format, checksum, and
+accepted frame identity (instance, session generation, capture ID, tick and revision).
+Protocol schema 2 preserves that identity in JSON even if live state advances
+before the capture completes. A transport timeout ends the CLI wait; it does not
+prove host cancellation.
 The RPG writes a PPM file under `target/titan/<instance>-<pid>/capture.ppm` in the
 selected project. A subsequent capture replaces that file.
 

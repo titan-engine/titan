@@ -34,7 +34,7 @@ function png(width, height) {
 const replacement = png(8, 8);
 let sequence = 0;
 function call(runtime, request, success = true) {
-  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 1, request_id: `asset-${++sequence}`, request })));
+  const result = JSON.parse(runtime.handle(JSON.stringify({ schema_version: 2, request_id: `asset-${++sequence}`, request })));
   assert.equal(result.status, success ? 'success' : 'failure', JSON.stringify(result));
   return result;
 }

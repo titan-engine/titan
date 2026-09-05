@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const { BrowserRuntime, BrowserLiveRuntime } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 const evidence = [];
 function call(runtime, request_id, request, code) {
-  const envelope = { schema_version: 1, request_id, request };
+  const envelope = { schema_version: 2, request_id, request };
   const result = JSON.parse(runtime.handle(JSON.stringify(envelope)));
   assert.equal(result.request_id, request_id);
   assert.equal(result.status, code ? 'failure' : 'success');

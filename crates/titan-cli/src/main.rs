@@ -991,7 +991,10 @@ mod tests {
         assert_eq!(json["command"], "info");
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["type"], "info");
-        assert_eq!(json["data"]["protocol_schema"], 1);
+        assert_eq!(
+            json["data"]["protocol_schema"],
+            titan_protocol::SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -1143,7 +1146,7 @@ mod tests {
             project: "/tmp/game".into(),
             pid: 1,
             endpoint: "http://127.0.0.1:1234/request".into(),
-            schema_version: 1,
+            schema_version: titan_protocol::SCHEMA_VERSION,
             run_mode: titan_protocol::RunMode::Headless,
             token: "super-secret".into(),
         };
@@ -1160,7 +1163,7 @@ mod tests {
         let cli = Cli::try_parse_from(["titan", "--project", project.to_str().unwrap(), "status"])
             .unwrap();
         let mut result = serde_json::json!({
-            "schema_version": 1, "request_id": "test", "instance_id": "one",
+            "schema_version": titan_protocol::SCHEMA_VERSION, "request_id": "test", "instance_id": "one",
             "observed_frame": 42, "state_revision": 9, "status": "failure",
             "error": {"code": "invalid_value", "message": "specific failure reason", "details": {"key": "value"}, "retryable": false}
         });

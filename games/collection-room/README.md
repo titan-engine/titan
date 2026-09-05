@@ -102,3 +102,10 @@ Actual WASM acceptance executes the Node bindings in a bounded child process.
 Native acceptance uses bounded separate CLI/runtime processes and sanitized
 failure evidence. The CPU tests cover collisions, collection, input semantics,
 restart, replay and immutable extracted geometry without opening a window.
+
+The semantic host uses protocol schema 2. Browser clients may await
+`runtime.dispatch(JSON.stringify(envelope))`; it returns one correlated Promise
+without retaining the runtime borrow. `handle` remains an immediate-only
+convenience for semantic calls. Native requests use the same owned dispatch and
+deferred reply boundary. This package still advertises no capture capability;
+collection-room GPU capture wiring belongs to #48.

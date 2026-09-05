@@ -307,7 +307,9 @@ jobs:
       - name: Verify native 3D shaders and offscreen readback
         env:
           TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
-        run: cargo test -p titan-render-wgpu --test three_d -- --ignored
+        run: |
+          cargo test -p titan-render-wgpu --test three_d -- --ignored
+          cargo test -p titan-render-wgpu --lib aborted_backend_map -- --ignored
 
       - name: Retain native 3D GPU comparison evidence
         if: always()

@@ -10,7 +10,7 @@ const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '-
 const {BrowserLiveRuntime, verify_recording_json} = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 let sequence = 0;
 function raw(game, request) {
-  return JSON.parse(game.handle(JSON.stringify({schema_version:1, request_id:`rpg-replay-${++sequence}`, request})));
+  return JSON.parse(game.handle(JSON.stringify({schema_version: 2, request_id:`rpg-replay-${++sequence}`, request})));
 }
 function ok(game, request) {
   const result = raw(game, request);

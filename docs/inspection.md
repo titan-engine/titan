@@ -28,10 +28,11 @@ choice. Deferred writes are flushed before and after each input hook, including
 a rejected hook; these writes are not transactional. An input response's `applied_frame` identifies the scheduled frame;
 `observed_frame` is the runtime's current completed tick.
 
-Register a capture hook with `register_capture_handler`. It receives shared
-application access and returns image dimensions, format, artifact location,
-and checksum. Capture does not advance the clock or state revision. Render
-from current world state so changes since the last fixed tick are visible.
+Register an immediate software hook with `register_capture_handler`, or a GPU
+hook with `register_async_capture_handler`. Dispatch captures with `dispatch`;
+see the [owned completion API](#asynchronous-capture-contract) below. Capture does
+not advance the clock or state revision. Extract from current world state so
+changes since the last fixed tick, including partial failures, are visible.
 
 Capabilities advertise registered adapters. Unsupported adapters and unknown
 command names return structured protocol errors.
@@ -223,12 +224,40 @@ also distinguishes local changes at the same frame.
 
 ## Asynchronous capture contract
 
-This is the agreed design for GPU capture, **not the current synchronous API**.
-Implement it through the linked work in
-[#42](https://github.com/titan-engine/titan/issues/42), then replace the current
-capture usage above and update this section in place. Compatibility across
-versions does not constrain the API: migrate current examples, CLI, transports,
-browser bridges and tests together, with concise migration guidance.
+Protocol schema 2 implements owned asynchronous capture dispatch. Existing
+software hooks complete immediately through the same boundary; GPU hosts register
+an asynchronous producer. The collection-room game's final capture wiring is
+separate from this reusable infrastructure.
+
+`Inspector::dispatch(&mut app, &request)` returns `Dispatch::Ready(response)` or
+`Dispatch::Pending(pending)`. Both are owned: release the app/player borrow before
+waiting. A GPU hook registered with `register_async_capture_handler(width, height,
+handler)` receives `&App`, the accepted `CaptureIdentity`, and a `CaptureCompleter`.
+Freeze a fresh owned render frame and immutable asset versions in the handler,
+then move those and the completer into the host's worker/task. Finish with
+`completer.complete(result)`. Keep the completer alive until submitted resources
+are safely reclaimed, including on cancellation.
+
+Poll `PendingCapture::poll(elapsed)` with monotonic elapsed time measured from
+before dispatch. It yields at most one response. `cancel()` explicitly cancels;
+`Inspector::reset_capture_session()` invalidates old generation captures on
+restart or replacement. Hosts must call reset even when the instance name stays
+the same. `handle` is an immediate-only convenience; asynchronous consumers must
+use dispatch. Native `RequestQueue::drain_with_reply` supplies an owned
+`ReplyHandle`; `complete_when(started, poll)` drives it independently of ticks or
+window redraw. Browser dispatch exports return owned Promises and the shared
+message bridge awaits them with request correlation and same-origin checks.
+
+Migration from schema 1: update request schema to 2 and await browser dispatch.
+Capture request and instance IDs are limited to 256 UTF-8 bytes; an invalid ID
+is truncated in its rejection to keep the error bounded. Capture results now
+carry `identity` (instance, session generation, capture ID,
+accepted tick/revision and dimensions). CLI JSON preserves the complete result.
+The immediate hook may initialize identity with its default; the inspector
+stamps acceptance provenance centrally. Persist the complete result alongside
+an extracted image to retain provenance. Inline PNG data URLs are usable directly
+as browser image sources; native results may point at local artifacts. Never copy
+native discovery registrations or bearer tokens into artifact metadata.
 
 A capture request produces one eventual response. Host dispatch can return an
 immediate response or an owned pending capture internally; browser callers await
@@ -268,7 +297,7 @@ pending jobs from the old generation, even when the runtime instance ID remains
 unchanged. Do not attach old results to the new session.
 
 Start with a configurable maximum of one outstanding GPU capture per instance,
-2048 pixels per dimension, 16 MiB raw RGBA and a five-second host deadline, further
+2048 pixels per dimension, 16 MiB raw RGBA, 3 MiB artifact payload and a five-second host deadline, further
 restricted by device/transport/artifact limits. Bound snapshot draw count and
 aggregate retained/uploaded geometry bytes before admission as well as image
 output; per-mesh limits alone do not bound a whole frame. Check padded staging sizes,

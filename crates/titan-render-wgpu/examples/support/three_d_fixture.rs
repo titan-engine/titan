@@ -68,6 +68,7 @@ pub struct Evidence {
     pub edge_policy: &'static str,
     pub lifecycle_checks: Vec<String>,
     pub images: Vec<ImageEvidence>,
+    pub capture_responses: Vec<titan_protocol::ResponseEnvelope>,
     pub passed: bool,
 }
 struct Case {
@@ -435,6 +436,41 @@ async fn readback(
     buffer.unmap();
     Ok(pixels)
 }
+// Timers drive completion independently of requestAnimationFrame and simulation ticks.
+async fn finish_owned(job: &mut titan_render_wgpu::OwnedGpuCapture) -> Result<Vec<u8>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let start = std::time::Instant::now();
+    #[cfg(target_arch = "wasm32")]
+    let start = web_sys::window().unwrap().performance().unwrap().now();
+    loop {
+        #[cfg(not(target_arch = "wasm32"))]
+        let elapsed = start.elapsed();
+        #[cfg(target_arch = "wasm32")]
+        let elapsed = std::time::Duration::from_secs_f64(
+            (web_sys::window().unwrap().performance().unwrap().now() - start) / 1000.0,
+        );
+        if let Some(image) = job.poll(elapsed).map_err(|e| e.to_string())? {
+            return Ok(image.pixels().to_vec());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        #[cfg(target_arch = "wasm32")]
+        {
+            let promise = js_sys::Promise::new(&mut |resolve, reject| {
+                if let Err(error) = web_sys::window()
+                    .unwrap()
+                    .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 1)
+                {
+                    let _ = reject.call1(&wasm_bindgen::JsValue::NULL, &error);
+                }
+            });
+            wasm_bindgen_futures::JsFuture::from(promise)
+                .await
+                .map_err(|_| "capture timer failed")?;
+        }
+    }
+}
+
 fn check_image(
     name: &str,
     format: wgpu::TextureFormat,
@@ -479,8 +515,247 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
         edge_policy: "Only named interior rectangles are compared; transparent expected/difference pixels are untested. Rasterized edges have no equality requirement.",
         lifecycle_checks: Vec::new(),
         images: Vec::new(),
+        capture_responses: Vec::new(),
         passed: true,
     };
+    // Host dispatch captures only a CPU snapshot and producer in a Send mailbox.
+    // GPU handles stay on the browser thread, outside the App borrow.
+    let mailbox = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let sink = mailbox.clone();
+    let mut app = titan::App::new();
+    app.world_mut().insert_resource(cases().remove(1).frame);
+    app.advance_fixed(7);
+    let mut inspector = titan::inspection::Inspector::new(
+        titan::inspection::InspectionConfig::controlled("gpu-fixture", "owned-capture-fixture"),
+    );
+    inspector.register_async_capture_handler(64, 64, move |app, identity, completion| {
+        let frame = app.world().resource::<RenderFrame3d>().unwrap().clone();
+        *sink.lock().unwrap() = Some((frame, identity, completion));
+        Ok(())
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    let accepted_at = std::time::Instant::now();
+    #[cfg(target_arch = "wasm32")]
+    let response_promise = titan::inspection::response_promise(inspector.capture_timeout(), || {
+        inspector.dispatch(
+            &mut app,
+            &titan_protocol::RequestEnvelope::new("gpu-owned-1", titan_protocol::Request::Capture),
+        )
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut pending = match inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new("gpu-owned-1", titan_protocol::Request::Capture),
+    ) {
+        titan::inspection::Dispatch::Pending(pending) => pending,
+        _ => return Err("GPU fixture capture was not deferred".into()),
+    };
+    let (frozen, identity, completion) = mailbox.lock().unwrap().take().unwrap();
+    let mut protocol_job = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        frozen,
+        identity.width,
+        identity.height,
+        CLEAR,
+    )
+    .map_err(|e| e.to_string())?;
+    // Advance after acceptance to prove metadata/image stay tied to the accepted tick.
+    app.world_mut().insert_resource(frame(
+        &MeshAssets::new(),
+        vec![],
+        Lighting3d::new(Vec3::ONE, 1., 0.).unwrap(),
+    ));
+    app.advance_fixed(3);
+    let pixels = finish_owned(&mut protocol_job).await?;
+    let image = titan::render::Image::new(identity.width, identity.height, pixels.clone()).unwrap();
+    completion.complete(titan_diagnostics::png_capture(&image));
+    #[cfg(not(target_arch = "wasm32"))]
+    let elapsed = accepted_at.elapsed();
+    #[cfg(not(target_arch = "wasm32"))]
+    let response = pending
+        .poll(elapsed)
+        .ok_or("GPU protocol completion missing")?;
+    #[cfg(target_arch = "wasm32")]
+    let response: titan_protocol::ResponseEnvelope = {
+        let json = wasm_bindgen_futures::JsFuture::from(response_promise)
+            .await
+            .map_err(|error| format!("capture Promise failed: {error:?}"))?
+            .as_string()
+            .ok_or("capture Promise did not return JSON")?;
+        serde_json::from_str(&json).map_err(|error| error.to_string())?
+    };
+    match &response.outcome {
+        titan_protocol::ResponseOutcome::Success {
+            response: titan_protocol::Response::Capture(capture),
+        } if capture.identity == identity
+            && identity.observed_frame == 7
+            && response.observed_frame == identity.observed_frame
+            && capture.artifact.starts_with("data:image/png;base64,") => {}
+        _ => return Err("GPU protocol provenance or artifact mismatch".into()),
+    }
+    evidence.capture_responses.push(response);
+    evidence.images.push(check_image(
+        "protocol-owned-frame",
+        wgpu::TextureFormat::Rgba8Unorm,
+        64,
+        64,
+        pixels,
+        cases().remove(1).probes,
+    ));
+    #[cfg(not(target_arch = "wasm32"))]
+    drop(pending);
+    let mut canceled_response = match inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new("gpu-cancel", titan_protocol::Request::Capture),
+    ) {
+        titan::inspection::Dispatch::Pending(pending) => pending,
+        _ => return Err("GPU cancellation fixture was not deferred".into()),
+    };
+    let (frozen, identity, completion) = mailbox.lock().unwrap().take().unwrap();
+    let canceled_job = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        frozen,
+        identity.width,
+        identity.height,
+        CLEAR,
+    )
+    .map_err(|e| e.to_string())?;
+    canceled_response
+        .cancel()
+        .ok_or("GPU cancellation response missing")?;
+    drop(canceled_response);
+    let blocked = inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new(
+            "gpu-cancel-overload",
+            titan_protocol::Request::Capture,
+        ),
+    );
+    if !matches!(
+        blocked,
+        titan::inspection::Dispatch::Ready(titan_protocol::ResponseEnvelope {
+            outcome: titan_protocol::ResponseOutcome::Failure { .. },
+            ..
+        })
+    ) {
+        return Err("canceled GPU producer released admission before retirement".into());
+    }
+    canceled_job.retire(move || drop(completion));
+    // Freeze a declared source frame, then replace the local source before mapping.
+    // The submitted image must still be the original scene, without another tick.
+    let case = cases().remove(1);
+    let mut source = case.frame;
+    let mut owned = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        source.clone(),
+        64,
+        64,
+        CLEAR,
+    )
+    .map_err(|e| e.to_string())?;
+    source = frame(
+        &MeshAssets::new(),
+        vec![],
+        Lighting3d::new(Vec3::ONE, 1., 0.).unwrap(),
+    );
+    let actual = finish_owned(&mut owned).await?;
+    // Subsequent completed GPU work has driven retirement, including admission cleanup.
+    let admitted = inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new(
+            "gpu-after-retirement",
+            titan_protocol::Request::Capture,
+        ),
+    );
+    if !matches!(admitted, titan::inspection::Dispatch::Pending(_)) {
+        return Err("GPU retirement did not release admission".into());
+    }
+    drop(admitted);
+    drop(mailbox.lock().unwrap().take());
+
+    evidence.images.push(check_image(
+        "owned-frozen-frame",
+        wgpu::TextureFormat::Rgba8Unorm,
+        64,
+        64,
+        actual,
+        case.probes,
+    ));
+    if !matches!(
+        owned.poll(std::time::Duration::ZERO),
+        Err(titan_render_wgpu::GpuCaptureError::Finished)
+    ) {
+        return Err("capture completed twice".into());
+    }
+    let mut canceled = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        source.clone(),
+        65,
+        31,
+        GREEN,
+    )
+    .map_err(|e| e.to_string())?;
+    canceled.cancel();
+    if !matches!(
+        canceled.poll(std::time::Duration::ZERO),
+        Err(titan_render_wgpu::GpuCaptureError::Finished)
+    ) {
+        return Err("canceled capture produced output".into());
+    }
+    let mut timeout = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        source.clone(),
+        65,
+        31,
+        GREEN,
+    )
+    .map_err(|e| e.to_string())?;
+    if !matches!(
+        timeout.poll(titan_render_wgpu::MAX_CAPTURE_WAIT),
+        Err(titan_render_wgpu::GpuCaptureError::Timeout)
+    ) {
+        return Err("capture deadline not enforced".into());
+    }
+    let retired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let notify = retired.clone();
+    canceled.retire(move || notify.store(true, std::sync::atomic::Ordering::Release));
+    // A new padded/changed-size capture polls late callbacks from canceled jobs too.
+    let mut resized = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        source,
+        65,
+        31,
+        GREEN,
+    )
+    .map_err(|e| e.to_string())?;
+    let actual = finish_owned(&mut resized).await?;
+    evidence.images.push(check_image(
+        "owned-new-size-after-cancel",
+        wgpu::TextureFormat::Rgba8Unorm,
+        65,
+        31,
+        actual,
+        vec![probe(
+            "padded rows retain dimensions",
+            [0, 0, 65, 31],
+            GREEN,
+        )],
+    ));
+    if !retired.load(std::sync::atomic::Ordering::Acquire) {
+        device
+            .poll(wgpu::PollType::Poll)
+            .map_err(|_| "retirement polling failed")?;
+    }
+    if !retired.load(std::sync::atomic::Ordering::Acquire) {
+        return Err("canceled submission did not retire before subsequent readback".into());
+    }
+    evidence.lifecycle_checks.push("owned fresh submission: frozen source, one completion, cancel, deadline, queue retirement callback, late-map cleanup, changed dimensions, paused timer polling".into());
     for format in [
         wgpu::TextureFormat::Rgba8Unorm,
         wgpu::TextureFormat::Rgba8UnormSrgb,

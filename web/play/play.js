@@ -84,7 +84,7 @@ function loop(time) {
   } catch (error) { failure(error); }
 }
 function query(name) {
-  const response = JSON.parse(player.handle(JSON.stringify({ schema_version: 1, request_id: `page-${++requestId}`, request: { type: 'query', name, arguments: {} } })));
+  const response = JSON.parse(player.handle(JSON.stringify({ schema_version: 2, request_id: `page-${++requestId}`, request: { type: 'query', name, arguments: {} } })));
   if (response.status === 'failure') throw new Error(response.error.message);
   return response.response.value;
 }
@@ -131,9 +131,9 @@ exportRecording.addEventListener('click', () => local(() => {
   URL.revokeObjectURL(url);
   recordingResult.textContent = `Exported ${verification.ticks} verified ticks. Final checksum ${verification.checksum}.`;
 }));
-window.addEventListener('message', event => {
+window.addEventListener('message', async event => {
   if (!player) return;
-  const response = bridgeResponse(event, { origin: location.origin, source: window, handle: request => player.handle(request) });
+  const response = await bridgeResponse(event, { origin: location.origin, source: window, handle: request => player.dispatch(request) });
   if (response) { window.postMessage(response, location.origin); refresh(); }
 });
 new ResizeObserver(() => { try { resize(); } catch (error) { failure(error); } }).observe(canvas);
