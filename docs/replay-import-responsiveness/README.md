@@ -49,10 +49,10 @@ before the synchronous import call.
 
 | Case | Native file | Native control load | Concurrent native status | Browser call | Browser timer | Browser animation frame |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Short valid, 8 ticks / 2,581 bytes | 3.974 (3.688–4.372) | 16.280 (8.524–16.656) | 13.176 (5.353–13.413) | 0.400 (0.300–0.600) | 0.500 (0.400–0.700) | 8.200 (0.500–8.400) |
-| Maximum valid, 3,600 ticks / about 150 KiB | 10.346 (9.633–10.552) | 16.643 (15.944–21.578) | 13.389 (12.669–17.784) | 8.400 (7.500–10.100) | 8.400 (7.700–10.200) | 8.400 (7.700–10.300) |
-| Maximum valid, 3,600 ticks / exactly 2 MiB | 10.970 (10.689–11.243) | n/a | n/a | 10.000 (9.800–10.600) | 10.000 (9.800–10.900) | 10.100 (9.800–11.700) |
-| Rejected at final verification, 3,600 ticks | 9.349 (8.896–9.576) | 14.753 (14.216–22.813) | 10.910 (4.820–19.491) | 6.900 (6.900–7.000) | 6.900 (6.900–7.100) | 7.000 (6.900–7.400) |
+| Short valid, 8 ticks / 2,581 bytes | 3.974 (3.688–4.372) | 16.280 (8.524–16.656) | 13.176 (5.353–13.413) | 0.400 (0.300–0.500) | 0.500 (0.400–0.700) | 8.300 (0.500–8.400) |
+| Maximum valid, 3,600 ticks / about 150 KiB | 10.346 (9.633–10.552) | 16.643 (15.944–21.578) | 13.389 (12.669–17.784) | 8.400 (7.300–9.400) | 8.400 (7.400–9.500) | 8.400 (7.400–9.500) |
+| Maximum valid, 3,600 ticks / exactly 2 MiB | 10.970 (10.689–11.243) | n/a | n/a | 10.200 (10.000–10.900) | 10.300 (10.100–11.000) | 10.500 (10.100–11.100) |
+| Rejected at final verification, 3,600 ticks | 9.349 (8.896–9.576) | 14.753 (14.216–22.813) | 10.910 (4.820–19.491) | 7.200 (7.000–7.300) | 7.300 (7.100–7.400) | 7.300 (7.100–7.400) |
 
 All 21 native control samples still had the load CLI process running when the
 status probe began, and no probe timed out. Process overlap does not prove the
@@ -60,7 +60,7 @@ load handler had already started, so the native values bound observed client
 responsiveness rather than isolating handler time. Direct native verifier and
 browser-call measurements isolate the scaling more clearly. The browser's
 zero-delay timer moved by essentially the synchronous call duration. No measured
-browser animation-frame delivery exceeded 11.7 ms, below one 60 Hz frame interval;
+browser animation-frame delivery exceeded 11.1 ms, below one 60 Hz frame interval;
 an import can still consume more than one 120 Hz frame budget.
 
 Every final-mismatch sample replayed all 3,600 ticks and was rejected. The live

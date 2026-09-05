@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "measured_at_utc": "2026-09-05T15:41:43.835Z",
+  "measured_at_utc": "2026-09-05T15:47:49.584Z",
+  "revision": "3ceb02018c7189e3f75ede8ef0f0b00354a9c797",
+  "working_tree_dirty": false,
   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
   "hardware_concurrency": 18,
   "profile": "release WASM in a real browser GPU player",
@@ -15,7 +17,7 @@
       "label": "short_valid",
       "samples": [
         {
-          "call_ms": 0.3999999910593033,
+          "call_ms": 0.4000000059604645,
           "timer_delay_ms": 0.7000000029802322,
           "animation_frame_delay_ms": 0.5,
           "outcome": "success",
@@ -24,32 +26,8 @@
         },
         {
           "call_ms": 0.29999999701976776,
-          "timer_delay_ms": 0.5,
-          "animation_frame_delay_ms": 2.5999999940395355,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 0.5,
-          "timer_delay_ms": 0.5,
-          "animation_frame_delay_ms": 8.200000002980232,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 0.5,
-          "timer_delay_ms": 0.6000000089406967,
-          "animation_frame_delay_ms": 8.299999997019768,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 0.4000000059604645,
-          "timer_delay_ms": 0.5,
-          "animation_frame_delay_ms": 8.400000005960464,
+          "timer_delay_ms": 0.4000000059604645,
+          "animation_frame_delay_ms": 3.5999999940395355,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
@@ -57,14 +35,38 @@
         {
           "call_ms": 0.4000000059604645,
           "timer_delay_ms": 0.4000000059604645,
+          "animation_frame_delay_ms": 8.300000011920929,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 0.4000000059604645,
+          "timer_delay_ms": 0.5,
           "animation_frame_delay_ms": 8.200000002980232,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 0.5999999940395355,
-          "timer_delay_ms": 0.7000000029802322,
+          "call_ms": 0.5,
+          "timer_delay_ms": 0.5999999940395355,
+          "animation_frame_delay_ms": 8.399999991059303,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 0.5,
+          "timer_delay_ms": 0.5,
+          "animation_frame_delay_ms": 8.300000011920929,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 0.5,
+          "timer_delay_ms": 0.5,
           "animation_frame_delay_ms": 8.299999997019768,
           "outcome": "success",
           "message": null,
@@ -76,15 +78,7 @@
       "label": "max_ticks_valid",
       "samples": [
         {
-          "call_ms": 10.100000008940697,
-          "timer_delay_ms": 10.200000002980232,
-          "animation_frame_delay_ms": 10.300000011920929,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 9.399999991059303,
+          "call_ms": 9.400000005960464,
           "timer_delay_ms": 9.5,
           "animation_frame_delay_ms": 9.5,
           "outcome": "success",
@@ -92,9 +86,9 @@
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 8.599999994039536,
-          "timer_delay_ms": 8.599999994039536,
-          "animation_frame_delay_ms": 8.599999994039536,
+          "call_ms": 8.900000005960464,
+          "timer_delay_ms": 9,
+          "animation_frame_delay_ms": 9,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
@@ -108,25 +102,33 @@
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 7.899999991059303,
-          "timer_delay_ms": 7.899999991059303,
-          "animation_frame_delay_ms": 7.899999991059303,
+          "call_ms": 8.399999991059303,
+          "timer_delay_ms": 8.5,
+          "animation_frame_delay_ms": 8.5,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 7.600000008940697,
-          "timer_delay_ms": 7.700000002980232,
+          "call_ms": 7.899999991059303,
+          "timer_delay_ms": 8,
           "animation_frame_delay_ms": 8,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 7.5,
-          "timer_delay_ms": 7.700000002980232,
-          "animation_frame_delay_ms": 7.700000002980232,
+          "call_ms": 7.799999997019768,
+          "timer_delay_ms": 7.899999991059303,
+          "animation_frame_delay_ms": 8,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 7.299999997019768,
+          "timer_delay_ms": 7.399999991059303,
+          "animation_frame_delay_ms": 7.399999991059303,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
@@ -137,57 +139,57 @@
       "label": "max_bytes_valid",
       "samples": [
         {
-          "call_ms": 10.400000005960464,
-          "timer_delay_ms": 10.400000005960464,
-          "animation_frame_delay_ms": 11.700000002980232,
+          "call_ms": 10.900000005960464,
+          "timer_delay_ms": 11,
+          "animation_frame_delay_ms": 11.100000008940697,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
         },
         {
-          "call_ms": 10.599999994039536,
-          "timer_delay_ms": 10.899999991059303,
-          "animation_frame_delay_ms": 11.099999994039536,
+          "call_ms": 10.299999997019768,
+          "timer_delay_ms": 10.399999991059303,
+          "animation_frame_delay_ms": 10.700000002980232,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 10.299999997019768,
+          "timer_delay_ms": 10.399999991059303,
+          "animation_frame_delay_ms": 10.5,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 10.199999988079071,
+          "timer_delay_ms": 10.299999997019768,
+          "animation_frame_delay_ms": 10.699999988079071,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 10.200000002980232,
+          "timer_delay_ms": 10.300000011920929,
+          "animation_frame_delay_ms": 10.300000011920929,
+          "outcome": "success",
+          "message": null,
+          "rejected_session_unchanged": null
+        },
+        {
+          "call_ms": 10.099999994039536,
+          "timer_delay_ms": 10.199999988079071,
+          "animation_frame_delay_ms": 10.199999988079071,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
         },
         {
           "call_ms": 10,
-          "timer_delay_ms": 10,
-          "animation_frame_delay_ms": 10,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 10.100000008940697,
           "timer_delay_ms": 10.100000008940697,
           "animation_frame_delay_ms": 10.100000008940697,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 10,
-          "timer_delay_ms": 10,
-          "animation_frame_delay_ms": 10.099999994039536,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 9.799999997019768,
-          "timer_delay_ms": 9.799999997019768,
-          "animation_frame_delay_ms": 9.799999997019768,
-          "outcome": "success",
-          "message": null,
-          "rejected_session_unchanged": null
-        },
-        {
-          "call_ms": 9.799999997019768,
-          "timer_delay_ms": 9.799999997019768,
-          "animation_frame_delay_ms": 9.900000005960464,
           "outcome": "success",
           "message": null,
           "rejected_session_unchanged": null
@@ -198,41 +200,49 @@
       "label": "max_ticks_final_mismatch",
       "samples": [
         {
-          "call_ms": 6.899999991059303,
-          "timer_delay_ms": 6.899999991059303,
+          "call_ms": 7.299999997019768,
+          "timer_delay_ms": 7.399999991059303,
           "animation_frame_delay_ms": 7.399999991059303,
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
         },
         {
-          "call_ms": 6.899999991059303,
-          "timer_delay_ms": 6.899999991059303,
-          "animation_frame_delay_ms": 6.899999991059303,
+          "call_ms": 7.199999988079071,
+          "timer_delay_ms": 7.299999997019768,
+          "animation_frame_delay_ms": 7.399999991059303,
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
         },
         {
-          "call_ms": 6.9000000059604645,
-          "timer_delay_ms": 6.9000000059604645,
-          "animation_frame_delay_ms": 6.9000000059604645,
+          "call_ms": 7.199999988079071,
+          "timer_delay_ms": 7.399999991059303,
+          "animation_frame_delay_ms": 7.399999991059303,
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
         },
         {
-          "call_ms": 6.9000000059604645,
-          "timer_delay_ms": 6.9000000059604645,
-          "animation_frame_delay_ms": 6.9000000059604645,
+          "call_ms": 7.200000002980232,
+          "timer_delay_ms": 7.299999997019768,
+          "animation_frame_delay_ms": 7.299999997019768,
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
         },
         {
-          "call_ms": 7,
-          "timer_delay_ms": 7,
-          "animation_frame_delay_ms": 7,
+          "call_ms": 7.300000011920929,
+          "timer_delay_ms": 7.300000011920929,
+          "animation_frame_delay_ms": 7.300000011920929,
+          "outcome": "failure",
+          "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
+          "rejected_session_unchanged": true
+        },
+        {
+          "call_ms": 7.200000002980232,
+          "timer_delay_ms": 7.299999997019768,
+          "animation_frame_delay_ms": 7.299999997019768,
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
@@ -244,18 +254,8 @@
           "outcome": "failure",
           "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
           "rejected_session_unchanged": true
-        },
-        {
-          "call_ms": 7,
-          "timer_delay_ms": 7,
-          "animation_frame_delay_ms": 7.299999997019768,
-          "outcome": "failure",
-          "message": "replay mismatch: state or image differs (actual checksum bade431583926480)",
-          "rejected_session_unchanged": true
         }
       ]
     }
-  ],
-  "revision": "dc83c7ceb981cdeee5f3cff5fb21c9166c309ee2",
-  "working_tree_dirty": false
+  ]
 }
