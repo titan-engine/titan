@@ -126,7 +126,10 @@ def main():
             for data in [(ROOT / 'assets/player.png').read_bytes(), png((100, 90, 250, 255))]:
                 bundled_sprite.write_bytes(data)
                 played = run([bundled_player, '--replay', '--frames', '2', '--run-for-ms', '5000'], project)
-                assert 'rendered 2 GPU frames' in played.stdout, played.stdout
+                # Exit is requested at the threshold; queued native redraws may
+                # still present before the event loop finishes shutting down.
+                rendered = re.search(r'rendered (\d+) GPU frames;', played.stdout)
+                assert rendered and int(rendered[1]) >= 2, played.stdout
                 state = json.loads(played.stdout.split('; ', 1)[1])
                 assert state['collected_shards'] == 3 and state['shrine_active'] is True, state
             bundled_sprite.unlink()
