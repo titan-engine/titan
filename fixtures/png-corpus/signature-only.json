@@ -1,0 +1,21 @@
+{
+  "label": "signature-only",
+  "bytes": [
+    137,
+    80,
+    78,
+    71,
+    13,
+    10,
+    26,
+    10
+  ],
+  "limits": {
+    "max_encoded_bytes": 65536,
+    "max_width": 4096,
+    "max_height": 4096,
+    "max_decoded_bytes": 1048576,
+    "max_allocation_bytes": 4194304
+  },
+  "expected_success": false
+}
