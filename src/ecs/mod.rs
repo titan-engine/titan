@@ -20,3 +20,5 @@ pub use world::{Component, ComponentMetadata, InsertError, QueryAccessError, Wor
 pub use access::{AccessMode, AccessTarget, SystemAccess, SystemError};
 pub use params::{Res, ResMut, SystemParam};
 pub use query::{Query, QueryData};
+
+pub use storage::{ComponentStorageStats, VectorStorageStats, WorldStorageStats};

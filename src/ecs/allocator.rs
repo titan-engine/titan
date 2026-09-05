@@ -14,6 +14,13 @@ pub(crate) struct EntityAllocator {
     live_entity_count: usize,
 }
 impl EntityAllocator {
+    pub(crate) fn storage_stats(&self) -> (super::VectorStorageStats, super::VectorStorageStats) {
+        (
+            super::VectorStorageStats::of(&self.entities),
+            super::VectorStorageStats::of(&self.free_entities),
+        )
+    }
+
     pub(crate) fn reserve_entity(&mut self) -> Entity {
         self.allocate_entity(true)
     }

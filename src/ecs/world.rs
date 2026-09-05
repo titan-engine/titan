@@ -186,6 +186,23 @@ impl World {
         self.allocator.entities()
     }
 
+    /// Reports actual retained ECS vector storage without changing capacities.
+    /// See [`super::WorldStorageStats`] for accounting exclusions.
+    pub fn storage_stats(&self) -> super::WorldStorageStats {
+        let (entity_slots, free_entities) = self.allocator.storage_stats();
+        let mut components: Vec<_> = self
+            .components
+            .values()
+            .map(|storage| storage.storage_stats())
+            .collect();
+        components.sort_by_key(|storage| storage.type_name);
+        super::WorldStorageStats {
+            entity_slots,
+            free_entities,
+            components,
+        }
+    }
+
     /// Returns sorted metadata for all component types registered by insertion,
     /// including types whose last instance has been removed.
     pub fn component_metadata(&self) -> Vec<ComponentMetadata> {

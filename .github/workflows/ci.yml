@@ -93,6 +93,11 @@ jobs:
           python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1
           python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1 --threads 2
 
+      - name: Verify sparse component retention smoke workload
+        run: |
+          python3 scripts/test-sparse-churn-measurement.py
+          python3 scripts/measure-sparse-churn.py --debug --counts 1 32 --cycles 3 --repeats 2
+
       - name: Verify generated asset cache across processes
         run: python3 scripts/test-generated-assets.py
 
