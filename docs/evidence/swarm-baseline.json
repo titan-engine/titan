@@ -1,0 +1,367 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-05T09:56:08.655556+00:00",
+  "revision": "f96d98590089a75f6bfbb132a242490404b19f8e",
+  "working_tree_dirty": false,
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "machine": "arm64",
+  "logical_cpus": 18,
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "profile": "release",
+  "rustflags": "",
+  "memory_scope": "whole child process high-water RSS, including setup, simulation and correctness checks; excludes Cargo and this runner",
+  "wall_scope": "whole child lifetime including launch and checks; polling resolution approximately 10ms",
+  "samples": [
+    {
+      "process_wall_seconds": 0.14872287500000003,
+      "peak_process_rss_bytes": 2719744,
+      "workload": {
+        "checksum": "4003ab8d05979666",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 1000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 60000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 139292,
+            "simulation_ns": 867208,
+            "validation_ns": 65709
+          },
+          {
+            "initialization_ns": 93875,
+            "simulation_ns": 857000,
+            "validation_ns": 65334
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 1000,
+      "repeat": 1
+    },
+    {
+      "process_wall_seconds": 0.014464499999999991,
+      "peak_process_rss_bytes": 2736128,
+      "workload": {
+        "checksum": "4003ab8d05979666",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 1000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 60000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 114875,
+            "simulation_ns": 773583,
+            "validation_ns": 64708
+          },
+          {
+            "initialization_ns": 87250,
+            "simulation_ns": 906875,
+            "validation_ns": 65417
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 1000,
+      "repeat": 2
+    },
+    {
+      "process_wall_seconds": 0.01458858399999996,
+      "peak_process_rss_bytes": 2719744,
+      "workload": {
+        "checksum": "4003ab8d05979666",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 1000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 60000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 84917,
+            "simulation_ns": 610125,
+            "validation_ns": 45791
+          },
+          {
+            "initialization_ns": 55500,
+            "simulation_ns": 634209,
+            "validation_ns": 44583
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 1000,
+      "repeat": 3
+    },
+    {
+      "process_wall_seconds": 0.025046500000000194,
+      "peak_process_rss_bytes": 9158656,
+      "workload": {
+        "checksum": "c958f2333dc726d9",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 10000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 600000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 1013250,
+            "simulation_ns": 8293792,
+            "validation_ns": 469000
+          },
+          {
+            "initialization_ns": 681333,
+            "simulation_ns": 7663083,
+            "validation_ns": 664125
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 10000,
+      "repeat": 1
+    },
+    {
+      "process_wall_seconds": 0.028766124999999976,
+      "peak_process_rss_bytes": 6127616,
+      "workload": {
+        "checksum": "c958f2333dc726d9",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 10000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 600000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 739167,
+            "simulation_ns": 8015791,
+            "validation_ns": 475250
+          },
+          {
+            "initialization_ns": 492417,
+            "simulation_ns": 7945167,
+            "validation_ns": 742208
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 10000,
+      "repeat": 2
+    },
+    {
+      "process_wall_seconds": 0.028493625000000078,
+      "peak_process_rss_bytes": 6029312,
+      "workload": {
+        "checksum": "c958f2333dc726d9",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 10000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 600000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 711917,
+            "simulation_ns": 7625125,
+            "validation_ns": 456250
+          },
+          {
+            "initialization_ns": 482750,
+            "simulation_ns": 7831250,
+            "validation_ns": 495541
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 10000,
+      "repeat": 3
+    },
+    {
+      "process_wall_seconds": 0.24431729200000007,
+      "peak_process_rss_bytes": 48332800,
+      "workload": {
+        "checksum": "901b70e007e1a7f7",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 100000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 6000000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 8281333,
+            "simulation_ns": 98413333,
+            "validation_ns": 5089542
+          },
+          {
+            "initialization_ns": 6474792,
+            "simulation_ns": 106534875,
+            "validation_ns": 10015292
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 100000,
+      "repeat": 1
+    },
+    {
+      "process_wall_seconds": 0.23187833300000005,
+      "peak_process_rss_bytes": 39911424,
+      "workload": {
+        "checksum": "901b70e007e1a7f7",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 100000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 6000000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 6225166,
+            "simulation_ns": 85611042,
+            "validation_ns": 4925750
+          },
+          {
+            "initialization_ns": 5560000,
+            "simulation_ns": 104896875,
+            "validation_ns": 6639834
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 100000,
+      "repeat": 2
+    },
+    {
+      "process_wall_seconds": 0.26565162500000006,
+      "peak_process_rss_bytes": 54788096,
+      "workload": {
+        "checksum": "901b70e007e1a7f7",
+        "correctness": {
+          "expected_state": true,
+          "repeat_agreement": true
+        },
+        "entities": 100000,
+        "environment": {
+          "arch": "aarch64",
+          "debug_assertions": false,
+          "os": "macos"
+        },
+        "memory": {
+          "bytes_per_entity": 60,
+          "logical_component_payload_bytes": 6000000
+        },
+        "repeats": 2,
+        "runs": [
+          {
+            "initialization_ns": 7238292,
+            "simulation_ns": 98454459,
+            "validation_ns": 6781125
+          },
+          {
+            "initialization_ns": 7891792,
+            "simulation_ns": 132035458,
+            "validation_ns": 7155416
+          }
+        ],
+        "schema_version": 1,
+        "steps": 120,
+        "workload": "swarm"
+      },
+      "entities": 100000,
+      "repeat": 3
+    }
+  ]
+}

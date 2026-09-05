@@ -70,6 +70,11 @@ jobs:
       - name: Run all tests and examples
         run: cargo test --workspace --all-targets
 
+      - name: Verify swarm measurement runner
+        run: |
+          python3 scripts/test-swarm-measurement.py
+          python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1
+
       - name: Run Clippy with warnings denied
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
