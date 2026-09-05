@@ -85,6 +85,14 @@ enum CliCommand {
         value: String,
     },
     Commands,
+    /// Lists registered read-only game queries.
+    Queries,
+    /// Reads game-owned state without changing the simulation.
+    Query {
+        name: String,
+        #[arg(long, default_value = "{}")]
+        arguments: String,
+    },
     Step {
         frames: u64,
     },
@@ -267,6 +275,11 @@ fn request_for(command: &CliCommand) -> Result<Request, LocalError> {
             })?,
         },
         CliCommand::Commands => Request::Commands,
+        CliCommand::Queries => Request::Queries,
+        CliCommand::Query { name, arguments } => Request::Query {
+            name: name.clone(),
+            arguments: object(arguments)?,
+        },
         CliCommand::Step { frames } => Request::Step { frames: *frames },
         CliCommand::Input { frame, actions } => Request::InjectInput {
             frame: *frame,
@@ -638,6 +651,29 @@ mod tests {
         ));
         assert!(Cli::try_parse_from(["titan", "status", "--timeout-ms", "0"]).is_err());
         assert!(Cli::try_parse_from(["titan", "entities", "--limit", "0"]).is_err());
+    }
+
+    #[test]
+    fn read_only_query_arguments_are_parsed_before_discovery() {
+        let cli = Cli::try_parse_from([
+            "titan",
+            "query",
+            "arena_state",
+            "--arguments",
+            r#"{"limit":2}"#,
+        ])
+        .unwrap();
+        assert!(
+            matches!(super::request_for(&cli.command).unwrap(), titan_protocol::Request::Query { name, arguments } if name == "arena_state" && arguments["limit"] == 2)
+        );
+        let invalid =
+            Cli::try_parse_from(["titan", "query", "recording", "--arguments", "[]"]).unwrap();
+        assert!(super::request_for(&invalid.command).is_err());
+        let list = Cli::try_parse_from(["titan", "queries"]).unwrap();
+        assert!(matches!(
+            super::request_for(&list.command).unwrap(),
+            titan_protocol::Request::Queries
+        ));
     }
 
     #[test]

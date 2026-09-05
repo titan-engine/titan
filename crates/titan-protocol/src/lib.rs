@@ -55,6 +55,12 @@ pub enum Request {
         value: Value,
     },
     Commands,
+    Queries,
+    Query {
+        name: String,
+        #[serde(default)]
+        arguments: BTreeMap<String, Value>,
+    },
     Invoke {
         name: String,
         #[serde(default)]
@@ -169,6 +175,8 @@ pub enum Response {
     Entities(EntityPage),
     Entity(EntityDetails),
     Commands { commands: Vec<CommandMetadata> },
+    Queries { queries: Vec<QueryMetadata> },
+    QueryResult { value: Value },
     Applied { applied_frame: u64 },
     Stepped { frames: u64, current_frame: u64 },
     Capture(CaptureResult),
@@ -195,6 +203,7 @@ pub enum RunMode {
 #[serde(rename_all = "snake_case")]
 pub enum Operation {
     Inspect,
+    Query,
     Mutate,
     Invoke,
     Step,
@@ -238,6 +247,16 @@ pub struct EntityDetails {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommandMetadata {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub arguments: BTreeMap<String, FieldMetadata>,
+}
+
+/// Metadata for an explicitly registered read-only game query.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct QueryMetadata {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,

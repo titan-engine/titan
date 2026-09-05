@@ -154,3 +154,26 @@ fields return `read_only`; invalid types, bounds, or game validation return
 structured errors. `Mutate` is advertised only when mutation is enabled and at
 least one writable field is registered. Getter serialization failures return
 `internal`. Field getter/setter callbacks should not panic.
+
+## Read-only game queries and live hosts
+
+`Inspector::register_query<A>` exposes explicitly registered game-owned state
+through shared `&App` access. `QueryMetadata` describes the name and typed JSON
+arguments, like command metadata. `Queries` lists available reads; `Query`
+returns `QueryResult { value }`. Reads do not advance time, drain deferred writes
+or increment the revision. Query callbacks must return bounded data. Use
+`#[serde(deny_unknown_fields)]` on arguments when extra fields should be rejected.
+This is an additive protocol capability, advertised as `Operation::Query`.
+
+Live hosts retain ownership of their actual application. `handle_with_policy`
+and `handle_json_with_policy` borrow that app and inspector and enforce control
+opt-in; read-only sessions allow queries and captures. Existing `BrowserSession`
+remains an owning wrapper for isolated paused instances. DOM origin checks and
+native authentication remain transport responsibilities.
+
+A player calls `set_controlled` at the pause/resume safe point so status and
+step/input capabilities match clock ownership. `note_external_change` accounts
+for local ticks or changes such as restart that did not pass through a request.
+The host must not use a transport timeout as cancellation or let a transport
+worker access the world. Frame identifies completed simulation time; revision
+also distinguishes local changes at the same frame.

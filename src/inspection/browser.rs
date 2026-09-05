@@ -35,84 +35,113 @@ impl BrowserSession {
     }
 
     /// Executes a protocol envelope and returns exactly one JSON response envelope.
-    /// Malformed input produces InvalidValue with the request ID when recoverable.
     pub fn handle(&mut self, request_json: &str) -> String {
-        let response = match serde_json::from_str::<RequestEnvelope>(request_json) {
-            Ok(request) => self.execute(&request),
-            Err(error) => {
-                let request_id = serde_json::from_str::<serde_json::Value>(request_json)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("request_id")
-                            .and_then(|id| id.as_str())
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_default();
-                let request = RequestEnvelope::new(request_id, Request::Status);
-                self.failure(
-                    &request,
-                    ProtocolError::new(
-                        ErrorCode::InvalidValue,
-                        format!("invalid request: {error}"),
-                    ),
-                )
-            }
-        };
-        serde_json::to_string(&response).expect("protocol responses contain serializable values")
+        handle_json_with_policy(
+            &mut self.app,
+            &mut self.inspector,
+            self.enable_control,
+            request_json,
+        )
     }
 }
 
-impl BrowserSession {
-    fn execute(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
-        if !self.enable_control
-            && matches!(
-                request.request,
-                Request::Step { .. }
-                    | Request::Invoke { .. }
-                    | Request::InjectInput { .. }
-                    | Request::SetField { .. }
+/// Parse a browser/host request against the caller's existing application.
+/// This borrows the actual player; it neither constructs a replacement game nor
+/// changes its clock policy. The host must enforce its message origin boundary.
+pub fn handle_json_with_policy(
+    app: &mut App,
+    inspector: &mut Inspector,
+    enable_control: bool,
+    request_json: &str,
+) -> String {
+    let response = match serde_json::from_str::<RequestEnvelope>(request_json) {
+        Ok(request) => handle_with_policy(app, inspector, enable_control, &request),
+        Err(error) => {
+            let request_id = serde_json::from_str::<serde_json::Value>(request_json)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("request_id")
+                        .and_then(|id| id.as_str())
+                        .map(str::to_owned)
+                })
+                .unwrap_or_default();
+            failure(
+                app,
+                inspector,
+                &RequestEnvelope::new(request_id, Request::Status),
+                ProtocolError::new(ErrorCode::InvalidValue, format!("invalid request: {error}")),
             )
-        {
-            return self.failure(
-                request,
-                ProtocolError::new(
-                    ErrorCode::MutationDisabled,
-                    "browser controls were not explicitly enabled",
-                ),
-            );
         }
-        let mut response = self.inspector.handle(&mut self.app, request);
-        if !self.enable_control {
-            match &mut response.outcome {
-                ResponseOutcome::Success {
-                    response: Response::Capabilities(capabilities),
-                } => {
-                    capabilities.operations.retain(|operation| {
-                        matches!(operation, Operation::Inspect | Operation::Capture)
-                    });
-                }
-                ResponseOutcome::Success {
-                    response: Response::Commands { commands },
-                } => commands.clear(),
-                _ => {}
-            }
-        }
-        response
-    }
+    };
+    serde_json::to_string(&response).expect("protocol responses contain serializable values")
+}
 
-    fn failure(&mut self, request: &RequestEnvelope, error: ProtocolError) -> ResponseEnvelope {
-        // Preserve schema/target validation and exact frame/revision correlation.
-        let probe = RequestEnvelope {
-            request: Request::Status,
-            ..request.clone()
-        };
-        let mut response = self.inspector.handle(&mut self.app, &probe);
-        if matches!(response.outcome, ResponseOutcome::Success { .. }) {
-            response.outcome = ResponseOutcome::Failure { error };
-        }
-        response
+/// Enforce read-only/control opt-in at an exclusive caller-owned safe point.
+/// Queries remain available without controls; mutation, commands and input do not.
+pub fn handle_with_policy(
+    app: &mut App,
+    inspector: &mut Inspector,
+    enable_control: bool,
+    request: &RequestEnvelope,
+) -> ResponseEnvelope {
+    if !enable_control
+        && matches!(
+            request.request,
+            Request::Step { .. }
+                | Request::Invoke { .. }
+                | Request::InjectInput { .. }
+                | Request::SetField { .. }
+        )
+    {
+        return failure(
+            app,
+            inspector,
+            request,
+            ProtocolError::new(
+                ErrorCode::MutationDisabled,
+                "controls were not explicitly enabled",
+            ),
+        );
     }
+    let mut response = inspector.handle(app, request);
+    if !enable_control {
+        match &mut response.outcome {
+            ResponseOutcome::Success {
+                response: Response::Capabilities(capabilities),
+            } => {
+                capabilities.operations.retain(|operation| {
+                    matches!(
+                        operation,
+                        Operation::Inspect | Operation::Query | Operation::Capture
+                    )
+                });
+                capabilities.mutation_enabled = false;
+            }
+            ResponseOutcome::Success {
+                response: Response::Commands { commands },
+            } => commands.clear(),
+            _ => {}
+        }
+    }
+    response
+}
+
+fn failure(
+    app: &mut App,
+    inspector: &mut Inspector,
+    request: &RequestEnvelope,
+    error: ProtocolError,
+) -> ResponseEnvelope {
+    let probe = RequestEnvelope {
+        request: Request::Status,
+        ..request.clone()
+    };
+    let mut response = inspector.handle(app, &probe);
+    if matches!(response.outcome, ResponseOutcome::Success { .. }) {
+        response.outcome = ResponseOutcome::Failure { error };
+    }
+    response
 }
 
 #[cfg(test)]
@@ -132,6 +161,94 @@ mod tests {
             ResponseOutcome::Success { response } => response,
             other => panic!("expected success: {other:?}"),
         }
+    }
+
+    #[test]
+    fn live_queries_borrow_current_game_and_preserve_read_only_revision() {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Args {
+            add: u32,
+        }
+        let mut app = App::new();
+        app.world_mut().insert_resource(7_u32);
+        let mut inspector =
+            Inspector::new(super::super::InspectionConfig::controlled("live", "test"));
+        let metadata = titan_protocol::QueryMetadata {
+            name: "score".into(),
+            description: "Current score".into(),
+            arguments: Default::default(),
+        };
+        inspector
+            .register_query(metadata.clone(), |app, args: Args| {
+                Ok(serde_json::json!(
+                    *app.world().resource::<u32>().unwrap() + args.add
+                ))
+            })
+            .unwrap();
+        assert!(
+            inspector
+                .register_query(metadata, |_, _: Args| Ok(0.into()))
+                .is_err()
+        );
+        inspector.set_run_mode(RunMode::Interactive);
+        inspector.set_controlled(false);
+        inspector.set_mutation_enabled(true);
+        app.advance_fixed(2);
+        *app.world_mut().resource_mut::<u32>().unwrap() = 10;
+        inspector.note_external_change();
+        let call = |app: &mut App, inspector: &mut Inspector, request| {
+            handle_with_policy(
+                app,
+                inspector,
+                false,
+                &RequestEnvelope::new("read", request),
+            )
+        };
+        let status = call(&mut app, &mut inspector, Request::Status);
+        assert_eq!((status.observed_frame, status.state_revision), (2, 1));
+        assert!(
+            matches!(success(status), Response::Status(state) if !state.paused && state.run_mode == RunMode::Interactive)
+        );
+        assert!(
+            matches!(success(call(&mut app, &mut inspector, Request::Queries)), Response::Queries { queries } if queries.len() == 1)
+        );
+        let query = call(
+            &mut app,
+            &mut inspector,
+            Request::Query {
+                name: "score".into(),
+                arguments: [("add".into(), 3.into())].into(),
+            },
+        );
+        assert_eq!((query.observed_frame, query.state_revision), (2, 1));
+        assert_eq!(success(query), Response::QueryResult { value: 13.into() });
+        let invalid = call(
+            &mut app,
+            &mut inspector,
+            Request::Query {
+                name: "score".into(),
+                arguments: [("extra".into(), true.into())].into(),
+            },
+        );
+        assert!(
+            matches!(invalid.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
+        );
+        assert_eq!((invalid.observed_frame, invalid.state_revision), (2, 1));
+        let capabilities = success(call(&mut app, &mut inspector, Request::Capabilities));
+        assert!(
+            matches!(capabilities, Response::Capabilities(c) if c.operations == [Operation::Inspect, Operation::Query] && !c.mutation_enabled)
+        );
+        inspector.set_controlled(true);
+        inspector.note_external_change();
+        let status = call(&mut app, &mut inspector, Request::Status);
+        assert_eq!((status.observed_frame, status.state_revision), (2, 2));
+        assert!(matches!(success(status), Response::Status(state) if state.paused));
+        let denied = call(&mut app, &mut inspector, Request::Step { frames: 1 });
+        assert_eq!((denied.observed_frame, denied.state_revision), (2, 2));
+        assert!(
+            matches!(denied.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::MutationDisabled)
+        );
     }
 
     #[test]

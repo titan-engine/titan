@@ -150,3 +150,20 @@ completion or timeout, including ordinary test/example descendants. Processes
 that deliberately escape the group are outside this guarantee. On other
 platforms only the direct child is terminated. Pipe draining has an additional
 100 ms grace period and never waits indefinitely for descendant-held pipes.
+
+## Read-only game queries
+
+`queries` discovers game-defined reads and their argument metadata. `query`
+executes one against the selected runtime without advancing its clock:
+
+```sh
+target/debug/titan --format json --project games/arena --instance arena-live queries
+target/debug/titan --format json --project games/arena --instance arena-live query arena_state
+target/debug/titan --format json --project games/arena --instance arena-live query recording > arena-recording.json
+```
+
+Optional `--arguments '{"key":"value"}'` supplies a JSON object. Query results
+retain the normal response envelope, including observed frame and revision.
+Read-only attachment permits queries; command invocation and other controls
+still require the live host's explicit opt-in. See the arena README for starting
+an actual native player with inspection and verifying its exported recording.

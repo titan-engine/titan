@@ -1,7 +1,7 @@
 //! Transport-neutral inspection of a Titan [`App`](crate::App).
 
 mod browser;
-pub use browser::BrowserSession;
+pub use browser::{BrowserSession, handle_json_with_policy, handle_with_policy};
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -11,8 +11,8 @@ use std::time::Instant;
 use serde::de::DeserializeOwned;
 use titan_protocol::{
     Capabilities, CaptureResult, CommandMetadata, EntityDetails, EntityId, EntityPage,
-    EntitySummary, ErrorCode, FieldMetadata, InputValue, Operation, ProtocolError, Request,
-    RequestEnvelope, Response, ResponseEnvelope, RunMode, RuntimeStatus, SCHEMA_VERSION,
+    EntitySummary, ErrorCode, FieldMetadata, InputValue, Operation, ProtocolError, QueryMetadata,
+    Request, RequestEnvelope, Response, ResponseEnvelope, RunMode, RuntimeStatus, SCHEMA_VERSION,
 };
 
 use crate::{App, Component, Entity, FixedTime, Name, World};
@@ -103,6 +103,13 @@ fn missing_component() -> ProtocolError {
 
 type CommandHandler =
     Box<dyn FnMut(&mut App, serde_json::Value) -> Result<(), ProtocolError> + Send>;
+type QueryHandler =
+    Box<dyn FnMut(&App, serde_json::Value) -> Result<serde_json::Value, ProtocolError> + Send>;
+struct RegisteredQuery {
+    metadata: QueryMetadata,
+    handler: QueryHandler,
+}
+
 type InputHandler = Box<
     dyn FnMut(&mut App, u64, &BTreeMap<String, InputValue>) -> Result<(), ProtocolError> + Send,
 >;
@@ -132,6 +139,7 @@ pub struct Inspector {
     state_revision: u64,
     step_budget: StepBudget,
     commands: BTreeMap<String, RegisteredCommand>,
+    queries: BTreeMap<String, RegisteredQuery>,
     fields: BTreeMap<String, BTreeMap<String, RegisteredField>>,
     input_handler: Option<InputHandler>,
     capture_handler: Option<CaptureHandler>,
@@ -144,6 +152,7 @@ impl Inspector {
             state_revision: 0,
             step_budget: StepBudget::DEFAULT,
             commands: BTreeMap::new(),
+            queries: BTreeMap::new(),
             fields: BTreeMap::new(),
             input_handler: None,
             capture_handler: None,
@@ -343,6 +352,60 @@ impl Inspector {
             },
         );
         Ok(self)
+    }
+
+    /// Registers a read-only query of game-owned state without exposing mutation.
+    /// Queries receive shared application access, do not drain deferred writes,
+    /// and do not increment the revision. Keep returned data bounded.
+    pub fn register_query<A: DeserializeOwned + 'static>(
+        &mut self,
+        metadata: QueryMetadata,
+        mut handler: impl FnMut(&App, A) -> Result<serde_json::Value, ProtocolError> + Send + 'static,
+    ) -> Result<&mut Self, ProtocolError> {
+        if metadata.name.trim().is_empty() || self.queries.contains_key(&metadata.name) {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidValue,
+                "query name must be nonempty and unique",
+            ));
+        }
+        self.queries.insert(
+            metadata.name.clone(),
+            RegisteredQuery {
+                metadata,
+                handler: Box::new(move |app, value| {
+                    let arguments = serde_json::from_value(value).map_err(|error| {
+                        ProtocolError::new(
+                            ErrorCode::InvalidValue,
+                            format!("invalid query arguments: {error}"),
+                        )
+                    })?;
+                    handler(app, arguments)
+                }),
+            },
+        );
+        Ok(self)
+    }
+
+    /// Reflect whether the host has paused its clock for inspector stepping.
+    /// The host owns the safe-point transition and its revision accounting.
+    pub fn set_controlled(&mut self, controlled: bool) {
+        self.config.controlled = controlled;
+    }
+    pub fn is_controlled(&self) -> bool {
+        self.config.controlled
+    }
+    pub fn set_run_mode(&mut self, run_mode: RunMode) {
+        self.config.run_mode = run_mode;
+    }
+    pub fn set_mutation_enabled(&mut self, enabled: bool) {
+        self.config.mutation_enabled = enabled;
+    }
+
+    /// Account for local host changes, such as restart, outside request handling.
+    /// Call at the same exclusive safe point as the change. Observed frame remains
+    /// the simulation clock; revision also distinguishes changes at that frame.
+    pub fn note_external_change(&mut self) {
+        self.state_revision = self.state_revision.wrapping_add(1);
     }
 
     /// Installs the game's deterministic input adapter, replacing any prior hook.
@@ -635,6 +698,23 @@ impl Inspector {
                     applied_frame: current_frame(app),
                 })
             }
+            Request::Queries => Ok(Response::Queries {
+                queries: self
+                    .queries
+                    .values()
+                    .map(|query| query.metadata.clone())
+                    .collect(),
+            }),
+            Request::Query { name, arguments } => {
+                let query = self.queries.get_mut(name).ok_or_else(|| {
+                    ProtocolError::new(ErrorCode::NotFound, "query is not registered")
+                })?;
+                let value = (query.handler)(
+                    app,
+                    serde_json::Value::Object(arguments.clone().into_iter().collect()),
+                )?;
+                Ok(Response::QueryResult { value })
+            }
             Request::Commands => Ok(Response::Commands {
                 commands: self
                     .commands
@@ -715,6 +795,9 @@ impl Inspector {
         }
         if self.config.controlled && self.input_handler.is_some() {
             operations.push(Operation::InjectInput);
+        }
+        if !self.queries.is_empty() {
+            operations.push(Operation::Query);
         }
         if self.capture_handler.is_some() {
             operations.push(Operation::Capture);
