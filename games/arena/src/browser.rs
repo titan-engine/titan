@@ -88,6 +88,19 @@ impl BrowserLiveRuntime {
             .load_replay(parse_recording_json(json)?)
             .map_err(|error| JsValue::from_str(&error.message))
     }
+    pub fn seek_playback(&mut self, position: usize) -> Result<(), JsValue> {
+        self.session
+            .seek_replay(position)
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn set_playback_speed(&mut self, speed: f64) -> Result<(), JsValue> {
+        self.session
+            .set_replay_speed(speed)
+            .map_err(|error| JsValue::from_str(&error.message))
+    }
+    pub fn update_playback(&mut self) -> usize {
+        self.session.update_replay_seek()
+    }
     pub fn playback_active(&self) -> bool {
         self.session.replay_active()
     }
@@ -223,11 +236,24 @@ mod player {
                 self.accumulated_ms = 0.0;
                 self.clock_epoch = self.session.clock_epoch();
             }
-            if !self.session.paused() {
-                self.accumulated_ms += elapsed_ms.min(250.0);
-                while self.accumulated_ms >= 1000.0 / 60.0 {
+            // Zero elapsed is a render-only call used by inspection and resize.
+            // A seek consumes one bounded batch per animation update, even paused.
+            if self.session.replay_seeking() {
+                if elapsed_ms > 0.0 {
+                    self.session.update_replay_seek();
+                }
+                self.accumulated_ms = 0.0;
+            } else if !self.session.paused() {
+                self.accumulated_ms += elapsed_ms.min(250.0) * self.session.replay_speed();
+                for _ in 0..120 {
+                    if self.accumulated_ms < 1000.0 / 60.0 || self.session.paused() {
+                        break;
+                    }
                     self.session.tick();
                     self.accumulated_ms -= 1000.0 / 60.0;
+                }
+                if self.session.paused() {
+                    self.accumulated_ms = 0.0;
                 }
             }
             let frame = self
@@ -284,6 +310,19 @@ mod player {
             self.session
                 .load_replay(super::parse_recording_json(json)?)
                 .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn seek_playback(&mut self, position: usize) -> Result<(), JsValue> {
+            self.session
+                .seek_replay(position)
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn set_playback_speed(&mut self, speed: f64) -> Result<(), JsValue> {
+            self.session
+                .set_replay_speed(speed)
+                .map_err(|error| JsValue::from_str(&error.message))
+        }
+        pub fn update_playback(&mut self) -> usize {
+            self.session.update_replay_seek()
         }
         pub fn playback_active(&self) -> bool {
             self.session.replay_active()

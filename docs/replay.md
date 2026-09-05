@@ -75,5 +75,6 @@ host frame and entity allocation history.
 
 See [RPG playback](rpg-replay.md) for the shard/shrine scenario and
 [arena playback](arena-replay.md) for its file controls and retained v1/v2
-compatibility. Scrubbing, speed controls, rollback and a general ECS serializer
-remain outside this increment.
+compatibility. Arena now exercises [bounded seeking and speed controls](arena-replay.md).
+Rollback, general replay editing and a general ECS serializer remain outside
+this increment.

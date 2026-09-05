@@ -7,7 +7,8 @@ so recording works immediately after restoring a mid-run save.
 ## Local controls
 
 In the browser Play page, start the player, pause, then choose **Load recording**.
-Use Play/Pause, **Step one tick**, **Restart playback**, and **Exit playback**.
+Use Play/Pause, **Step one tick**, **Seek to tick**, **Playback speed**,
+**Restart playback**, and **Exit playback**.
 The status shows the current recorded tick, total ticks and verification result.
 Local playback controls do not require enabling remote inspection controls.
 Files remain local; imports are limited to 2 MiB and reject a session change
@@ -20,7 +21,9 @@ cargo run --manifest-path games/arena/Cargo.toml --bin play -- --recording /tmp/
 ```
 
 P plays/pauses, N advances one recorded tick while paused, R restarts playback,
-and L exits to a fresh live game. The window title shows progress and completion.
+and L exits to a fresh live game. While paused, Left/Right seek backward/forward
+60 ticks, Home/End seek to the bounds, and -/+ select slower/faster playback.
+The window title shows progress, speed and completion.
 Native imports require a regular JSON file no larger than 2 MiB.
 
 Playback ignores physical movement, dash and pointer input. The in-game restart
@@ -29,15 +32,37 @@ it does not resume from the last replay frame. Restarting playback restores its
 initial snapshot. These transitions clear pending input and wall-clock catch-up
 without rewinding the host frame or replacing inspection identity.
 
+## Seek and speed semantics
+
+Seek positions are consumed recording ticks, inclusive from zero through the
+recording length, independent of the starting gameplay tick and monotonic host
+frame. Seek and speed changes require pause. Forward seeks replay from the
+current position; backward seeks restore the validated origin and replay from
+zero. A new seek replaces a pending target. Each host update advances at most
+120 seek ticks, returns control, and exposes the current position and target.
+Seeking remains paused, including on arrival; resume and manual steps cannot
+advance a pending seek. At EOF the complete snapshot and pixels are verified
+again. Seeking away clears that previous completion result.
+
+Speeds are ¼×, ½×, 1×, 2× and 4×. They scale elapsed playback time, leaving
+fixed tick duration, recorded input and manual one-tick steps unchanged. Hosts
+cap incoming elapsed time at 250 ms and execution at 120 ticks per update.
+Seek/speed transitions clear accumulated time and pending physical/control input.
+Browser animation updates pump seeks while paused; zero-elapsed render calls
+used by resize and inspection do not. Native seeks progress at event-loop safe
+points even when presentation is suspended. The cap bounds tick count rather
+than promising a wall-clock latency independent of game-system costs.
+
 ## Inspection and verification
 
 Inspection, entity listing, save queries and captures stay available throughout
 playback. `arena_state.replay` reports `active`, `position`, `total`, `complete`,
-`verified` and `error`. Verification is reported when playback reaches its end;
+`verified`, `error`, `seeking`, `target` and `speed`. Verification is reported when playback reaches its end;
 the player pauses automatically without consuming another simulation tick.
 
 The interactive session exposes commands `load_replay` with
-`{"recording": <recording>}`, `restart_replay` and `stop_replay`. Remote commands
+`{"recording": <recording>}`, `restart_replay`, `stop_replay`, `seek_replay` with `{ "position": 120 }`,
+and `replay_speed` with `{ "speed": 0.5 }`. Remote commands
 require inspection control permission and pause. Existing pause/resume and Step
 operate on recorded frames; a Step request exceeding the remaining recording is
 rejected before advancing. Ordinary remote `restart` exits to a fresh live game.
@@ -77,8 +102,9 @@ or externally edited recordings cannot establish exact replay.
 
 Historical format v1 recordings remain supported with their original fresh-game
 origin. The checked-in compatibility fixture predates v2; this narrow reader
-support does not promise future game/save compatibility. Scrubbing, playback
-speed controls, general ECS serialization and rollback remain future work.
+support does not promise future game/save compatibility. General replay editing, RPG UI expansion, ECS serialization and rollback remain
+outside this exercise. Import validation still runs a bounded full verification
+before installing a recording; incremental import validation is not a seek API.
 
 ## Verification evidence
 
