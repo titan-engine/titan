@@ -24,11 +24,15 @@ def call(*args, error=None):
     if error: assert data['error']['code']==error,data
     else: assert data['status']=='success',data
     return data
-try:
-    for _ in range(100):
+def wait_ready(process):
+    deadline=time.monotonic()+10
+    while True:
+        assert process.poll() is None, 'Arena exited before registration'
+        if call('instances')['instances']: return
+        assert time.monotonic()<deadline, 'Arena did not register within 10 seconds'
         time.sleep(.05)
-        r=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'instances'],capture_output=True,text=True)
-        if json.loads(r.stdout).get('instances'): break
+try:
+    wait_ready(p)
     assert call('capabilities')['response']['mutation_enabled']
     entities=call('entities')['response']['entities']; player=next(e['id'] for e in entities if e['name']=='player')
     idx,gen=player['index'],player['generation']
@@ -62,7 +66,7 @@ finally:
 assert not call('instances')['instances']
 p=subprocess.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],cwd=GAME,stdout=subprocess.DEVNULL)
 try:
-    time.sleep(.2)
+    wait_ready(p)
     call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
 finally:
     p.terminate();p.wait(timeout=5)

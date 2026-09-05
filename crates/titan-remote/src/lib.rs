@@ -761,14 +761,24 @@ mod tests {
         config.queue_capacity = 1;
         config.request_timeout = Duration::from_millis(300);
         let (server, _queue) = Server::start(config).unwrap();
-        let registration = server.registration().clone();
-        let first = thread::spawn(move || send(&registration, &request(), Duration::from_secs(2)));
-        thread::sleep(Duration::from_millis(60));
+        // A timed-out request stays queued until the runtime drains it. Wait for
+        // that response so the queue is full before issuing the second request.
+        let mut stream = TcpStream::connect(endpoint(server.registration()).unwrap()).unwrap();
+        let body = serde_json::to_vec(&request()).unwrap();
+        write!(
+            stream,
+            "POST /request HTTP/1.1\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n",
+            server.registration().token,
+            body.len()
+        )
+        .unwrap();
+        stream.write_all(&body).unwrap();
+        let (header, _) = read_message(&mut stream, Duration::from_secs(2)).unwrap();
+        assert!(header.starts_with("HTTP/1.1 504"));
         assert!(matches!(
             send(server.registration(), &request(), Duration::from_secs(2)),
             Err(RemoteError::Busy)
         ));
-        assert!(matches!(first.join().unwrap(), Err(RemoteError::Timeout)));
     }
     #[test]
     fn discovery_filters_stale_and_other_projects_and_requires_selection() {

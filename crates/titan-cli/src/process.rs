@@ -138,13 +138,22 @@ mod tests {
     }
     #[test]
     fn noisy_child_cannot_grow_retained_output_without_bound() {
+        // Produce a fixed amount of output before exiting. A short timeout on
+        // an infinite producer makes truncation depend on runner throughput.
         let out = run(
-            Command::new("sh").args(["-c", "yes noisy"]),
-            Duration::from_millis(200),
+            Command::new("dd").args(["if=/dev/zero", "bs=1048576", "count=2"]),
+            Duration::from_secs(10),
         )
         .unwrap();
-        assert!(!out.success);
-        assert!(out.stdout.len() <= OUTPUT_LIMIT + 100);
-        assert!(out.stdout.contains("output truncated"));
+        assert!(out.success, "{}", out.stderr);
+        assert!(!out.timed_out);
+        let marker = "\n[Titan: output truncated at 1 MiB]\n";
+        assert_eq!(out.stdout.len(), OUTPUT_LIMIT + marker.len());
+        assert!(
+            out.stdout.as_bytes()[..OUTPUT_LIMIT]
+                .iter()
+                .all(|&b| b == 0)
+        );
+        assert!(out.stdout.ends_with(marker));
     }
 }
