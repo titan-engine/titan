@@ -128,3 +128,6 @@ software/readback comparison and relocated bundle execution with each resource.
 [Earlier single-image evidence](assets/checks.json) records the original regression
 suite; issue #8 and its PR record the two-image verification. CI includes the
 native/browser/bundle checks.
+
+The decoder also has a [bounded generated-input corpus harness](png-fuzzing.md),
+with deterministic reproduction, process limits and retained regression cases.

@@ -87,6 +87,20 @@ jobs:
       - name: Run all tests and examples
         run: cargo test --workspace --all-targets
 
+      - name: Exercise bounded PNG corpus and generated inputs
+        run: |
+          python3 scripts/test-png-fuzz-runner.py
+          python3 scripts/fuzz-png.py --seed 69 --iterations 1000
+
+      - name: Upload PNG fuzz failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: png-fuzz-failures-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/png-fuzz/run-*/*
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Verify swarm measurement runner
         run: |
           python3 scripts/test-swarm-measurement.py
