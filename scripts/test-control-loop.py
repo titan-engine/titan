@@ -71,7 +71,7 @@ def main():
                 assert stepped["observed_frame"] == 11
                 details = cli("entity", str(shrine["index"]), str(shrine["generation"]))["response"]
                 assert any(name.endswith("::ActiveShrine") for name in details["components"])
-                assert len(cli("entities")["response"]["entities"]) == 2
+                assert {entity["name"] for entity in cli("entities")["response"]["entities"]} == {"player", "shrine", "ui/quest"}
                 capture = cli("capture")["response"]
                 assert capture["checksum"] == "f7a298f62ad75c1c", capture
                 artifact = Path(capture["artifact"])
