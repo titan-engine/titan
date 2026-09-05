@@ -60,6 +60,7 @@ def main():
     parser.add_argument('--steps', type=integer(0), default=120)
     parser.add_argument('--repeats', type=integer(1), default=3)
     parser.add_argument('--timeout-seconds', type=integer(1), default=120)
+    parser.add_argument('--threads', type=integer(1), default=1, help='1 preserves sequential execution; larger values opt into bounded parallel execution')
     parser.add_argument('--debug', action='store_true', help='use dev build for smoke tests')
     args = parser.parse_args()
     if sys.platform not in ('darwin', 'linux'):
@@ -89,7 +90,7 @@ def main():
     }
     for count in args.counts:
         for repeat in range(args.repeats):
-            sample = measure([executable, '--entities', str(count), '--steps', str(args.steps)],
+            sample = measure([executable, '--entities', str(count), '--steps', str(args.steps), '--threads', str(args.threads)],
                              args.timeout_seconds)
             sample.update(entities=count, repeat=repeat + 1)
             report['samples'].append(sample)

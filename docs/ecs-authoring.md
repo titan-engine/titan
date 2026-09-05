@@ -2,7 +2,26 @@
 
 `App::add_systems` accepts exclusive `fn(&mut World)` functions and functions
 with zero to four typed parameters: `Query`, `Res`, `ResMut`, and `Commands`.
-Execution remains sequential and follows registration order.
+Execution defaults to sequential registration order. Native applications can opt
+into compatible-system concurrency:
+
+```rust
+use std::num::NonZeroUsize;
+use titan::{App, ExecutorPolicy};
+let mut app = App::new();
+app.set_executor_policy(ExecutorPolicy::Parallel {
+    max_threads: NonZeroUsize::new(2).unwrap(),
+});
+```
+
+The limit bounds simultaneously executing callbacks. One thread and WebAssembly
+use sequential execution. Parallel batches contain contiguous compatible typed
+systems; conflicting accesses, exclusive systems, Commands and ApplyDeferred
+separate batches. Commands barriers do not add a deferred flush. Shared reads can
+run concurrently; writes to the same component/resource serialize. Captured state,
+interior mutation and external effects are outside access metadata, so use
+sequential execution when their order matters. See [executor design](executor.md)
+for safety, error and panic semantics.
 
 ```rust
 use titan::{Commands, Component, Query, Res};

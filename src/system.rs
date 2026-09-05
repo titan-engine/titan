@@ -1,4 +1,4 @@
-//! Typed, access-validated systems executed sequentially by application schedules.
+//! Typed, access-validated systems for application schedules.
 use crate::{
     World,
     ecs::{
@@ -14,8 +14,39 @@ pub struct SystemMetadata {
     pub name: &'static str,
     pub accesses: Vec<SystemAccess>,
 }
-type Runner = Box<dyn FnMut(&mut World) -> Result<(), SystemError> + Send>;
-/// A registered sequential system or explicit deferred-command boundary.
+type ExclusiveRunner = Box<dyn FnMut(&mut World) + Send>;
+type TypedRunner = Box<dyn for<'w> FnMut(SystemContext<'w>) + Send>;
+enum Runner {
+    Exclusive(ExclusiveRunner),
+    Typed(TypedRunner),
+}
+
+/// Application execution policy. Sequential execution is the default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExecutorPolicy {
+    #[default]
+    Sequential,
+    /// Runs compatible typed systems concurrently on native targets.
+    /// The limit includes all executing callbacks. One uses sequential execution;
+    /// WebAssembly always falls back to sequential execution.
+    /// Callback order and external or interior-mutability effects are unspecified.
+    Parallel { max_threads: std::num::NonZeroUsize },
+}
+impl ExecutorPolicy {
+    pub(crate) fn concurrency(self) -> usize {
+        match self {
+            Self::Sequential => 1,
+            Self::Parallel { max_threads } => {
+                if cfg!(target_arch = "wasm32") {
+                    1
+                } else {
+                    max_threads.get()
+                }
+            }
+        }
+    }
+}
+/// A registered system or explicit deferred-command boundary.
 pub struct System {
     metadata: SystemMetadata,
     runner: Option<Runner>,
@@ -28,7 +59,28 @@ impl System {
         self.runner.is_none()
     }
     pub(crate) fn run(&mut self, world: &mut World) -> Result<(), SystemError> {
-        self.runner.as_mut().expect("boundary handled by schedule")(world)
+        match self.runner.as_mut().expect("boundary handled by schedule") {
+            Runner::Exclusive(runner) => runner(world),
+            Runner::Typed(runner) => {
+                runner(SystemContext::prepare(world, &self.metadata.accesses)?)
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn is_parallel_candidate(&self) -> bool {
+        matches!(self.runner, Some(Runner::Typed(_)))
+            && self.metadata.accesses.iter().all(|access| {
+                matches!(
+                    access.target,
+                    AccessTarget::Component | AccessTarget::Resource
+                )
+            })
+    }
+    pub(crate) fn run_prepared(&mut self, context: SystemContext<'_>) {
+        match self.runner.as_mut().expect("typed system") {
+            Runner::Typed(runner) => runner(context),
+            Runner::Exclusive(_) => unreachable!("exclusive system in parallel batch"),
+        }
     }
 }
 /// Converts a function with zero to four typed parameters, an exclusive
@@ -66,10 +118,7 @@ impl<F: FnMut(&mut World) + Send + 'static> IntoSystem<Exclusive> for F {
                     AccessMode::Write,
                 )],
             },
-            runner: Some(Box::new(move |world| {
-                self(world);
-                Ok(())
-            })),
+            runner: Some(Runner::Exclusive(Box::new(move |world| self(world)))),
         })
     }
 }
@@ -80,10 +129,7 @@ impl<F: FnMut() + Send + 'static> IntoSystem<Parameters<()>> for F {
                 name: std::any::type_name::<F>(),
                 accesses: Vec::new(),
             },
-            runner: Some(Box::new(move |_| {
-                self();
-                Ok(())
-            })),
+            runner: Some(Runner::Typed(Box::new(move |_| self()))),
         })
     }
 }
@@ -99,12 +145,10 @@ macro_rules! function_system {
                 $(accesses.extend($param::accesses());)+
                 validate(&accesses)?;
                 let metadata = SystemMetadata { name: std::any::type_name::<F>(), accesses: accesses.clone() };
-                Ok(System { metadata, runner: Some(Box::new(move |world| {
-                    let mut context = SystemContext::prepare(world, &accesses)?;
+                Ok(System { metadata, runner: Some(Runner::Typed(Box::new(move |mut context| {
                     $(let $value = $param::fetch(&mut context);)+
                     self($($value),+);
-                    Ok(())
-                })) })
+                }))) })
             }
         }
     };
@@ -141,6 +185,99 @@ mod tests {
             total.0 += position.0;
             commands.insert(entity, Extra(9));
         });
+    }
+
+    fn parallel() -> crate::ExecutorPolicy {
+        crate::ExecutorPolicy::Parallel {
+            max_threads: std::num::NonZeroUsize::new(2).unwrap(),
+        }
+    }
+
+    #[test]
+    fn execution_policy_is_opt_in_and_one_thread_preserves_order() {
+        use std::sync::{Arc, Mutex};
+        let mut app = App::new();
+        assert_eq!(app.executor_policy(), crate::ExecutorPolicy::Sequential);
+        let order = Arc::new(Mutex::new(Vec::new()));
+        app.set_executor_policy(crate::ExecutorPolicy::Parallel {
+            max_threads: std::num::NonZeroUsize::new(1).unwrap(),
+        });
+        for value in 0..4 {
+            let order = order.clone();
+            app.add_systems(FixedUpdate, move || order.lock().unwrap().push(value));
+        }
+        app.try_advance_fixed(1).unwrap();
+        assert_eq!(*order.lock().unwrap(), [0, 1, 2, 3]);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn parallel_readers_actually_overlap_with_shared_component_and_resource() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let mut app = App::new();
+        app.set_executor_policy(parallel());
+        let entity = app.world_mut().spawn();
+        app.world_mut().insert(entity, Position(7)).unwrap();
+        app.world_mut().insert_resource(Scale(3));
+        let (left_tx, left_rx) = mpsc::channel();
+        let (right_tx, right_rx) = mpsc::channel();
+        app.add_systems(
+            FixedUpdate,
+            move |mut query: Query<&Position>, scale: Res<Scale>| {
+                query.for_each(|_, position| assert_eq!(position.0 * scale.0, 21));
+                left_tx.send(()).unwrap();
+                right_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("callbacks did not overlap");
+            },
+        );
+        app.add_systems(
+            FixedUpdate,
+            move |mut query: Query<&Position>, scale: Res<Scale>| {
+                query.for_each(|_, position| assert_eq!(position.0 * scale.0, 21));
+                right_tx.send(()).unwrap();
+                left_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("callbacks did not overlap");
+            },
+        );
+        app.try_advance_fixed(1).unwrap();
+    }
+
+    #[test]
+    fn parallel_missing_resource_runs_valid_prefix_and_flushes_earlier_commands() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let mut app = App::new();
+        app.set_executor_policy(parallel());
+        let count = Arc::new(AtomicUsize::new(0));
+        app.add_systems(FixedUpdate, |mut commands: Commands| {
+            commands.spawn_with(Position(9));
+        });
+        for _ in 0..3 {
+            let count = count.clone();
+            app.add_systems(FixedUpdate, move || {
+                count.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        app.add_systems(FixedUpdate, |_: Res<Scale>| {
+            panic!("missing resource callback ran")
+        });
+        app.add_systems(FixedUpdate, || {
+            panic!("callback after missing resource ran")
+        });
+        assert!(matches!(
+            &app.try_advance_fixed(1).unwrap_err()[0],
+            AppError::System {
+                error: SystemError::MissingResource { .. },
+                ..
+            }
+        ));
+        assert_eq!(count.load(Ordering::SeqCst), 3);
+        assert_eq!(app.world().iter::<Position>().next().unwrap().1.0, 9);
     }
 
     #[test]

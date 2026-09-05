@@ -158,12 +158,13 @@ authoring is the initial direction; other models may be explored later. Optional
 human-readable names or paths should coexist with cheap unnamed entities; current
 names do not yet provide a general persistent-path system.
 
-The current executor is sequential. Automatic parallel execution where data
-access permits is an intended capability, and multithreading should arrive soon
-after the correct initial model. Access metadata and deferred boundaries provide
-a foundation; a parallel executor is not yet selected implementation work.
-Determinism versus maximum parallelism should be configurable. Canonical traversal
-is available today for algorithms that need deterministic ordering.
+The executor defaults to sequential registration order. An opt-in native
+[parallel executor](executor.md) runs contiguous compatible typed systems in
+bounded batches using access metadata. Commands and exclusive systems remain
+barriers; WebAssembly falls back to sequential execution. Applications can choose
+the policy explicitly, with hidden shared-state effects outside the deterministic
+ECS guarantee. Canonical traversal remains available for algorithms that need
+deterministic ordering. Broader throughput policies remain future work.
 
 Familiar schedule stages should be defaults in the high-level framework and
 remain customizable. The low-level libraries should not impose the framework's

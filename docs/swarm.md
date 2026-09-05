@@ -1,9 +1,10 @@
 # Deterministic swarm workload
 
-The headless `swarm` example exercises Titan's existing sequential ECS schedule
+The headless `swarm` example exercises Titan's ECS schedule
 with configurable counts of unnamed moving entities and periodic weapon firing.
 It supplies a reproducible game-driven baseline for evaluating future execution
-changes. It does not implement a scheduler or establish a capacity guarantee.
+changes. Sequential execution remains the default; `--threads 2` opts into the
+[parallel executor](executor.md). It does not establish a capacity guarantee.
 
 ```sh
 cargo run --release --example swarm -- --entities 10000 --steps 120
@@ -21,7 +22,8 @@ on other native platforms; the RSS runner supports macOS and Linux.
 
 Each entity has identity, position, velocity and weapon components. Fixed integer
 arithmetic defines initial state, toroidal movement and periodic firing. Two typed
-systems execute in registration order using the existing fixed-update schedule.
+systems execute in registration order by default. With `--threads 2` their
+disjoint component accesses allow concurrent execution in one batch.
 This deliberately isolates dense component joins and independent component updates; it does not
 represent rendering, collision/neighbour searches, structural churn, or a complete
 game. Entity counts vary the workload size while preserving its behavior.
@@ -61,7 +63,7 @@ Cargo configuration, machine load and power mode when comparing environments.
 Compare several release samples on the same machine and toolchain. Checksums and
 oracle results establish correctness; timings and RSS are observations without
 pass/fail thresholds. Do not infer million-entity support or scheduler speedups
-from these baselines. Scheduler work remains separately scoped in issue #6.
+from these baselines. The opt-in executor comparison below is scoped to issue #6.
 
 ## Recorded baseline
 
@@ -78,3 +80,20 @@ these are local observations with no performance budget.
 | 1,000 | 0.815 | 2,719,744–2,736,128 | 60,000 | `4003ab8d05979666` |
 | 10,000 | 7.888 | 6,029,312–9,158,656 | 600,000 | `c958f2333dc726d9` |
 | 100,000 | 101.676 | 39,911,424–54,788,096 | 6,000,000 | `901b70e007e1a7f7` |
+
+
+## Comparing executor policies
+
+```sh
+python3 scripts/measure-swarm.py --counts 1000 10000 100000 --steps 120 --repeats 3 --threads 1 > /tmp/swarm-sequential.json
+python3 scripts/measure-swarm.py --counts 1000 10000 100000 --steps 120 --repeats 3 --threads 2 > /tmp/swarm-parallel.json
+```
+
+The example reports `executor` and `max_threads`; both policies retain the same
+closed-form oracle and repeated-run checksum checks. Tests compare sequential and
+parallel checksums directly. `--threads 1` uses the unchanged default policy.
+Each native parallel batch creates scoped workers and joins before continuing;
+small systems can cost more to dispatch than to execute. This slice has no
+persistent pool or intra-query parallelism. The historical baseline above is
+preserved; fresh sequential measurements distinguish current machine conditions
+and refactoring overhead from parallel dispatch cost.

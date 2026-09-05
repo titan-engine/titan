@@ -25,4 +25,4 @@ pub use time::FixedTime;
 pub use titan_macros::{Component, Inspect};
 
 pub use ecs::{AccessMode, AccessTarget, Query, QueryData, Res, ResMut, SystemAccess, SystemError};
-pub use system::{ApplyDeferred, IntoSystem, SystemMetadata};
+pub use system::{ApplyDeferred, ExecutorPolicy, IntoSystem, SystemMetadata};
