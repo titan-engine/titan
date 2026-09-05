@@ -53,8 +53,11 @@ The RPG extracts a renderer-neutral `RenderFrame`. The wgpu backend consumes
 that frame and the existing CPU `ImageAssets`, drawing actual textured quads
 with nearest sampling, tint, alpha, clipping, and deterministic layer/order
 sorting. It renders to a logical-size floating-point intermediate and presents
-to the output surface with nearest scaling. Platform surface and event-loop
-code belongs to the runners; `App` does not own a window or browser event loop.
+to the output surface with nearest scaling. The public `titan_render_wgpu::SurfaceRenderer` handles default adapter/device
+acquisition, surface configuration, bounded resize, and presentation. Runners
+create their window/canvas and surface and pass game-owned `RenderFrame` and
+`ImageAssets` references to `render`. Event loops, extraction, aspect ratio, and
+input remain host/game decisions; `App` owns no window or browser event loop.
 
 See [the GPU crate](../crates/titan-render-wgpu/README.md) for API and supported
 format details.
@@ -78,3 +81,21 @@ evidence and does not replace the headless semantic tests.
 
 The browser player has also been exercised through the complete reference
 route with the actual generated WASM and GPU backend.
+
+## Surface adapter migration
+
+The RPG support adapter and the copied starter/arena `surface.rs` modules have
+been replaced by `titan_render_wgpu::SurfaceRenderer`. Remove the local module
+and import that public type. Construction and `resize` signatures are unchanged;
+replace `renderer.render(&app)` with explicit extraction:
+
+```rust,ignore
+let frame = app.extracted::<RenderFrame>().ok_or("missing render frame")?;
+let assets = app.world().resource::<ImageAssets>().ok_or("missing image assets")?;
+renderer.render(frame, assets)?;
+```
+
+The return value still reports whether a frame was presented. Zero dimensions
+suspend presentation, sizes are bounded to the device limit, outdated surfaces
+are reconfigured, and lost/invalid surfaces return an error for the host to
+handle. No RPG dependency or game-specific rendering policy enters this API.

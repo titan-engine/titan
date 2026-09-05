@@ -1,5 +1,8 @@
 //! App-independent textured sprite rendering for native wgpu and browser WebGPU.
 //! Render into a logical-size framebuffer, then present it with nearest sampling.
+mod surface;
+pub use surface::SurfaceRenderer;
+
 use bytemuck::{Pod, Zeroable};
 use std::{collections::BTreeMap, fmt};
 use titan::render::{Color, ImageAssets, ImageId, RenderFrame};

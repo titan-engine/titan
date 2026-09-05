@@ -2,9 +2,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use titan_game::game;
-#[cfg(not(target_arch = "wasm32"))]
-#[path = "../surface.rs"]
-mod gpu_surface;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,14 +12,17 @@ fn main() {}
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
-    use super::{game, gpu_surface::SurfaceRenderer};
+    use super::game;
     use std::{
         collections::HashSet,
         sync::Arc,
         time::{Duration, Instant},
     };
-    use titan::{App, Startup};
-    use titan_render_wgpu::wgpu;
+    use titan::{
+        App, Startup,
+        render::{ImageAssets, RenderFrame},
+    };
+    use titan_render_wgpu::{SurfaceRenderer, wgpu};
     use winit::{
         application::ApplicationHandler,
         dpi::LogicalSize,
@@ -184,7 +184,18 @@ mod native {
                         self.input.tick(&mut self.app);
                         self.accumulated -= tick;
                     }
-                    match self.renderer.as_mut().unwrap().render(&self.app) {
+                    match (|| {
+                        let frame = self
+                            .app
+                            .extracted::<RenderFrame>()
+                            .ok_or("game render extraction unavailable")?;
+                        let assets = self
+                            .app
+                            .world()
+                            .resource::<ImageAssets>()
+                            .ok_or("game image assets unavailable")?;
+                        self.renderer.as_mut().unwrap().render(frame, assets)
+                    })() {
                         Ok(true) => self.rendered += 1,
                         Ok(false) => {}
                         Err(error) => {

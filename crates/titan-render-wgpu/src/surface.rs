@@ -1,11 +1,13 @@
-//! Small surface adapter shared by the native and browser game runners.
+//! Shared surface acquisition, configuration, and presentation.
 
-use titan::{
-    App,
-    render::{ImageAssets, RenderFrame},
-};
-use titan_render_wgpu::{GpuRenderer, wgpu};
+use crate::{GpuRenderer, wgpu};
+use titan::render::{ImageAssets, RenderFrame};
 
+/// A default surface presenter for native windows and browser canvases.
+///
+/// The caller creates the surface and retains ownership of its window/canvas,
+/// game extraction, event loop, and timing. Use [`GpuRenderer`] directly when
+/// custom adapter, device, or surface configuration is required.
 pub struct SurfaceRenderer {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -16,6 +18,9 @@ pub struct SurfaceRenderer {
 }
 
 impl SurfaceRenderer {
+    /// Request a compatible adapter/device and configure the supplied surface.
+    /// Uses portable WebGL2 limits and prefers non-sRGB presentation. Zero-sized
+    /// surfaces are configured at 1x1 and suspended until a nonzero resize.
     pub async fn new(
         instance: &wgpu::Instance,
         surface: wgpu::Surface<'static>,
@@ -31,7 +36,7 @@ impl SurfaceRenderer {
             .map_err(|error| format!("request GPU adapter: {error}"))?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Titan RPG device"),
+                label: Some("Titan game device"),
                 required_limits: wgpu::Limits::downlevel_webgl2_defaults()
                     .using_resolution(adapter.limits()),
                 ..Default::default()
@@ -79,7 +84,12 @@ impl SurfaceRenderer {
         (width, height)
     }
 
-    pub fn render(&mut self, app: &App) -> Result<bool, String> {
+    /// Render and present a game-owned snapshot and its image assets.
+    /// Returns `false` when suspended, occluded, timed out, or reconfigured after
+    /// an outdated surface. Suboptimal frames are presented before reconfiguring.
+    /// Surface loss/validation and renderer failures return an error; the host
+    /// decides whether to exit or recreate its surface.
+    pub fn render(&mut self, frame: &RenderFrame, assets: &ImageAssets) -> Result<bool, String> {
         if self.suspended {
             return Ok(false);
         }
@@ -100,13 +110,6 @@ impl SurfaceRenderer {
                 return Err("GPU surface validation failed".into());
             }
         };
-        let frame = app
-            .extracted::<RenderFrame>()
-            .ok_or("game render extraction unavailable")?;
-        let assets = app
-            .world()
-            .resource::<ImageAssets>()
-            .ok_or("game image assets unavailable")?;
         self.renderer
             .prepare(frame, assets)
             .map_err(|error| format!("prepare frame: {error}"))?;

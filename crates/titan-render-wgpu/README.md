@@ -1,8 +1,9 @@
 # GPU sprite renderer
 
 `titan-render-wgpu` renders the engine's `RenderFrame` and `ImageAssets` with real
-textured GPU quads. It has no dependency on an `App`, window, surface, clock, or
-inspection transport. Native Metal/Vulkan/DX12/GL and browser WebGPU/WebGL2 use the
+textured GPU quads. Its render inputs have no dependency on an `App`, clock, or inspection
+transport. `GpuRenderer` handles GPU drawing; `SurfaceRenderer` optionally owns
+a default surface/device/queue for native and browser presentation. Native Metal/Vulkan/DX12/GL and browser WebGPU/WebGL2 use the
 same wgpu 30 pipeline. WebGL2 needs floating-point color attachment support for
 the RGBA16Float intermediate target.
 
@@ -14,8 +15,21 @@ renderer.render(&mut encoder, &surface_texture_view)?;
 queue.submit([encoder.finish()]);
 ```
 
-The runner acquires the adapter/device, configures and resizes its surface,
-submits commands, presents, and handles device/surface loss. `render` accepts a
+For default surface setup, create a wgpu surface from your window/canvas and use:
+
+```rust,ignore
+let mut renderer = SurfaceRenderer::new(&instance, surface, width, height).await?;
+let (width, height) = renderer.resize(width, height);
+let presented = renderer.render(&frame, &assets)?;
+```
+
+This adapter requests portable limits, prefers non-sRGB output, bounds resize to
+the texture limit, suspends zero-sized surfaces, and handles transient acquisition
+failures. Lost/invalid surfaces return errors. It owns no game, clock, event loop,
+or window/canvas setup. See [migration and lifecycle policy](../../docs/rendering.md#surface-adapter-migration).
+
+When using `GpuRenderer` directly, the runner acquires the adapter/device,
+configures and resizes its surface, submits commands, presents, and handles loss. `render` accepts a
 single-sample color target with the constructor's format. Changing output size
 requires no renderer reconfiguration: a second GPU pass scales the logical
 framebuffer to the entire target with nearest-neighbor sampling. Use integer

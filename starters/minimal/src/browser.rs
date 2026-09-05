@@ -151,13 +151,15 @@ fn capture_error(error: png::EncodingError) -> ProtocolError {
 
 #[cfg(target_arch = "wasm32")]
 mod player {
-    use titan::{App, Startup};
-    use titan_render_wgpu::wgpu;
+    use titan::{
+        App, Startup,
+        render::{ImageAssets, RenderFrame},
+    };
+    use titan_render_wgpu::{SurfaceRenderer, wgpu};
     use wasm_bindgen::prelude::*;
     use web_sys::HtmlCanvasElement;
 
     use crate::game;
-    use crate::surface::SurfaceRenderer;
 
     /// Interactive canvas runner. The browser owns keyboard events and animation timing.
     #[wasm_bindgen]
@@ -212,7 +214,16 @@ mod player {
                 self.input.tick(&mut self.app);
                 self.accumulated_ms -= 1000.0 / 60.0;
             }
-            self.renderer.render(&self.app).map_err(js_error)?;
+            let frame = self
+                .app
+                .extracted::<RenderFrame>()
+                .ok_or_else(|| js_error("game render extraction unavailable"))?;
+            let assets = self
+                .app
+                .world()
+                .resource::<ImageAssets>()
+                .ok_or_else(|| js_error("game image assets unavailable"))?;
+            self.renderer.render(frame, assets).map_err(js_error)?;
             Ok(())
         }
 
