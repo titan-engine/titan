@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Titan 3D GPU verification</title>
+<style>
+body { font: 16px system-ui; margin: 2rem; color: #e9edf4; background: #151923; }
+a { color: #9aceff; } pre { white-space: pre-wrap; } canvas { image-rendering: pixelated; width: 256px; }
+#images { display: flex; flex-wrap: wrap; gap: 1rem; } figure { margin: 0; } figcaption { max-width: 256px; }
+</style>
+<h1>Titan 3D GPU verification</h1>
+<p>Actual WASM shaders and GPU readback, using the same fixtures as native tests.</p>
+<nav><a href="?backend=webgpu">Run WebGPU</a> · <a href="?backend=webgl2">Run WebGL2</a></nav>
+<pre id="status" role="status">Starting…</pre>
+<a id="download" hidden download="three-d-evidence.json">Download full evidence JSON</a>
+<div id="images"></div>
+<script type="module" src="verify.mjs"></script>
+</html>

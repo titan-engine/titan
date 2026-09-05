@@ -4,3 +4,6 @@
 
 # Built copy of the RPG source assets.
 /web/assets/
+
+# Generated opt-in 3D GPU verification bindings.
+/web/render-3d/pkg/

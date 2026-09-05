@@ -200,6 +200,9 @@ jobs:
       - name: Exercise headless 3D primitives in actual WebAssembly
         run: node scripts/test-render-3d.mjs
 
+      - name: Build actual browser 3D GPU verification fixture
+        run: python3 scripts/build-render-3d-browser.py
+
       - name: Build the browser adapter and run the real WASM control loop
         run: |
           python3 scripts/build-browser.py
@@ -264,6 +267,9 @@ jobs:
 
       - name: Build and run relocated bundles from copied games
         run: python3 scripts/test-macos-bundles.py
+
+      - name: Verify native 3D shaders and offscreen readback
+        run: cargo test -p titan-render-wgpu --test three_d -- --ignored
 
       - name: Inspect and replay the actual native arena player
         run: python3 games/arena/scripts/test-live-player.py

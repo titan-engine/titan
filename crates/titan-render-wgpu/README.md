@@ -69,3 +69,57 @@ pixels and integer scaling must match exactly; other channel differences default
 to at most 2/255. Set `TITAN_GPU_TOLERANCE=0` to request exact comparison or choose
 another explicit u8 tolerance for a particular adapter. The engine's software
 renderer remains the deterministic capture/reference implementation.
+
+## Opaque 3D offscreen rendering
+
+`GpuRenderer3d` consumes the validated `titan::render::three_d::RenderFrame3d`
+snapshot. It owns one color texture and one `Depth24Plus` attachment, and no
+surface, simulation, readback, or submission machinery:
+
+```rust,ignore
+use titan::render::three_d::BaseColor;
+use titan_render_wgpu::{GpuRenderer3d, wgpu};
+let mut renderer = GpuRenderer3d::new(
+    device.clone(), 640, 480, wgpu::TextureFormat::Rgba8Unorm,
+)?;
+renderer.prepare(&frame, BaseColor::rgb(24, 32, 48))?;
+let mut encoder = device.create_command_encoder(&Default::default());
+renderer.render(&mut encoder)?;
+// Copy renderer.color_texture() to a padded readback buffer here, or use
+// renderer.color_view() for a later presentation/composition pass.
+queue.submit([encoder.finish()]);
+```
+
+Meshes upload as indexed triangles with GPU projection × view × model position
+transforms. Preparation applies inverse-transpose normal transforms using the
+CPU data API's f64 intermediates, which also handles extreme finite scales.
+The fragment shader normalizes interpolated world-space normals and applies
+bounded ambient plus directional Lambert lighting in linear RGB. Counterclockwise
+front faces, back-face culling, depth clear 1, strict less comparison and depth
+writes preserve the CPU contract. Draws retain frame key order, so the lowest key
+wins exact depth ties. Each render clears both attachments and uses one sample.
+
+Allowed outputs are `Rgba8Unorm`, `Bgra8Unorm` and their sRGB variants. All store
+sRGB-encoded RGB with opaque alpha: the sRGB attachment encodes linear shader
+output, while the unorm shader explicitly encodes once. Clear colors use the
+same policy. BGRA readback requires channel swizzling. These are format policies,
+not a promise of backend availability: the host must probe adapter format usages
+and report adapter/device/validation or readback failures. There is no software
+fallback. The renderer requires only portable vertex/index/uniform facilities,
+including one dynamic uniform binding; no storage buffers or base-vertex draw
+feature is needed on WebGL2.
+
+`resize(width, height)` rebuilds both attachments when dimensions change and
+always invalidates prepared draws. Update the camera aspect in the next frame.
+Zero dimensions return `InvalidDimensions`; the host should suspend drawing.
+Failed resize retains the old target allocation/dimensions, with rendering
+invalidated. Targets are bounded by device dimensions and `MAX_3D_TARGET_BYTES`
+(64 MiB, charged at eight bytes per color/depth pixel). Uniform and geometry
+uploads are checked against device buffer and addressing limits before GPU
+allocation, in addition to the CPU frame budgets. Unsupported formats/limits and
+unrepresentable transformed geometry produce `Gpu3dError`. Failed preparation
+invalidates old draws; `render` returns `NotPrepared` until preparation succeeds.
+Frame uploads are rebuilt without persistent mesh-handle caching, so replacement
+and collection changes cannot silently reuse geometry. Native/browser adapter
+acquisition, error scopes, device loss, surface presentation and readback remain
+the host's responsibility.
