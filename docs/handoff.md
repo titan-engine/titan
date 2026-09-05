@@ -30,8 +30,9 @@ Working preferences and approval policy are in [workflow.md](workflow.md) and
 `AGENTS.md`. The user approved GitHub-native planning and PR integration. Use
 [Titan Development](https://github.com/orgs/titan-engine/projects/1) as the pending
 backlog. Claim only approved, unblocked work; use isolated worktrees and subagents
-for substantial independent work/review. Merge approved scope autonomously after
-independent attributed agent review and green required CI. Scope changes and
+for substantial independent work/review. Enqueue approved scope autonomously after
+independent attributed agent review and green required PR CI; the merge queue
+validates integration with current main. Do not refresh branches solely for freshness. Scope changes and
 releases return to the user. Verify exact merged-main CI, and keep context compact.
 
 Preserve RPG reference checksum `f7a298f62ad75c1c`, arena initial
