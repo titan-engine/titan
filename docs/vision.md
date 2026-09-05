@@ -181,8 +181,10 @@ are not claims about current implementation.
 
 Game UI uses the same entity/component model as the game world. The first
 [UI slice](ui.md) provides fixed-pixel text and primary-pointer buttons, exercised
-by the arena HUD and RPG quest display. General layout and typography remain
-future work. Browser host controls and inspector panels are separate tooling.
+by the arena HUD and RPG quest display. The [quest journal](journal.md) adds
+explicit column layout, bounded bitmap text and scoped keyboard focus. General
+layout and typography remain future work. Browser host controls and inspector
+panels are separate tooling.
 Whether reusable gameplay primitives belong in the high-level framework remains
 open and does not change the entity-based UI commitment.
 

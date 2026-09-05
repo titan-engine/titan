@@ -15,7 +15,8 @@ verified. See the [live-player evidence](live-player.md).
 The [implementation plan](implementation-plan.md) tracks execution; the
 [host setup audit](host-setup-audit.md) records completed consolidation evidence.
 The [first entity-based UI slice](ui.md) now covers both games and pointer-driven
-restart. Broader layout/typography requirements need a concrete next UI use case;
+restart. The [quest journal](journal.md) now exercises column layout, bounded bitmap text
+and scoped focus; broader layout/typography remain future work;
 the [save/load boundary](save-load.md) separates those derived entities from
 persistent gameplay state.
 Keep broader framework, camera and platform features demand-driven.

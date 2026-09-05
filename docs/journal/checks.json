@@ -1,0 +1,113 @@
+{
+  "date": "2026-09-05",
+  "code_revision": "6bc3e22707302bad03555b78c248e806f9cf1599",
+  "engine_ui_revision": "26e7dc7",
+  "journal_integration_revision": "9cce38f",
+  "checks": [
+    {
+      "command": "cargo fmt --all --check",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --workspace --all-targets",
+      "result": "passed"
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "result": "passed"
+    },
+    {
+      "command": "cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/test-control-loop.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/build-browser.py",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/test-browser.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/test-rpg-replay.py --gpu",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/test-rpg-replay.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --test web/inspector/bridge.test.mjs web/shared/input.test.mjs web/play/*.test.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "TITAN_GPU_TOLERANCE=0 cargo test -p titan-render-wgpu --test offscreen completed_rpg_replay -- --ignored",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/test-build-tools.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/test-starter.py --browser",
+      "result": "passed"
+    },
+    {
+      "command": "cargo fmt --manifest-path games/arena/Cargo.toml --all --check",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path games/arena/Cargo.toml --all-targets",
+      "result": "passed"
+    },
+    {
+      "command": "cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings",
+      "result": "passed"
+    },
+    {
+      "command": "python3 games/arena/scripts/test-control.py",
+      "result": "passed"
+    },
+    {
+      "command": "cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown",
+      "result": "passed"
+    },
+    {
+      "command": "python3 games/arena/scripts/build-browser.py",
+      "result": "passed"
+    },
+    {
+      "command": "node games/arena/scripts/test-browser.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --test games/arena/web/inspector/bridge.test.mjs games/arena/web/play/*.test.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "python3 scripts/test-macos-bundles.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 games/arena/scripts/test-live-player.py",
+      "result": "passed"
+    }
+  ],
+  "visual_checks": {
+    "native": "Physical J, Down, pointer Close; journal paused at host frame 975, resumed at 1429; player stayed (2,2).",
+    "browser": "Actual browser GPU canvas: physical J, Down and pointer Close; modal toolbar disabled; wrapped text and focus visually inspected.",
+    "gpu": "Both open and closed RPG views match software with tolerance zero on unorm and sRGB targets."
+  },
+  "checksums": {
+    "rpg_reference": "f7a298f62ad75c1c",
+    "arena_initial": "e096abf94fd12c24",
+    "arena_winning": "b5cf61da6f50efd7",
+    "journal_initial_open": "189f600ebd82feea"
+  },
+  "readme_preview": "Committed 1280x896 nearest-neighbor preview unchanged.",
+  "ci": "Existing GitHub Actions jobs cover the extended journal acceptance; consult the exact pushed revision for remote results."
+}

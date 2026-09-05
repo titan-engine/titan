@@ -17,57 +17,37 @@ save and recording format versions are unchanged.
 
 The release commit `cebefc3` passed all three jobs in
 [CI run 33952161952](https://github.com/titan-engine/titan/actions/runs/33952161952).
-Remote `main` and the pushed annotated `v0.4.0` tag resolve to that revision.
+At release completion, remote `main` and the pushed annotated `v0.4.0` tag
+resolved to that revision.
 See [release notes](releases/v0.4.0.md) and [next-task context](handoff.md).
-No next feature has been selected.
+The next approved exercise is the RPG quest journal below.
 
-## Recommended next exercise: RPG quest journal (not approved)
+## RPG quest journal: complete
 
-Add a closed-by-default journal for the existing shard/shrine quest. Open it
-from the quest label or a key, select between two objective rows using keyboard
-or pointer, read bounded detail text, and close it with Escape or a button.
-Progress remains derived from existing gameplay state. This is a recommendation,
-not authorization to implement a feature.
+The approved exercise adds a closed-by-default journal for the existing shard
+and shrine objectives. Keyboard/pointer navigation, wrapped detail text and a
+Close button use shared column layout, bounded bitmap text, scoped focus and
+filtered UI extraction. Game-owned modal policy restores prior pause state,
+clears stale input and preserves completed-playback isolation.
 
-The current UI has absolute bounds, bitmap text and pointer buttons, but no
-layout or keyboard focus (`src/ui.rs`). This exercise should establish the
-smallest shared column layout, text measurement/wrapping and focus/input routing
-needed by a real panel. Keep objective content, selection meaning and modal
-pause policy game-owned. Do not expand this into an inventory economy, general
-widget framework, scrolling, font import or scene hierarchy.
+Live capture shows the journal; gameplay recording verification uses a canonical
+closed-journal render including the existing HUD. Native/headless/actual-WASM
+checks cover open-panel export, fresh playback, snapshot resets and inspection.
+Physical native/browser interaction and exact GPU/software open/closed comparison
+passed. Reference checksums and the crisp README preview are unchanged.
+See [journal behavior and evidence](journal.md) and [UI APIs](ui.md).
 
-Acceptance should cover:
+The workspace, both games, external starter and macOS bundle gates pass locally.
+GitHub Actions records CI for each pushed revision; verify the exact revision
+when continuing. No release
+or package version bump is part of this exercise.
 
-- Native, actual-browser and headless keyboard/pointer interaction with
-  inspectable visibility, selected objective, focus and resolved bounds.
-- A narrow panel and longer objective description that exercise layout and
-  bounded text rather than another set of individually positioned labels.
-- No movement leaking through modal navigation or after closing; held keys,
-  canceled gestures, hidden/disabled targets, focus loss, resize, pause and
-  load/restart must have explicit behavior. Closing must respect prior pause state.
-- UI rebuilt from quest state after load/restart, with no transient focus or
-  pointer state added to gameplay snapshots.
-- Unchanged eleven-tick closed-journal RPG reference and both arena checksums;
-  separate open-journal captures and native GPU/browser evidence. Preserve the
-  committed README preview. Run the applicable gates below and retain starter
-  and both-game CI coverage.
-
-Resolve the replay image boundary in the first implementation slice: current RPG
-recordings hash the full rendered image, while UI gestures are not recorded.
-The recommended policy is a canonical closed-journal image for gameplay replay
-verification, preserving the existing HUD and historical checksums; live capture
-must still show the actual journal. Test export with the journal open, fresh
-headless/native/browser playback, and independent journal visuals. Do not silently
-ignore this mismatch or expand the recording schema to serialize transient UI.
-
-The runner-up is loading one existing RPG sprite from a PNG with identical
-pixels. Embedded bytes would mainly exercise decoding into the existing `Image`
-interface; loose-file delivery would additionally require native bundle/browser
-packaging, readiness and failure policy. Consult the asset commitments in
-[vision](vision.md#rendering-and-assets) and requirements R2.57–62 before selecting
-that work. Parallel scheduling needs a representative workload and measurements;
-replay scrubbing/speed controls remain deferred. Broader rendering, networking
-and persistence commitments remain unscheduled.
+File-backed assets remain the next candidate, not selected work. Embedded PNG
+bytes would mainly exercise decoding into `Image`; loose-file delivery also
+requires native/browser packaging, readiness and failure policy. Consult the
+[asset vision](vision.md#rendering-and-assets) and requirements R2.57–62 before
+selecting that work. Parallel scheduling needs a representative workload and
+measurements; replay scrubbing/speed controls remain deferred.
 
 ## Shared replay through the RPG: complete
 

@@ -20,6 +20,13 @@ game rules. The shared file format currently supports digital buttons; the
 engine's broader `InputFrame` support for analog values is not an analog replay
 format promise.
 
+The RPG quest journal is transient presentation. Its recording checksum uses a
+canonical closed-journal render, including the existing quest HUD. An ordinary
+live capture still shows the actual panel and focus; journal captures are tested
+separately. Opening or selecting objectives pauses fixed ticks without recording
+UI gestures or changing the gameplay snapshot. Historical recording identities
+and checksums are unchanged. See [journal policy](journal.md).
+
 Games validate imports and run them in a fresh game before changing a live scene.
 Playback then restores the starting snapshot, supplies the recorded input frames,
 and verifies again at the end. The host pauses exactly at EOF; stepping past the

@@ -1,4 +1,4 @@
-# Continue after v0.4.0
+# Continue after the RPG quest journal
 
 Work in the Titan repository on `main`. The v0.4.0 milestone aligns the eight
 engine Cargo packages with the source tag; arena/starter packages remain 0.1.0.
@@ -17,14 +17,13 @@ and native/browser/headless playback verification. Read `docs/replay.md`,
 `docs/rpg-replay.md` and `docs/arena-replay.md` for the exact boundary and evidence.
 Both pushed implementation revisions passed CI before the release bump.
 
-No next feature has been approved. The reviewed recommendation in the
-[implementation plan](implementation-plan.md#recommended-next-exercise-rpg-quest-journal-not-approved)
-is a small RPG quest journal exercising layout, keyboard focus and modal input
-isolation. It also needs an explicit replay image policy because transient UI
-gestures are not recorded. File-backed assets across native/browser remain the
-runner-up; consult the vision's asset design and requirements R2.57–62 first.
-These are suggestions, not selected work. Difficulty settings, replay scrubbing
-and speed controls remain deferred.
+The user approved the RPG quest journal and requested autonomous implementation.
+It now exercises shared column layout, bounded bitmap text, scoped keyboard focus
+and modal input isolation. Gameplay replay uses a canonical closed-journal image;
+live captures show the actual panel. See [journal behavior and verification](journal.md)
+and the [implementation plan](implementation-plan.md). Keep the journal scope
+bounded; assets, difficulty settings, replay scrubbing and speed controls are not
+selected work.
 
 Working preferences: use subagents for substantial independent work, keep the
 main context compact, make frequent coherent commits, and continue autonomously

@@ -25,14 +25,27 @@ rendering. UI text and positions are component data, rather than strings
 constructed only inside a render function.
 
 `UiNode` describes logical framebuffer coordinates, hit bounds, visibility, layer
-and order. New nodes use layer 100. Bounds do not clip or wrap text. `UiText`
-contains text and tint. The built-in 3×5 font supports uppercase letters, digits,
+and order. New nodes use layer 100. By default bounds do not clip or wrap text.
+`UiText` contains text, tint and opt-in wrapping. The built-in 3×5 font supports uppercase letters, digits,
 period and slash; unknown glyphs advance without drawing. `BitmapFont::new`
 accepts a game-owned glyph map and spacing.
 
-The first API has one font resource per world, fixed pixel positions, and no
-parenting, automatic layout, text shaping, scrolling or keyboard focus traversal.
-The small font suits these pixel-art demos; it is not a general typography system.
+The API has one font resource per world. `UiColumn::new(x, y, width, gap)` emits
+successive `next_node(height)` rectangles for explicit column layout. It is a
+small placement helper; the game retains the resolved `UiNode` components.
+`UiText::with_wrap()` opts into word wrapping and truncation to whole font cells
+inside the node. `BitmapFont::measure_wrapped(text, width, height)` reports width,
+height, line count and truncation using the same layout. Long words split across
+cells; explicit newlines work. Legacy text remains unbounded and unchanged.
+Custom glyphs should fit their spacing cells; there is no per-pixel text clip,
+shaping, font fallback, automatic parent layout or scrolling.
+
+`UiFocus` takes an explicit ordered slice of button entity IDs owned by the game.
+`navigate(world, scope, backwards)` skips missing, hidden and disabled buttons;
+`set` selects a valid pointer target and `activate` revalidates before returning
+an entity. Games translate host key edges into navigation/actions and render
+focus. Focus owns no physical key state or implicit global focus tree. The RPG
+[journal](journal.md) demonstrates these APIs and modal input routing.
 
 ## Interaction and inspection
 
@@ -58,7 +71,7 @@ entity protocol. Fields are read-only in this slice; game systems own their valu
 Game-defined commands provide interaction at exclusive runtime safe points.
 
 Arena names its UI entities `ui/status`, `ui/restart` and `ui/dash`; RPG uses
-`ui/quest`. Arena's `ui_pointer` command feeds logical pointer samples through the
+`ui/quest` plus `ui/journal/...`. Arena's `ui_pointer` command feeds logical pointer samples through the
 same hit test as physical input. Consult its command metadata for arguments.
 Live native/browser inspection requires control opt-in for commands; a headless
 controlled server retains its existing command policy. UI inspection is read-only
@@ -107,7 +120,8 @@ and all three UI entities named and positioned correctly.
 - [Browser arena after UI restart](ui/arena-browser.png)
 - [Browser RPG completed quest](ui/rpg-browser.png)
 
-The UI increment is included in the published `v0.3.0` source tag. General layout
-and keyboard focus navigation remain future work. The arena now also exercises
+The UI increment is included in the published `v0.3.0` source tag. The subsequent [quest journal](journal.md) adds explicit column placement,
+bounded bitmap text and scoped keyboard focus. General layout and typography
+remain future work. The arena now also exercises
 [interactive playback of saved recordings](arena-replay.md); during playback its
 in-game restart button is disabled and host playback controls remain available.
