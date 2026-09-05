@@ -22,6 +22,9 @@ Ready view excludes issues GitHub marks blocked. Priority does not grant approva
 Record the user-approved scope and source of approval in the issue before moving
 it to Ready. A broad requirement or old planning answer does not authorize its
 implementation. Split broad proposals into bounded sub-issues when selected.
+Blank issues and CLI-created issues are allowed for quick idea capture. Before
+moving either to Ready, add the outcome, acceptance/verification criteria, scope
+boundaries, dependencies and recorded user approval required by the work template.
 
 Use Priority (P0 urgent, P1 high, P2 normal, P3 later), Area and Owner fields.
 Owner identifies the responsible agent/task, since agents share a GitHub account;

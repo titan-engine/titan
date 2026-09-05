@@ -11,8 +11,9 @@ when rendering changes, preserved reference checksums, and material limitations.
 ## Review and integration
 
 - Approved issue/scope:
-- Independent agent review comment (reviewer/model, UTC date/time, reviewed SHA,
-  findings and verification):
+- Independent agent review comment (reviewer/task identity, actual model name or
+  `unavailable`, UTC date/time, full reviewed SHA, findings, verification, and
+  limitations):
 - Stack position and prerequisites, if applicable:
 
 Merge only after required CI and independent review pass for the current change.
