@@ -10,7 +10,7 @@ import time
 GAME = Path(__file__).resolve().parents[1]
 REPO = GAME.parents[1]
 started=time.monotonic()
-subprocess.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game'], check=True)
+subprocess.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True)
 build_seconds=time.monotonic()-started
 subprocess.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True)
 def target(manifest):
@@ -107,7 +107,21 @@ try:
     assert loaded['state_revision']>before_load['state_revision']
     assert call('capture')['response']['checksum']==saved_capture
     assert call('query','save')['response']['value']==saved
-    assert 'loaded save' in call('query','recording')['response']['value']['invalid_reason']
+    assert call('query','recording')['response']['value']['invalid_reason'] is None
+    # Snapshot-backed recording begins mid-dash, then reproduces all hidden state.
+    for offset, action in enumerate(['left','up','up','right','down','left','up','right'], 1):
+        call('input',before_load['observed_frame']+offset,'--actions',json.dumps({action:{'kind':'button','value':True}}))
+    call('step',8)
+    snapshot_recording=call('query','recording')
+    snapshot_path=evidence/'native-snapshot-recording.json'
+    snapshot_path.write_text(json.dumps(snapshot_recording))
+    verification=json.loads(subprocess.check_output([str(BINARY.with_name('replay')),str(snapshot_path)],text=True))
+    assert verification['save']==call('query','save')['response']['value']
+    assert verification['checksum']==call('capture')['response']['checksum']
+    assert snapshot_recording['response']['value']['initial_snapshot']==saved
+    legacy=json.loads(subprocess.check_output([str(BINARY.with_name('replay')),str(GAME/'tests/fixtures/recording-v1.json')],text=True))
+    assert legacy['ticks']==194 and legacy['checksum']=='ae923e36040921f9'
+
     call('invoke','restart');call('step',310)
     lost=call('invoke','verify_survival',error='invalid_value')
     data=json.loads(Path(lost['error']['details']['diagnostic_bundle']).read_text())
@@ -122,4 +136,4 @@ try:
     call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
 finally:
     p.terminate();p.wait(timeout=5)
-print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, save/load, capture and bounded diagnostics passed.')
+print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, save/load, snapshot/v1 replay, capture and bounded diagnostics passed.')

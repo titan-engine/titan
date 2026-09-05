@@ -30,7 +30,9 @@ def call(instance, *args, error=None):
     ], capture_output=True, text=True, timeout=10)
     data = json.loads(result.stdout)
     if error:
-        assert data['error']['code'] == error, data
+        assert data['status'] == 'failure', data
+        if error is not True:
+            assert data['error']['code'] == error, data
     else:
         assert data['status'] == 'success', data
     return data
@@ -82,6 +84,7 @@ def scenario(control):
         capture = call(instance, 'capture')
         assert capture['observed_frame'] == frame + 1, capture
         assert capture['response']['checksum'] != initial['checksum'], capture
+        mid_dash_save = call(instance, 'query', 'save')['response']['value']
         resumed = call(instance, 'invoke', 'resume')
         time.sleep(.2)
         paused_again = call(instance, 'invoke', 'pause')
@@ -106,10 +109,67 @@ def scenario(control):
         assert call(instance, 'status')['response']['paused']
         assert call(instance, 'capture')['response']['checksum'] == saved_checksum
         assert call(instance, 'query', 'save')['response']['value'] == saved
-        assert 'loaded save' in call(instance, 'query', 'recording')['response']['value']['invalid_reason']
+        assert call(instance, 'query', 'recording')['response']['value']['invalid_reason'] is None
         call(instance, 'invoke', 'resume')
         call(instance, 'invoke', 'load_save', '--arguments', json.dumps({'save': saved}), error='not_controlled')
         call(instance, 'invoke', 'pause')
+        # Play a snapshot-backed recording visibly in this same GPU player.
+        call(instance, 'invoke', 'load_save', '--arguments', json.dumps({'save': mid_dash_save}))
+        source_frame = call(instance, 'status')['observed_frame']
+        for offset, action in enumerate(['left','up','up','right','down','left','up','right'], 1):
+            call(instance, 'input', source_frame + offset, '--actions', json.dumps({action:{'kind':'button','value':True}}))
+        call(instance, 'step', 8)
+        snapshot_recording = call(instance, 'query', 'recording')['response']['value']
+        snapshot_path = evidence / 'native-visible-snapshot-recording.json'
+        snapshot_path.write_text(json.dumps(snapshot_recording))
+        verification = json.loads(subprocess.check_output([str(BINARY.with_name('replay')), str(snapshot_path)], text=True))
+        assert verification['save'] == call(instance, 'query', 'save')['response']['value']
+        assert verification['checksum'] == call(instance, 'capture')['response']['checksum']
+        replay_arguments = evidence / 'native-visible-replay-arguments.json'
+        replay_arguments.write_text(json.dumps({'recording': snapshot_recording}))
+        call(instance, 'invoke', 'load_replay', '--arguments-file', replay_arguments)
+        assert call(instance, 'query', 'save')['response']['value'] == mid_dash_save
+        def replay_state():
+            return call(instance, 'query', 'arena_state')['response']['value']['replay']
+        assert replay_state()['position'] == 0
+        replay_frame = call(instance, 'status')['observed_frame']
+        for arguments in [
+            ('invoke', 'load_replay', '--arguments', '{"recording":{}}'),
+            ('step', 9),
+            ('input', replay_frame + 1, '--actions', '{"left":{"kind":"button","value":true}}'),
+            ('set-field', player['index'], player['generation'], next(key for key in entity['components'] if key.endswith('::Position')), 'x', '--value', '10'),
+            ('invoke', 'load_save', '--arguments', json.dumps({'save': mid_dash_save})),
+            ('invoke', 'ui_pointer', '--arguments', '{"x":8,"y":12,"pressed":true}'),
+        ]:
+            before_rejected = call(instance, 'status')
+            rejected = call(instance, *arguments, error=True)
+            assert (rejected['observed_frame'], rejected['state_revision']) == (before_rejected['observed_frame'], before_rejected['state_revision'])
+            assert call(instance, 'query', 'save')['response']['value'] == mid_dash_save
+            assert replay_state()['position'] == 0
+        call(instance, 'step', 3)
+        restart_frame = call(instance, 'status')['observed_frame']
+        call(instance, 'invoke', 'restart_replay')
+        assert call(instance, 'status')['observed_frame'] == restart_frame
+        assert call(instance, 'query', 'save')['response']['value'] == mid_dash_save
+        call(instance, 'invoke', 'resume')
+        replay_deadline = time.monotonic() + 3
+        while not call(instance, 'status')['response']['paused']:
+            assert time.monotonic() < replay_deadline, replay_state()
+            time.sleep(.05)
+        assert call(instance, 'status')['observed_frame'] == restart_frame + 8
+        assert replay_state()['complete'] and replay_state()['verified'], replay_state()
+        assert call(instance, 'query', 'save')['response']['value'] == verification['save']
+        assert call(instance, 'capture')['response']['checksum'] == verification['checksum']
+        time.sleep(.1)
+        assert call(instance, 'status')['observed_frame'] == restart_frame + 8
+        call(instance, 'invoke', 'stop_replay')
+        assert not replay_state()['active']
+        assert call(instance, 'capture')['response']['checksum'] == initial['checksum']
+        assert call(instance, 'status')['observed_frame'] == restart_frame + 8
+        call(instance, 'invoke', 'load_replay', '--arguments-file', replay_arguments)
+        call(instance, 'invoke', 'restart')
+        assert not replay_state()['active']
+        assert call(instance, 'capture')['response']['checksum'] == initial['checksum']
         # Reproduce a real continuously ticking contact, not just injected input.
         call(instance, 'invoke', 'restart')
         call(instance, 'invoke', 'resume')
@@ -143,4 +203,4 @@ def scenario(control):
 
 scenario(False)
 scenario(True)
-print('Native GPU live-player read-only policy, safe-point pause, stable inspection, dash step, capture, resume, save/load, live contact headless replay and registration cleanup passed.')
+print('Native GPU live-player read-only policy, safe-point pause, stable inspection, dash step, capture, resume, save/load, snapshot playback/input isolation/EOF, live contact headless replay and registration cleanup passed.')
