@@ -75,6 +75,9 @@ jobs:
       - name: Check portable build tooling policy
         run: python3 scripts/test-build-tools.py
 
+      - name: Verify bounded acceptance failure evidence
+        run: python3 scripts/test-acceptance-evidence.py
+
       - name: Check formatting
         run: cargo fmt --all --check
 
@@ -117,6 +120,26 @@ jobs:
           cargo test --manifest-path games/arena/Cargo.toml --all-targets
           cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/arena/scripts/test-control.py
+
+      - name: Verify real acceptance failure retention and cleanup
+        run: python3 scripts/test-acceptance-failure-integration.py
+
+      - name: Upload sanitized native acceptance failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-failures-${{ github.job }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            target/acceptance-failures/*/context.json
+            target/acceptance-failures/*/commands.log
+            target/acceptance-failures/*/runtime.log
+            target/acceptance-failures/*/bundle.json
+            target/acceptance-failures/*/api.txt
+            target/acceptance-failures/*/capture.png
+            target/acceptance-failures/*/latest-capture.ppm
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false
 
   wasm:
     name: WebAssembly core check
@@ -246,3 +269,31 @@ jobs:
         run: |
           python3 scripts/test-rpg-replay.py --gpu
           python3 scripts/test-rpg-assets.py --gpu
+
+      - name: Verify bounded acceptance failure evidence
+        run: python3 scripts/test-acceptance-evidence.py
+
+      - name: Exercise native RPG and arena control with failure evidence
+        run: |
+          python3 scripts/test-control-loop.py
+          python3 games/arena/scripts/test-control.py
+
+      - name: Verify real acceptance failure retention and cleanup
+        run: python3 scripts/test-acceptance-failure-integration.py
+
+      - name: Upload sanitized native acceptance failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-failures-${{ github.job }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            target/acceptance-failures/*/context.json
+            target/acceptance-failures/*/commands.log
+            target/acceptance-failures/*/runtime.log
+            target/acceptance-failures/*/bundle.json
+            target/acceptance-failures/*/api.txt
+            target/acceptance-failures/*/capture.png
+            target/acceptance-failures/*/latest-capture.ppm
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false

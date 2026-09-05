@@ -9,6 +9,8 @@ import time
 import urllib.error
 import urllib.request
 
+from acceptance_evidence import FailureEvidence
+
 REPO = Path(__file__).resolve().parent.parent
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", REPO / "target"))
 if not TARGET.is_absolute():
@@ -17,29 +19,36 @@ CLI = TARGET / "debug" / "titan"
 GAME = TARGET / "debug" / "examples" / "procedural_rpg"
 
 
-def main():
-    processes.run(
-        ["cargo", "build", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
-        cwd=REPO,
-        check=True, phase="build",
-    )
+def main(failures):
+    with failures.runtime_log() as build_log:
+        failures.record_command(["cargo", "build", "RPG and CLI"], None)
+        processes.run(
+            ["cargo", "build", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
+            cwd=REPO,
+            check=True, phase="build",
+            stdout=build_log, stderr=build_log,
+        )
     with tempfile.TemporaryDirectory(prefix="titan-control-loop-") as directory:
         project = Path(directory).resolve()
-        with tempfile.TemporaryFile(mode="w+") as log:
+        with failures.runtime_log() as log:
             game = processes.Popen(
                 [str(GAME), "--serve", "--project", str(project), "--instance", "acceptance", "--allow-mutation", "--run-for-ms", "30000"],
                 cwd=REPO,
                 project=project, instance="acceptance", stdout=log,
                 stderr=log,
             )
+            failures.record_process(game)
             try:
                 def cli(*arguments, success=True):
+                    failures.record_command(arguments, None)
                     output = processes.run(
                         [str(CLI), "--format", "json", "--project", str(project), "--instance", "acceptance", *arguments],
                         capture_output=True,
                         text=True,
                     )
+                    failures.record_command(arguments, output)
                     result = json.loads(output.stdout)  # Rejects extra stdout content.
+                    failures.observe(result)
                     assert (output.returncode == 0) == success, result
                     assert result["status"] == ("success" if success else "failure"), result
                     return result
@@ -92,6 +101,7 @@ def main():
                 assert (manifest.parent / bundle["capture"]["artifact"]).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 assert "spawn_shard" in (manifest.parent / "api.txt").read_text()
                 assert "request" in bundle["timings_us"]
+                failures.checkpoint("diagnostic")
                 # The CLI preserves the richer runtime bundle instead of writing a duplicate.
                 assert len(list((project / "target/titan/diagnostics").glob("*/bundle.json"))) == 1
                 cli("invoke", "spawn_shard", "--arguments", '{"x":0,"y":0}')
@@ -113,6 +123,7 @@ def main():
                 assert cli("entity", str(player["index"]), str(player["generation"]))["response"]["components"][position_type]["x"] == 9
                 registration_path = next((project / "target/titan/instances").glob("*.json"))
                 registration = json.loads(registration_path.read_text())
+                failures.redact_secret(registration["token"])
                 request = urllib.request.Request(
                     registration["endpoint"],
                     data=json.dumps({"schema_version": registration["schema_version"] + 1, "request_id": "mismatch", "request": {"type": "status"}}).encode(),
@@ -131,4 +142,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with FailureEvidence("rpg-control", repo=REPO) as failures:
+        main(failures)
