@@ -55,3 +55,5 @@ for current instructions; measurements and environments describe specific runs.
   and [snapshot verification](arena-save-load.md).
 - [Host setup audit](host-setup-audit.md) and [workflow verification](host-workflow-verification.md).
 - [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
+
+- [Inspection failure repair evidence](inspection-repair/README.md).
