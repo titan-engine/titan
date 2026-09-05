@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 
-test('RPG page uses authoritative pause and exposes local playback without inspection opt-in', async () => {
+for (const failedSprite of ['player.png', 'tree.png']) test('RPG page uses authoritative pause and exposes local playback without inspection opt-in', async () => {
   const element = () => ({
     handlers: {}, clientWidth: 640, clientHeight: 448,
     addEventListener(name, callback) { this.handlers[name] = callback; },
@@ -41,8 +41,8 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
     window, location: { origin: 'http://localhost' },
     ResizeObserver: class { observe() {} },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    init: async () => {}, BrowserPlayer: { create_with_player_png: async () => { created++; return player; } },
-    loadPlayerPng: async () => { if (failAsset) throw new Error('Could not load ../assets/player.png: HTTP 404'); return new Uint8Array(); },
+    init: async () => {}, BrowserPlayer: { create_with_pngs: async (_canvas, playerBytes, treeBytes) => { assert.deepEqual([...playerBytes], [1]); assert.deepEqual([...treeBytes], [2]); created++; return player; } },
+    loadRpgPngs: async () => { if (failAsset) throw new Error(`Could not load ../assets/${failedSprite}: HTTP 404`); return { player: new Uint8Array([1]), tree: new Uint8Array([2]) }; },
     bindJournalInput: () => ({ cancel() {}, cancelHeld() {}, onKey: () => false }),
     bindPlayerInput: options => { input = options; return { cancel() {} }; },
     readRecordingForSession: async file => { if (file.reject) throw new Error('Invalid recording'); return '{}'; },
@@ -52,7 +52,7 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
   await click('start');
   assert.equal(created, 0, 'failed asset must not construct or run a game');
   assert.equal(paused, true);
-  assert.match(ids.error.textContent, /player.png: HTTP 404/);
+  assert.match(ids.error.textContent, new RegExp(`${failedSprite}: HTTP 404`));
   assert.equal(ids.start.textContent, 'Retry');
   assert.equal(ids.start.disabled, false);
   failAsset = false;

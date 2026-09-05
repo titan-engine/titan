@@ -1,9 +1,9 @@
-import init, { BrowserPlayer, verify_recording_json_with_player_png } from '../inspector/pkg/titan_browser.js';
+import init, { BrowserPlayer, verify_recording_json_with_pngs } from '../inspector/pkg/titan_browser.js';
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
 import { readRecordingForSession } from './replay.mjs';
 import { bindJournalInput } from './journal.mjs';
-import { loadPlayerPng } from '../shared/player-asset.mjs';
+import { loadRpgPngs } from '../shared/player-asset.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -24,7 +24,7 @@ const recordingResult = document.querySelector('#recording-result');
 const actions = ['up', 'down', 'left', 'right'];
 const keys = new Map([['ArrowUp', 'up'], ['w', 'up'], ['W', 'up'], ['ArrowDown', 'down'], ['s', 'down'], ['S', 'down'], ['ArrowLeft', 'left'], ['a', 'left'], ['A', 'left'], ['ArrowRight', 'right'], ['d', 'right'], ['D', 'right']]);
 let player;
-let playerPng;
+let pngs;
 let lastTime;
 let animation;
 let loading = false;
@@ -46,7 +46,7 @@ function failure(error) {
   errorPanel.textContent = `GPU player stopped: ${error.message ?? error}\nRetry starts a fresh scene.`;
   for (const button of [pause, replay, loadRecording, exportRecording, step, restartPlayback, exitPlayback, inspect]) button.disabled = true;
   document.querySelectorAll('[data-action]').forEach(button => button.disabled = true);
-  input.cancel(); player?.free(); player = undefined;
+  input.cancel(); player?.free(); player = undefined; pngs = undefined;
   start.disabled = false; start.textContent = 'Retry';
 }
 function updateStatus() {
@@ -92,10 +92,10 @@ function local(action) { try { action(); refresh(); } catch (error) { recordingR
 start.addEventListener('click', async () => {
   start.disabled = true; errorPanel.hidden = true;
   try {
-    start.textContent = 'Loading player.png…';
+    start.textContent = 'Loading sprites…';
     await init();
-    playerPng = await loadPlayerPng();
-    player = await BrowserPlayer.create_with_player_png(canvas, playerPng); player.resume();
+    pngs = await loadRpgPngs();
+    player = await BrowserPlayer.create_with_pngs(canvas, pngs.player, pngs.tree); player.resume();
     resize(); lastTime = undefined; pause.disabled = false; replay.disabled = false;
     exportRecording.disabled = inspect.disabled = false; controls.checked = false;
     start.textContent = 'Playing'; canvas.focus(); animation = requestAnimationFrame(loop);
@@ -125,7 +125,7 @@ loadRecording.addEventListener('change', async () => {
 exportRecording.addEventListener('click', () => local(() => {
   const recording = query('recording');
   const text = JSON.stringify(recording);
-  const verification = JSON.parse(verify_recording_json_with_player_png(text, playerPng));
+  const verification = JSON.parse(verify_recording_json_with_pngs(text, pngs.player, pngs.tree));
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'rpg-recording.json'; link.click();
   URL.revokeObjectURL(url);

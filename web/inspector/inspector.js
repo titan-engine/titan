@@ -1,4 +1,4 @@
-import { loadPlayerPng } from "../shared/player-asset.mjs";
+import { loadRpgPngs } from "../shared/player-asset.mjs";
 import { bridgeResponse, typedArgument } from "./bridge.mjs";
 
 async function initialize() {
@@ -19,7 +19,7 @@ async function initialize() {
     };
   }
   function request(body) {
-    if (!runtime) throw new Error("Runtime unavailable. Retry loading player.png before inspection.");
+    if (!runtime) throw new Error("Runtime unavailable. Retry loading sprites before inspection.");
     const envelope = { schema_version: 1, request_id: `browser-ui-${++sequence}`, request: body };
     const result = JSON.parse(runtime.handle(JSON.stringify(envelope)));
     text("last-response", JSON.stringify(result, null, 2));
@@ -129,15 +129,15 @@ async function initialize() {
     $("reference-route").hidden = true; $("reference-route").disabled = true;
     $("scene").removeAttribute("src"); $("capture-placeholder").hidden = false;
     for (const id of ["entity-details", "entity-count", "capabilities", "last-response", "capture-info"]) text(id, "");
-    text("runtime-status", "Waiting for player asset");
-    text("mode", "Loading player.png…");
+    text("runtime-status", "Waiting for sprites");
+    text("mode", "Loading sprites…");
     try {
-      const bytes = await loadPlayerPng();
-      runtime = BrowserRuntime.with_player_png(control, bytes);
+      const pngs = await loadRpgPngs();
+      runtime = BrowserRuntime.with_pngs(control, pngs.player, pngs.tree);
     } catch (error) {
       text("mode", "Runtime unavailable");
-      text("runtime-status", "Player asset failed to load");
-      text("session-note", "Fix assets/player.png, then retry. No game has started.");
+      text("runtime-status", "Sprite loading failed");
+      text("session-note", "Fix the reported sprite in assets/, then retry. No game has started.");
       $("enable-controls").textContent = "Retry"; $("enable-controls").disabled = false;
       throw error;
     }

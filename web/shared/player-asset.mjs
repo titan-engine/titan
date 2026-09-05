@@ -33,3 +33,12 @@ export async function loadPlayerPng({ fetch = globalThis.fetch, url = '../assets
     controller.abort();
   }
 }
+
+/** Each source has its own byte/time budget. No partial pair escapes to a host. */
+export async function loadRpgPngs(options = {}) {
+  const [player, tree] = await Promise.all([
+    loadPlayerPng({ ...options, url: '../assets/player.png' }),
+    loadPlayerPng({ ...options, url: '../assets/tree.png' }),
+  ]);
+  return { player, tree };
+}
