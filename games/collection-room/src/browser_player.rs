@@ -118,24 +118,31 @@ impl BrowserPlayer {
         self.session.paused()
     }
     pub fn step(&mut self) -> Result<(), JsValue> {
-        self.session.step().map_err(js)
+        self.session.step().map_err(|error| js(error.message))
     }
     pub fn restart(&mut self) {
         self.session.restart();
         self.session.pause();
     }
     pub fn replay_route(&mut self) -> Result<(), JsValue> {
-        self.session.load_replay(reference_recording()).map_err(js)
+        self.session
+            .load_replay(reference_recording())
+            .map_err(|error| js(error.message))
     }
     pub fn load_recording(&mut self, json: &str) -> Result<(), JsValue> {
         if json.len() > 2 * 1024 * 1024 {
             return Err(js("recording exceeds 2 MiB"));
         }
         let recording = serde_json::from_str(json).map_err(js)?;
-        self.session.load_replay(recording).map_err(js)
+        self.session
+            .load_replay(recording)
+            .map_err(|error| js(error.message))
     }
     pub fn recording(&self) -> Result<String, JsValue> {
-        serde_json::to_string(&game::recording(self.session.app()).map_err(js)?).map_err(js)
+        serde_json::to_string(
+            &game::recording(self.session.app()).map_err(|error| js(error.message))?,
+        )
+        .map_err(js)
     }
     pub fn status(&self) -> String {
         let mut status = game::status(self.session.app());

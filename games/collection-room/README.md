@@ -188,3 +188,9 @@ without retaining the runtime borrow. `handle` remains an immediate-only
 convenience for semantic calls. Native requests use the same owned dispatch and
 deferred reply boundary. This package still advertises no capture capability;
 collection-room GPU capture wiring belongs to #48.
+
+[Recorded player acceptance](evidence/player-acceptance.json) verifies native Metal
+on Apple M5 Pro, actual browser WebGPU, and Chromium WebGL2 via ANGLE Metal.
+The actual native run presented 170 GPU frames and verified a real 800 × 500
+window resize as well as zero-size suspension. Device loss was not physically
+forced; supported failure-policy branches have unit coverage.

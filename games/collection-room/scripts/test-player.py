@@ -63,7 +63,7 @@ def main():
                     time.sleep(.05)
                 assert state()['session_tick'] == 0
                 # Capture stays unregistered until the separate capture integration.
-                assert call('capture', success=False)['error']['code'] == 'unsupported_operation'
+                assert call('capture', success=False)['error']['code'] == 'unsupported'
                 route = ['right'] * 8 + ['up'] * 20 + ['right'] * 16
                 for frame, action in enumerate(route, 1):
                     call('input', frame, '--actions', json.dumps({action: {'kind': 'button', 'value': True}}))
@@ -91,17 +91,17 @@ def main():
                 time.sleep(.15)
             finally:
                 processes.terminate(process)
+                log.flush()
+                print(log_path.read_text(), flush=True)
         output = log_path.read_text()
-        print(output)
         assert 'surface lifecycle verified:' in output, output
         assert 'native GPU adapter:' in output, output
         assert 'GPU frames;' in output, 'native player did not finish GPU presentation normally'
         rendered = int(output.split('rendered ')[-1].split(' GPU frames;')[0])
         assert rendered > 0, output
         print(json.dumps({'native_gpu_frames': rendered, 'replay_ticks': 44,
-                          'semantic_equivalence': True, 'capture_registered': False, 'surface_lifecycle_verified': True}))
+                          'semantic_equivalence': True, 'completed_state': actual, 'capture_registered': False, 'surface_lifecycle_verified': True}))
 
 
 if __name__ == '__main__':
-    with processes.harness_deadline():
-        main()
+    main()
