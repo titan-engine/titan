@@ -59,7 +59,7 @@ def main():
                 capabilities = cli("capabilities")["response"]["operations"]
                 assert {"inspect", "invoke", "inject_input", "step", "capture"} <= set(capabilities)
                 entities = cli("entities")["response"]["entities"]
-                assert len(entities) == 6
+                assert len([entity for entity in entities if not (entity.get("name") or "").startswith("ui/journal/")]) == 6
                 shrine = next(entity["id"] for entity in entities if entity["name"] == "shrine")
                 assert any(command['name'] == 'spawn_shard' for command in cli('commands')['response']['commands'])
                 frame = 0
@@ -71,7 +71,7 @@ def main():
                 assert stepped["observed_frame"] == 11
                 details = cli("entity", str(shrine["index"]), str(shrine["generation"]))["response"]
                 assert any(name.endswith("::ActiveShrine") for name in details["components"])
-                assert {entity["name"] for entity in cli("entities")["response"]["entities"]} == {"player", "shrine", "ui/quest"}
+                assert {entity["name"] for entity in cli("entities")["response"]["entities"] if not (entity.get("name") or "").startswith("ui/journal/")} == {"player", "shrine", "ui/quest"}
                 capture = cli("capture")["response"]
                 assert capture["checksum"] == "f7a298f62ad75c1c", capture
                 artifact = Path(capture["artifact"])

@@ -61,6 +61,19 @@ impl BrowserLiveRuntime {
             .set_action(name, pressed)
             .map_err(|error| JsValue::from_str(&error))
     }
+    pub fn journal_open(&self) -> bool {
+        self.session.journal_open()
+    }
+    pub fn journal_key(&mut self, key: &str) -> bool {
+        self.session.journal_key(key)
+    }
+    /// Headless gestures use logical framebuffer coordinates.
+    pub fn journal_pointer(&mut self, x: i32, y: i32, pressed: bool) -> bool {
+        self.session.journal_pointer(Some((x, y)), pressed)
+    }
+    pub fn cancel_journal_input(&mut self) {
+        self.session.cancel_journal_input();
+    }
     pub fn paused(&self) -> bool {
         self.session.paused()
     }

@@ -206,6 +206,7 @@ pub fn load(app: &mut App, value: Value) -> Result<(), ProtocolError> {
             .text
             .clone_from(&text);
     }
+    journal::reset(app.world_mut());
     app.refresh_extracted();
     Ok(())
 }

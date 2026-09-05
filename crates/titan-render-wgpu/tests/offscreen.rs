@@ -275,38 +275,46 @@ fn completed_rpg_replay_matches_software_capture() {
         let state: serde_json::Value = serde_json::from_str(&game::status(&app)).unwrap();
         assert_eq!(state["shrine_active"], true);
         assert_eq!(state["collected_shards"], 3);
-        let frame = app
-            .extracted::<RenderFrame>()
-            .expect("RPG extracted render frame");
-        let assets = app.world().resource::<ImageAssets>().unwrap();
-        let reference = SoftwareRenderer::render(frame, assets).unwrap();
-        let reference_checksum = game::image_checksum(&reference);
-        assert_eq!(reference_checksum, 0xf7a298f62ad75c1c);
-        let tolerance = std::env::var("TITAN_GPU_TOLERANCE")
-            .map(|s| s.parse::<u8>().expect("TITAN_GPU_TOLERANCE must be a u8"))
-            .unwrap_or(2);
-        for format in [
-            wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-        ] {
-            let mut renderer = GpuRenderer::new(device.clone(), queue.clone(), format);
-            renderer.prepare(frame, assets).unwrap();
-            let actual = pixels(
-                &device,
-                &queue,
-                &renderer,
-                frame.width(),
-                frame.height(),
-                format,
-            );
-            compare(&actual, reference.pixels(), tolerance);
-            let image = Image::new(frame.width(), frame.height(), actual).unwrap();
-            eprintln!(
-                "RPG {format:?}: GPU checksum {:016x}, software checksum {reference_checksum:016x}, tolerance {tolerance}",
-                game::image_checksum(&image)
-            );
-            if tolerance == 0 {
-                assert_eq!(game::image_checksum(&image), reference_checksum);
+        for journal_open in [false, true] {
+            game::journal::set_open(app.world_mut(), journal_open);
+            app.refresh_extracted();
+            let frame = app
+                .extracted::<RenderFrame>()
+                .expect("RPG extracted render frame");
+            let assets = app.world().resource::<ImageAssets>().unwrap();
+            let reference = SoftwareRenderer::render(frame, assets).unwrap();
+            let reference_checksum = game::image_checksum(&reference);
+            if !journal_open {
+                assert_eq!(reference_checksum, 0xf7a298f62ad75c1c);
+            } else {
+                assert_ne!(reference_checksum, 0xf7a298f62ad75c1c);
+            }
+            let tolerance = std::env::var("TITAN_GPU_TOLERANCE")
+                .map(|s| s.parse::<u8>().expect("TITAN_GPU_TOLERANCE must be a u8"))
+                .unwrap_or(2);
+            for format in [
+                wgpu::TextureFormat::Rgba8Unorm,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+            ] {
+                let mut renderer = GpuRenderer::new(device.clone(), queue.clone(), format);
+                renderer.prepare(frame, assets).unwrap();
+                let actual = pixels(
+                    &device,
+                    &queue,
+                    &renderer,
+                    frame.width(),
+                    frame.height(),
+                    format,
+                );
+                compare(&actual, reference.pixels(), tolerance);
+                let image = Image::new(frame.width(), frame.height(), actual).unwrap();
+                eprintln!(
+                    "RPG {format:?}: GPU checksum {:016x}, software checksum {reference_checksum:016x}, tolerance {tolerance}",
+                    game::image_checksum(&image)
+                );
+                if tolerance == 0 {
+                    assert_eq!(game::image_checksum(&image), reference_checksum);
+                }
             }
         }
     });

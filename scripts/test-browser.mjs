@@ -37,7 +37,7 @@ for (const request of [
   assert.equal(result.state_revision, 0);
   assert.equal(result.error.code, 'mutation_disabled');
 }
-assert.equal(call(readOnly, { type: 'entities' }).response.entities.length, 6);
+assert.equal(call(readOnly, { type: 'entities' }).response.entities.filter(entity => !entity.name?.startsWith('ui/journal/')).length, 6);
 assert.equal(call(readOnly, { type: 'capture' }).response.checksum, readOnlyCapture);
 assert.deepEqual(call(readOnly, { type: 'entity', entity: readOnlyPlayer }).response, readOnlyDetails);
 readOnly.free();
@@ -66,7 +66,7 @@ const stepped = call(runtime, { type: 'step', frames: 11 });
 assert.equal(stepped.observed_frame, 11);
 const details = call(runtime, { type: 'entity', entity: shrine }).response;
 assert.ok(Object.keys(details.components).some(name => name.endsWith('::ActiveShrine')));
-assert.equal(call(runtime, { type: 'entities' }).response.entities.length, 3);
+assert.equal(call(runtime, { type: 'entities' }).response.entities.filter(entity => !entity.name?.startsWith('ui/journal/')).length, 3);
 assert.equal(hudDetails().components[uiText].text, 'SHARDS 3/3  SHRINE ACTIVE');
 const capture = call(runtime, { type: 'capture' }).response;
 assert.equal(capture.checksum, 'f7a298f62ad75c1c');

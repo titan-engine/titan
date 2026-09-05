@@ -42,6 +42,37 @@ impl BrowserPlayer {
         self.session.set_action(name, pressed).map_err(js_error)
     }
 
+    pub fn journal_open(&self) -> bool {
+        self.session.journal_open()
+    }
+
+    pub fn journal_key(&mut self, key: &str) -> bool {
+        self.session.journal_key(key)
+    }
+
+    /// Canvas backing pixels; nonfinite coordinates represent an outside pointer.
+    pub fn journal_pointer(&mut self, x: f64, y: f64, pressed: bool) -> bool {
+        let point = self
+            .session
+            .app()
+            .extracted::<RenderFrame>()
+            .and_then(|frame| {
+                titan::ui::point_from_surface(
+                    x,
+                    y,
+                    f64::from(self.canvas.width()),
+                    f64::from(self.canvas.height()),
+                    frame.width(),
+                    frame.height(),
+                )
+            });
+        self.session.journal_pointer(point, pressed)
+    }
+
+    pub fn cancel_journal_input(&mut self) {
+        self.session.cancel_journal_input();
+    }
+
     /// Cancel held actions and buffered taps on focus loss or pause.
     pub fn clear_input(&mut self) {
         self.session.clear_input();
@@ -87,6 +118,7 @@ impl BrowserPlayer {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        self.session.cancel_journal_input();
         let (width, height) = self.renderer.resize(width, height);
         self.canvas.set_width(width);
         self.canvas.set_height(height);

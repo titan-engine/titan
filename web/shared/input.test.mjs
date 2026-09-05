@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import { bindPlayerInput } from './input.mjs';
+import { bindJournalInput } from '../play/journal.mjs';
 
 // Exercise each shipped page's lifecycle with event-buffering semantics. The
 // native and actual-WASM tests separately verify game-specific tick sampling.
@@ -43,6 +44,8 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       clear_input() { held.clear(); pending.clear(); },
       cancel_action(action) { held.delete(action); pending.delete(action); },
       pointer() { return false; }, cancel_pointer() {},
+      journal_open() { return false; }, journal_key() { return false; },
+      journal_pointer() { return false; }, cancel_journal_input() {},
       resize() {}, frame() {}, free() {}, replay_reference() {},
       restart() { paused = true; epoch++; },
       pause() { paused = true; epoch++; },
@@ -58,6 +61,7 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       window, document, URLSearchParams, location: { search: '' },
       requestAnimationFrame: () => 1, cancelAnimationFrame() {},
       ResizeObserver: class { observe() {} },
+      bindJournalInput: options => bindJournalInput({ ...options, window, document }),
       bindCanvasPointer: options => bindCanvasPointer({ ...options, window, document }),
       bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
       init: async () => {}, BrowserPlayer: { create: async () => player },

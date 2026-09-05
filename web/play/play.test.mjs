@@ -19,6 +19,7 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
   const player = {
     resize() {}, frame() {}, free() {}, clear_input() {},
     paused: () => paused,
+    journal_open: () => false,
     clock_epoch: () => String(epoch),
     playback_active: () => active,
     playback_status: () => JSON.stringify({ active, position, total: 2, complete: active && position === 2, verified: active && position === 2 }),
@@ -39,6 +40,7 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
     ResizeObserver: class { observe() {} },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     init: async () => {}, BrowserPlayer: { create: async () => player },
+    bindJournalInput: () => ({ cancel() {}, cancelHeld() {}, onKey: () => false }),
     bindPlayerInput: options => { input = options; return { cancel() {} }; },
     readRecordingForSession: async file => { if (file.reject) throw new Error('Invalid recording'); return '{}'; },
   });

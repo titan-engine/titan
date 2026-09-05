@@ -1,3 +1,5 @@
+#[path = "rpg_journal.rs"]
+pub mod journal;
 #[path = "rpg_live.rs"]
 pub mod live;
 #[path = "rpg_snapshot.rs"]
@@ -20,7 +22,7 @@ use titan::input::{InputRecording, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
-use titan::ui::{BitmapFont, UiNode, UiText, append_ui, register_ui_inspection};
+use titan::ui::{BitmapFont, UiNode, UiText, append_ui_filtered, register_ui_inspection};
 use titan::{
     App, Commands, Component, FixedTime, FixedUpdate, Name, Query, Res, ResMut, Startup, World,
 };
@@ -104,6 +106,7 @@ pub fn build_game() -> App {
     app.add_systems(FixedUpdate, collect_shards);
     app.add_systems(FixedUpdate, activate_shrine);
     app.add_systems(FixedUpdate, sync_quest_ui);
+    app.add_systems(FixedUpdate, journal::sync_labels);
     app.add_systems(FixedUpdate, titan::ApplyDeferred);
     app.add_systems(FixedUpdate, live::finish_tick);
     app.add_extractor(render_frame);
@@ -286,6 +289,15 @@ pub fn render_image(world: &World) -> Result<Image, ProtocolError> {
     })
 }
 
+pub fn render_replay_image(world: &World) -> Result<Image, ProtocolError> {
+    let assets = world
+        .resource::<ImageAssets>()
+        .ok_or_else(|| ProtocolError::new(ErrorCode::Busy, "run startup before capturing"))?;
+    SoftwareRenderer::render(&render_frame_view(world, false), assets).map_err(|error| {
+        ProtocolError::new(ErrorCode::Internal, format!("render failed: {error:?}"))
+    })
+}
+
 fn apply_scheduled_input(
     time: Res<FixedTime>,
     mut scheduled: ResMut<ScheduledInput>,
@@ -320,6 +332,7 @@ fn setup(world: &mut World) {
         UiNode::new(4, 4, 152, 5),
         UiText::new("SHARDS 0/3").with_color(Color::rgb(255, 248, 217)),
     ));
+    journal::setup(world);
 }
 
 fn sync_quest_ui(state: Res<QuestState>, mut labels: Query<(&mut UiText, &QuestHud)>) {
@@ -379,6 +392,10 @@ fn activate_shrine(mut shrines: Query<&Shrine>, state: Res<QuestState>, mut comm
 }
 
 fn render_frame(world: &World) -> RenderFrame {
+    render_frame_view(world, true)
+}
+
+fn render_frame_view(world: &World, show_journal: bool) -> RenderFrame {
     let art = *world.resource::<Art>().unwrap();
     let shrine_active = world.resource::<QuestState>().unwrap().shrine_active;
     let mut frame = RenderFrame::new(
@@ -455,7 +472,12 @@ fn render_frame(world: &World) -> RenderFrame {
             .with_layer(layer),
         );
     }
-    append_ui(world, &mut frame);
+    if show_journal {
+        journal::append_background(world, &mut frame);
+    }
+    append_ui_filtered(world, &mut frame, |entity| {
+        show_journal || world.get::<journal::JournalNode>(entity).is_none()
+    });
     frame
 }
 
@@ -928,7 +950,7 @@ mod tests {
         )) else {
             panic!("expected entities")
         };
-        assert_eq!(page.entities.len(), 6);
+        assert_eq!(page.entities.len(), 11);
         let hud = page
             .entities
             .iter()
@@ -1014,7 +1036,7 @@ mod tests {
         )) else {
             panic!("expected entities")
         };
-        assert_eq!(page.entities.len(), 3);
+        assert_eq!(page.entities.len(), 8);
         let Response::Capture(capture) =
             success(request(&mut app, &mut inspector, Request::Capture))
         else {
@@ -1093,7 +1115,7 @@ mod tests {
                 matches!(response.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
             );
         }
-        assert_eq!(app.world().entities().count(), 6);
+        assert_eq!(app.world().entities().count(), 11);
         assert!(
             !app.world()
                 .resource::<super::ScheduledInput>()

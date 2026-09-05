@@ -33,7 +33,7 @@ mod native {
     use winit::{
         application::ApplicationHandler,
         dpi::LogicalSize,
-        event::{ElementState, WindowEvent},
+        event::{ElementState, MouseButton, WindowEvent},
         event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowId},
@@ -47,6 +47,9 @@ mod native {
         duration: Option<Duration>,
         clock_epoch: u64,
         held_keys: HashSet<KeyCode>,
+        pointer: Option<(f64, f64)>,
+        pointer_down: bool,
+        shift: bool,
         window: Option<Arc<Window>>,
         renderer: Option<SurfaceRenderer>,
         previous: Instant,
@@ -109,7 +112,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play_rpg [--replay] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; P pauses/resumes; R restarts; Escape exits.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--replay renders the completed reference walk.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
+                        "play_rpg [--replay] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; J opens the quest journal; arrows/Tab navigate, Enter selects, Escape closes. P pauses/resumes; R restarts; Escape exits when the journal is closed.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--replay renders the completed reference walk.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -183,6 +186,9 @@ mod native {
             duration,
             clock_epoch,
             held_keys: HashSet::new(),
+            pointer: None,
+            pointer_down: false,
+            shift: false,
             window: None,
             renderer: None,
             previous: Instant::now(),
@@ -278,18 +284,55 @@ mod native {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::Resized(size) => {
+                    self.cancel_gestures();
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }
                 }
                 WindowEvent::Focused(false) => {
-                    self.held_keys.clear();
-                    self.session.clear_input();
+                    self.cancel_gestures();
+                    self.shift = false;
+                }
+                WindowEvent::ModifiersChanged(modifiers) => {
+                    self.shift = modifiers.state().shift_key();
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.pointer = Some((position.x, position.y));
+                    self.send_pointer();
+                }
+                WindowEvent::CursorLeft { .. } => {
+                    self.pointer = None;
+                    self.send_pointer();
+                }
+                WindowEvent::MouseInput {
+                    state,
+                    button: MouseButton::Left,
+                    ..
+                } => {
+                    self.pointer_down = state == ElementState::Pressed;
+                    self.send_pointer();
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
                     let PhysicalKey::Code(key) = event.physical_key else {
                         return;
                     };
+                    if event.state == ElementState::Pressed {
+                        let was_open = self.session.journal_open();
+                        let journal_key = match key {
+                            KeyCode::KeyJ => "toggle",
+                            KeyCode::ArrowDown => "next",
+                            KeyCode::ArrowUp => "previous",
+                            KeyCode::Tab if self.shift => "previous",
+                            KeyCode::Tab => "next",
+                            KeyCode::Enter | KeyCode::Space => "activate",
+                            KeyCode::Escape => "close",
+                            _ => "",
+                        };
+                        if (!event.repeat && self.session.journal_key(journal_key)) || was_open {
+                            self.sync_clock();
+                            return;
+                        }
+                    }
                     if key == KeyCode::Escape && event.state == ElementState::Pressed {
                         event_loop.exit();
                         return;
@@ -341,7 +384,11 @@ mod native {
                     }
                     // A key still physically down across pause/focus loss must
                     // not be resurrected by the operating system's repeat event.
-                    if self.session.paused() || self.session.replay_active() || event.repeat {
+                    if self.session.paused()
+                        || self.session.replay_active()
+                        || self.session.journal_open()
+                        || event.repeat
+                    {
                         return;
                     }
                     if let Some((action, pressed)) = update_key(
@@ -399,8 +446,33 @@ mod native {
     }
 
     impl Player {
+        fn cancel_gestures(&mut self) {
+            self.held_keys.clear();
+            self.pointer_down = false;
+            self.session.cancel_journal_input();
+        }
+
+        fn send_pointer(&mut self) {
+            let point = self.pointer.and_then(|(x, y)| {
+                let size = self.window.as_ref()?.inner_size();
+                let frame = self.session.app().extracted::<RenderFrame>()?;
+                titan::ui::point_from_surface(
+                    x,
+                    y,
+                    f64::from(size.width),
+                    f64::from(size.height),
+                    frame.width(),
+                    frame.height(),
+                )
+            });
+            self.session.journal_pointer(point, self.pointer_down);
+            self.sync_clock();
+        }
+
         fn window_title(&self) -> String {
-            if self.session.replay_active() {
+            if self.session.journal_open() {
+                "Titan — Quest journal · Arrows/Tab navigate · Enter selects · Escape closes".into()
+            } else if self.session.replay_active() {
                 let replay = self.session.replay_status();
                 let state = if replay["complete"].as_bool().unwrap_or(false) {
                     if replay["verified"].as_bool() == Some(true) {
@@ -439,6 +511,7 @@ mod native {
             if epoch != self.clock_epoch {
                 self.clock_epoch = epoch;
                 self.held_keys.clear();
+                self.pointer_down = false;
                 self.accumulated = Duration::ZERO;
                 self.previous = Instant::now();
             }

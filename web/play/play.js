@@ -2,6 +2,7 @@ import init, { BrowserPlayer, verify_recording_json } from '../inspector/pkg/tit
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
 import { readRecordingForSession } from './replay.mjs';
+import { bindJournalInput } from './journal.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -27,12 +28,14 @@ let animation;
 let loading = false;
 let requestId = 0;
 let epoch;
+const journal = bindJournalInput({ canvas, player: () => player, changed: () => { if (player) refresh(); } });
 const input = bindPlayerInput({
   canvas, buttons: document.querySelectorAll('[data-action]'), keys, actions,
-  isRunning: () => Boolean(player && !player.paused() && !player.playback_active()),
+  isRunning: () => Boolean(player && !player.paused() && !player.playback_active() && !player.journal_open()),
   setAction: (action, pressed) => player?.set_action(action, pressed),
   cancelAction: action => player?.cancel_action(action),
   clearInput: () => player?.clear_input(),
+  onKey: event => journal.onKey(event),
   onHidden: () => { lastTime = undefined; },
 });
 function failure(error) {
@@ -46,7 +49,7 @@ function failure(error) {
 }
 function updateStatus() {
   if (epoch !== player.clock_epoch()) {
-    input.cancel(); lastTime = undefined; epoch = player.clock_epoch();
+    input.cancel(); journal.cancelHeld(); lastTime = undefined; epoch = player.clock_epoch();
     output.textContent = ''; recordingResult.textContent = '';
   }
   const state = JSON.parse(player.status());
@@ -54,11 +57,11 @@ function updateStatus() {
   status.textContent = `Frame ${state.frame} · ${state.collected_shards} / 3 shards`;
   result.textContent = state.shrine_active ? 'The shrine is active. All three shards collected.' : '';
   pause.textContent = player.paused() ? 'Resume' : 'Pause';
-  pause.disabled = Boolean(playback.complete);
-  replay.disabled = playback.active;
-  loadRecording.disabled = !player.paused() || loading;
-  step.disabled = !playback.active || !player.paused() || playback.complete;
-  restartPlayback.disabled = exitPlayback.disabled = !playback.active;
+  pause.disabled = player.journal_open() || Boolean(playback.complete);
+  replay.disabled = player.journal_open() || playback.active;
+  loadRecording.disabled = player.journal_open() || !player.paused() || loading;
+  step.disabled = player.journal_open() || !playback.active || !player.paused() || playback.complete;
+  restartPlayback.disabled = exitPlayback.disabled = player.journal_open() || !playback.active;
   document.querySelectorAll('[data-action]').forEach(button => button.disabled = player.paused() || playback.active);
   playbackStatus.textContent = playback.active
     ? `Playback ${playback.position}/${playback.total} · ${playback.complete ? (playback.verified ? 'Complete · MATCH' : `Complete · MISMATCH: ${playback.error}`) : (player.paused() ? 'Paused' : 'Playing')}`
@@ -67,6 +70,7 @@ function updateStatus() {
 function refresh() { player.frame(0); updateStatus(); }
 function resize() {
   if (!player) return;
+  input.cancel(); journal.cancel();
   const scale = window.devicePixelRatio || 1;
   player.resize(Math.max(1, Math.round(canvas.clientWidth * scale)), Math.max(1, Math.round(canvas.clientHeight * scale)));
   refresh();

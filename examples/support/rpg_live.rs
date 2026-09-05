@@ -1,5 +1,5 @@
 //! RPG policy and snapshot validation around Titan's shared recording primitives.
-use super::{self as game, Action, snapshot};
+use super::{self as game, Action, journal, snapshot};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use titan::{
@@ -31,6 +31,7 @@ const IDENTITY: RecordingIdentity<'static> = RecordingIdentity {
 struct Control {
     paused: bool,
     epoch: u64,
+    journal_was_paused: bool,
 }
 struct Expected(Value);
 fn invalid(message: impl Into<String>) -> ProtocolError {
@@ -59,6 +60,7 @@ pub fn begin_recording(world: &mut World) {
         world.insert_resource(Control {
             paused: true,
             epoch: 0,
+            journal_was_paused: true,
         });
     }
 }
@@ -92,7 +94,7 @@ fn comparable(world: &World) -> Value {
 fn checksum(world: &World) -> Result<String, ProtocolError> {
     Ok(format!(
         "{:016x}",
-        game::image_checksum(&game::render_image(world)?)
+        game::image_checksum(&game::render_replay_image(world)?)
     ))
 }
 fn finish_playback(world: &mut World) {
@@ -116,6 +118,7 @@ fn finish_playback(world: &mut World) {
         .unwrap()
         .finish(result)
         .expect("first EOF verification");
+    journal::cancel(world);
     let control = world.resource_mut::<Control>().unwrap();
     control.paused = true;
     control.epoch += 1;
@@ -156,6 +159,7 @@ pub fn state(app: &App) -> Value {
     let mut value: Value = serde_json::from_str(&game::status(app)).unwrap();
     value["paused"] = app.world().resource::<Control>().unwrap().paused.into();
     value["replay"] = replay_status(app.world());
+    value["journal"] = journal::state(app.world());
     if let Ok(save) = snapshot::export(app) {
         value["player"] = save["player"].clone();
         value["remaining_shards"] = save["shards"].as_array().unwrap().len().into();
@@ -256,6 +260,51 @@ fn stop_replay(app: &mut App) -> Result<(), ProtocolError> {
     }
     restart(app)
 }
+// Journal presentation is transient. Opening suspends simulation without
+// changing a recording; closing restores the previous pause policy.
+fn journal_transition(app: &mut App, was_open: bool) {
+    let open = journal::is_open(app.world());
+    if open != was_open {
+        let control = app.world_mut().resource_mut::<Control>().unwrap();
+        if open {
+            control.journal_was_paused = control.paused;
+            control.paused = true;
+        } else {
+            control.paused = control.journal_was_paused;
+        }
+        reset_input(app);
+    }
+    app.refresh_extracted();
+}
+fn journal_key(app: &mut App, key: &str) -> bool {
+    let before = journal::is_open(app.world());
+    let consumed = journal::key(app.world_mut(), key);
+    journal_transition(app, before);
+    consumed
+}
+fn journal_pointer(
+    app: &mut App,
+    point: Option<(i32, i32)>,
+    pressed: bool,
+    physical: bool,
+) -> bool {
+    let before = journal::is_open(app.world());
+    let consumed = journal::pointer(app.world_mut(), point, pressed, physical);
+    journal_transition(app, before);
+    consumed
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JournalKeyArgs {
+    key: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JournalPointerArgs {
+    x: Option<i32>,
+    y: Option<i32>,
+    pressed: bool,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NoneArgs {}
@@ -322,6 +371,61 @@ pub fn register(inspector: &mut Inspector) {
         .unwrap();
 }
 fn register_controls(inspector: &mut Inspector) {
+    let mut key_metadata = metadata("journal_key", None);
+    key_metadata.description =
+        "Journal edge: toggle, next, previous, activate or close. Does not advance gameplay."
+            .into();
+    key_metadata.arguments.insert(
+        "key".into(),
+        FieldMetadata {
+            type_name: "String".into(),
+            description: "toggle | next | previous | activate | close".into(),
+            writable: false,
+            minimum: None,
+            maximum: None,
+            unit: None,
+        },
+    );
+    inspector
+        .register_command(key_metadata, |app, args: JournalKeyArgs| {
+            if !matches!(
+                args.key.as_str(),
+                "toggle" | "next" | "previous" | "activate" | "close"
+            ) {
+                return Err(invalid("unknown journal key"));
+            }
+            journal_key(app, &args.key);
+            Ok(())
+        })
+        .unwrap();
+    let mut pointer_metadata = metadata("journal_pointer", None);
+    pointer_metadata.description = "Logical primary pointer sample; omit both coordinates for an outside sample. Separate from physical gestures.".into();
+    for (name, ty) in [
+        ("x", "Option<i32>"),
+        ("y", "Option<i32>"),
+        ("pressed", "bool"),
+    ] {
+        pointer_metadata.arguments.insert(
+            name.into(),
+            FieldMetadata {
+                type_name: ty.into(),
+                description: "Logical framebuffer pointer sample".into(),
+                writable: false,
+                minimum: None,
+                maximum: None,
+                unit: None,
+            },
+        );
+    }
+    inspector
+        .register_command(pointer_metadata, |app, args: JournalPointerArgs| {
+            if args.x.is_some() != args.y.is_some() {
+                return Err(invalid("provide both pointer coordinates or neither"));
+            }
+            journal_pointer(app, args.x.zip(args.y), args.pressed, false);
+            Ok(())
+        })
+        .unwrap();
     inspector
         .register_command(
             metadata("load_save", Some("save")),
@@ -364,6 +468,19 @@ fn set_paused(app: &mut App, paused: bool) {
     {
         return;
     }
+
+    if journal::is_open(app.world()) {
+        // Explicit host/inspector pause overrides the policy restored on close.
+        app.world_mut()
+            .resource_mut::<Control>()
+            .unwrap()
+            .journal_was_paused = paused;
+        journal::cancel(app.world_mut());
+        reset_input(app);
+        app.refresh_extracted();
+        return;
+    }
+    journal::cancel(app.world_mut());
     if app.world().resource::<Control>().unwrap().paused != paused {
         app.world_mut().resource_mut::<Control>().unwrap().paused = paused;
         reset_input(app);
@@ -418,6 +535,40 @@ impl RpgSession {
     pub fn replay_status(&self) -> Value {
         replay_status(self.app.world())
     }
+    pub fn journal_open(&self) -> bool {
+        journal::is_open(self.app.world())
+    }
+    pub fn journal_key(&mut self, key: &str) -> bool {
+        let epoch = self.clock_epoch();
+        let consumed = journal_key(&mut self.app, key);
+        if epoch != self.clock_epoch() {
+            self.clear_input();
+        }
+        if consumed {
+            self.inspector.note_external_change();
+        }
+        self.inspector.set_controlled(self.paused());
+        consumed
+    }
+    pub fn journal_pointer(&mut self, point: Option<(i32, i32)>, pressed: bool) -> bool {
+        let epoch = self.clock_epoch();
+        let consumed = journal_pointer(&mut self.app, point, pressed, true);
+        if epoch != self.clock_epoch() {
+            self.clear_input();
+        }
+        if consumed {
+            self.inspector.note_external_change();
+        }
+        self.inspector.set_controlled(self.paused());
+        consumed
+    }
+    pub fn cancel_journal_input(&mut self) {
+        journal::cancel(self.app.world_mut());
+        reset_input(&mut self.app);
+        self.clear_input();
+        self.app.refresh_extracted();
+        self.inspector.note_external_change();
+    }
     pub fn clear_input(&mut self) {
         self.input.clear();
         self.app
@@ -425,7 +576,7 @@ impl RpgSession {
             .insert_resource(InputFrame::<Action>::default());
     }
     pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
-        if self.replay_active() {
+        if self.replay_active() || self.journal_open() || self.paused() {
             return Ok(());
         }
         self.input.set_action(name, pressed)
@@ -475,6 +626,9 @@ impl RpgSession {
     }
     pub fn step_replay(&mut self) -> Result<(), ProtocolError> {
         require_paused(&self.app)?;
+        if self.journal_open() {
+            return Err(invalid("close the journal before stepping"));
+        }
         if self
             .app
             .world()
@@ -503,6 +657,11 @@ impl RpgSession {
                 .map_or(StepBudget::DEFAULT.max_frames, |p| p.remaining() as u64),
             ..StepBudget::DEFAULT
         });
+        let modal_allowed = !self.journal_open()
+            || !matches!(
+                &request.request,
+                Request::Step { .. } | Request::InjectInput { .. } | Request::SetField { .. }
+            );
         let allowed = !self.replay_active()
             || match &request.request {
                 Request::SetField { .. } | Request::InjectInput { .. } => false,
@@ -514,6 +673,8 @@ impl RpgSession {
                         | "load_replay"
                         | "restart_replay"
                         | "stop_replay"
+                        | "journal_key"
+                        | "journal_pointer"
                 ),
                 _ => true,
             };
@@ -521,7 +682,7 @@ impl RpgSession {
         let response = handle_with_policy(
             &mut self.app,
             &mut self.inspector,
-            self.enable_control && allowed,
+            self.enable_control && allowed && modal_allowed,
             request,
         );
         if self.clock_epoch() != epoch {
@@ -623,11 +784,123 @@ mod tests {
         assert_eq!(session.replay_status()["verified"], true);
         assert_eq!(session.replay_status()["position"], 11);
         let end_frame = frame(session.app().world());
+        session.journal_key("toggle");
+        session.resume();
+        session.journal_key("close");
+        assert!(session.paused());
         session.resume();
         session.tick();
         assert_eq!(frame(session.app().world()), end_frame);
         session.stop_replay().unwrap();
         assert!(!session.replay_active());
         assert_eq!(state(session.app())["collected_shards"], 0);
+    }
+    #[test]
+    fn journal_preserves_pause_cancels_buffered_input_and_keeps_replay_canonical() {
+        let mut session = session();
+        session.resume();
+        session.set_action("right", true).unwrap();
+        let before = snapshot::export(session.app()).unwrap();
+        assert!(session.journal_key("toggle"));
+        assert!(session.journal_open() && session.paused());
+        session.tick();
+        assert_eq!(snapshot::export(session.app()).unwrap(), before);
+        let canonical = checksum(session.app().world()).unwrap();
+        assert_ne!(
+            canonical,
+            format!(
+                "{:016x}",
+                game::image_checksum(&game::render_image(session.app().world()).unwrap())
+            )
+        );
+        let artifact = recording(session.app()).unwrap();
+        assert_eq!(verify_recording(artifact).unwrap()["checksum"], canonical);
+        session.set_action("right", true).unwrap();
+        session.journal_key("close");
+        assert!(!session.paused());
+        session.tick();
+        assert_eq!(snapshot::export(session.app()).unwrap(), before);
+        session.pause();
+        session.journal_key("toggle");
+        session.journal_key("close");
+        assert!(session.paused());
+        session.resume();
+        session.journal_key("toggle");
+        session.pause();
+        session.journal_key("close");
+        assert!(
+            session.paused(),
+            "explicit pause while modal must survive close"
+        );
+    }
+
+    #[test]
+    fn journal_blocks_injected_ticks_and_load_rebuilds_transient_state() {
+        let mut session = session();
+        let save = snapshot::export(session.app()).unwrap();
+        // Queued future movement must be cleared by the modal transition.
+        let inject = RequestEnvelope::new(
+            "input",
+            Request::InjectInput {
+                frame: 1,
+                actions: [("right".into(), titan_protocol::InputValue::Button(true))].into(),
+            },
+        );
+        assert!(matches!(
+            session.handle(&inject).outcome,
+            ResponseOutcome::Success { .. }
+        ));
+        session.journal_key("toggle");
+        let tick = frame(session.app().world());
+        let response = session.handle(&RequestEnvelope::new("step", Request::Step { frames: 1 }));
+        assert!(matches!(response.outcome, ResponseOutcome::Failure { .. }));
+        assert_eq!(frame(session.app().world()), tick);
+        assert!(matches!(
+            session.handle(&inject).outcome,
+            ResponseOutcome::Failure { .. }
+        ));
+        let response = session.handle(&RequestEnvelope::new(
+            "load",
+            Request::Invoke {
+                name: "load_save".into(),
+                arguments: [("save".into(), save.clone())].into(),
+            },
+        ));
+        assert!(matches!(response.outcome, ResponseOutcome::Success { .. }));
+        assert!(!session.journal_open());
+        session.handle(&RequestEnvelope::new("step", Request::Step { frames: 1 }));
+        assert_eq!(snapshot::export(session.app()).unwrap(), save);
+    }
+
+    #[test]
+    fn journal_pointer_sources_cannot_complete_each_others_gesture() {
+        let mut session = session();
+        session.journal_pointer(Some((5, 5)), true);
+        session.handle(&RequestEnvelope::new(
+            "pointer",
+            Request::Invoke {
+                name: "journal_pointer".into(),
+                arguments: [
+                    ("x".into(), 5.into()),
+                    ("y".into(), 5.into()),
+                    ("pressed".into(), false.into()),
+                ]
+                .into(),
+            },
+        ));
+        assert!(!session.journal_open());
+        session.cancel_journal_input();
+        session.journal_pointer(Some((5, 5)), false);
+        assert!(!session.journal_open());
+        session.journal_pointer(Some((5, 5)), true);
+        session.pause();
+        session.journal_pointer(Some((5, 5)), false);
+        assert!(
+            !session.journal_open(),
+            "pause cancels a pending opener gesture"
+        );
+        session.journal_pointer(Some((5, 5)), true);
+        session.journal_pointer(Some((5, 5)), false);
+        assert!(session.journal_open());
     }
 }
