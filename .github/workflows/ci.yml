@@ -138,6 +138,13 @@ jobs:
       - name: Verify copied standalone starter
         run: python3 scripts/test-starter.py
 
+      - name: Check and drive headless collection room
+        run: |
+          cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
+          cargo test --manifest-path games/collection-room/Cargo.toml --all-targets
+          cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets -- -D warnings
+          python3 games/collection-room/scripts/test-control.py
+
       - name: Check and drive independent arena game
         run: |
           cargo fmt --manifest-path games/arena/Cargo.toml --all --check
@@ -220,6 +227,11 @@ jobs:
 
       - name: Check engine and protocol for WebAssembly
         run: cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
+
+      - name: Exercise collection room in actual WebAssembly
+        run: |
+          python3 games/collection-room/scripts/build-browser.py
+          node games/collection-room/scripts/test-browser.mjs
 
       - name: Exercise headless 3D primitives in actual WebAssembly
         run: node scripts/test-render-3d.mjs

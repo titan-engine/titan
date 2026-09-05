@@ -92,3 +92,14 @@ node --test games/arena/web/play/*.test.mjs
 python3 scripts/test-macos-bundles.py # macOS
 python3 games/arena/scripts/test-live-player.py # desktop GPU/window required
 ```
+
+Collection-room headless package gates:
+
+```sh
+cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
+cargo test --manifest-path games/collection-room/Cargo.toml --all-targets
+cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets -- -D warnings
+python3 games/collection-room/scripts/test-control.py
+python3 games/collection-room/scripts/build-browser.py
+node games/collection-room/scripts/test-browser.mjs
+```
