@@ -1,33 +1,29 @@
-name: Idea, investigation, or work item
-description: Capture an outcome and the evidence needed to select or complete it.
+name: Feature or investigation
+description: Suggest an improvement or a question worth exploring.
 labels: [investigation]
 body:
   - type: markdown
     attributes:
-      value: "New issues enter Proposed. Filing an issue or assigning priority does not approve implementation."
+      value: "Ideas are welcome. New issues enter Proposed so we can discuss scope before implementation. You do not need a complete design; maintainers help define acceptance criteria and dependencies. For usage questions, visit GitHub Discussions."
   - type: textarea
     id: outcome
     attributes:
-      label: Outcome or question
-      description: What user/game problem should this solve, or what decision needs evidence?
+      label: Problem or question
+      description: What are you trying to do, and what is missing or difficult?
     validations:
       required: true
   - type: textarea
     id: evidence
     attributes:
-      label: Acceptance criteria and verification
-      description: Observable results, relevant native/browser/headless checks, and evidence needed before selecting implementation.
-    validations:
-      required: true
+      label: Suggested outcome (optional)
+      description: What would a useful result look like? Examples or alternatives are welcome.
   - type: textarea
     id: boundaries
     attributes:
-      label: Scope and non-goals
-      description: Distinguish firm requirements, tentative preferences, and undecided choices. Record approval here when the scope is selected.
-    validations:
-      required: true
+      label: Contribution interest (optional)
+      description: Would you like to help investigate or implement this? Tell us if you need a starting point.
   - type: textarea
     id: relationships
     attributes:
-      label: Dependencies and sources
-      description: Link real prerequisite issues, parent objectives, requirements, and relevant docs. Set blocking relationships in the sidebar.
+      label: Related work (optional)
+      description: Link relevant issues, examples, or docs if you know of any. Maintainers manage board status and blocking relationships.

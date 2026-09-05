@@ -1,5 +1,5 @@
 name: Bug report
-description: Report incorrect existing behavior with reproduction evidence.
+description: Tell us what went wrong and how to reproduce it.
 labels: [bug]
 body:
   - type: textarea
@@ -12,13 +12,11 @@ body:
     id: reproduction
     attributes:
       label: Reproduction and environment
-      description: Include revision, platform, commands or recording, and bounded diagnostic evidence. Never include discovery bearer tokens.
+      description: Include your Titan revision, operating system, and steps or commands. A small example helps. Remove credentials and private data from logs; do not attach raw runtime discovery registrations.
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: context
     attributes:
-      label: Acceptance criteria
-      description: What verifies the fix and which reference behaviors must remain unchanged?
-    validations:
-      required: true
+      label: Additional context (optional)
+      description: Screenshots, relevant logs, a workaround, or anything else that helps us investigate. It is fine if you do not know how to fix it.

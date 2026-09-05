@@ -1,4 +1,10 @@
-# GitHub-native development workflow
+# Maintainer and agent workflow
+
+For your first contribution, start with [CONTRIBUTING.md](../CONTRIBUTING.md).
+This document covers project administration and maintainer-run agents. Outside
+contributors use ordinary forks and PRs; they do not need board write access,
+agent tooling, multiple worktrees, or permission to operate the merge queue.
+The maintainer coordinates those steps for them.
 
 [Titan Development](https://github.com/orgs/titan-engine/projects/1) is the shared
 backlog and execution board. [Issues](https://github.com/titan-engine/titan/issues)
@@ -12,25 +18,30 @@ Small implementation steps may remain checklists within their owning issue.
 | Status | Meaning |
 | --- | --- |
 | Proposed | Captured idea or bug; implementation is not approved. |
-| Ready | User-approved scope with concrete acceptance criteria. Check dependencies before claiming. |
+| Ready | Maintainer-approved scope with concrete acceptance criteria. Check dependencies before claiming. |
 | In progress | One owner has claimed the approved issue and started work. |
 | In review | Implementation is ready for independent review and required CI. |
 | Done | Work is completed and its implementation merged. Verify the resulting main revision before reporting completion. |
 
 Ready is the approved queue, not a promise that prerequisites are complete. The
 Ready view excludes issues GitHub marks blocked. Priority does not grant approval.
-Record the user-approved scope and source of approval in the issue before moving
-it to Ready. A broad requirement or old planning answer does not authorize its
+Record the maintainer-approved scope and decision in the issue before moving
+it to Ready. A broad requirement or historical design discussion does not authorize its
 implementation. Split broad proposals into bounded sub-issues when selected.
 Blank issues and CLI-created issues are allowed for quick idea capture. Before
 moving either to Ready, add the outcome, acceptance/verification criteria, scope
-boundaries, dependencies and recorded user approval required by the work template.
+boundaries, dependencies and recorded maintainer agreement. Reporters do not need
+to supply a complete implementation plan; maintainers add these details during triage.
 
 Use Priority (P0 urgent, P1 high, P2 normal, P3 later), Area and Owner fields.
-Owner identifies the responsible agent/task, since agents share a GitHub account;
-Assignees identify GitHub users. Labels classify work: bug, enhancement,
-investigation, maintenance, documentation, or tracking. Existing GitHub triage
-labels remain available. Use sub-issues for decomposition and blocking
+Assignees identify contributors. Owner is optional coordination metadata for
+maintainer-run agents sharing a GitHub account; keep private session identifiers
+out of public fields. Outside contributors comment to request an issue and the
+maintainer records the assignment. Labels classify work: bug, enhancement,
+investigation, maintenance, documentation, or tracking. Use `good first issue`
+for bounded beginner tasks with starting points and verification, and `help wanted`
+for work seeking contributors. These labels do not override status or dependencies.
+Use sub-issues for decomposition and blocking
 relationships only for actual prerequisites. Related work need not be blocked.
 
 New/updated open Titan issues automatically enter the project and default to
@@ -40,7 +51,7 @@ not itself close its issue. Reopened work must be triaged explicitly. PRs appear
 through the Linked pull requests field rather than duplicate execution cards.
 Set In review explicitly when the linked implementation is ready.
 
-## Implementation loop
+## Maintainer-run agent implementation loop
 
 1. Read the issue, dependencies, relevant design docs and applicable skills.
    Select an unblocked Ready issue. Claim Owner and set In progress before editing;
@@ -60,7 +71,9 @@ Set In review explicitly when the linked implementation is ready.
    Do not update branches merely because main advanced: the queue tests the latest
    main plus preceding queued changes before merging. Address real conflicts and
    failures, with renewed review where needed. Never bypass the queue/protections
-   or force-push main. Return scope changes and releases to the user.
+   or force-push main. Return scope changes and releases to the maintainer.
+   An explicit request for maintainer review before merge takes precedence over
+   autonomous enqueueing; leave that PR open until the review is complete.
 7. Verify CI for the exact resulting main SHA. Link the result in the PR/issue,
    ensure the issue is completed, and release its worktree when no longer needed.
    While checks run, continue another eligible issue if independent work exists.
@@ -70,20 +83,23 @@ conversations and no force pushes/deletion, including for admins. Legacy branch
 protection retains the required checks with strict branch freshness disabled; the
 active `Main merge queue` ruleset requires queued integration with no bypass actors. Required jobs
 are Native checks, WebAssembly core check, and macOS development app bundles.
-GitHub approval count is zero because all agents currently share the author's
+GitHub approval count is zero because maintainer-run agents currently share the author's
 account and cannot cast independent approval votes. Independent review is a
 mandatory workflow rule recorded as PR evidence; GitHub does not enforce reviewer
-independence. Revisit approval rules when separate reviewer identities exist.
+independence. Outside contributions receive maintainer-coordinated review, which
+may be human or clearly attributed agent review. Maintainer-run agent changes
+require independent agent review. Revisit approval rules when separate reviewer
+identities exist; changing this documentation does not alter GitHub protections.
 
 ## Attributed agent reviews
 
-The user authorizes agents to comment on PRs for review. Clearly identify each
+Maintainer-run agents are authorized to comment on PRs for review. Clearly identify each
 review as agent-generated, never as a human approval. Include actual available
 model identity; do not invent a model/version when unavailable. Example:
 
 ```text
 Agent review
-Reviewer: <agent/task identity>
+Reviewer: <public agent/task label, without private session links>
 Model: <actual model name, or unavailable>
 Reviewed at: <YYYY-MM-DD HH:MM:SS UTC>
 Reviewed commit: <full PR head SHA>
@@ -139,9 +155,12 @@ For stacks, `gh stack merge` queues the selected range and the queue chooses the
 merge method. Queued stack layers may land in separate groups; do not promise
 atomic landing of an entire stack.
 
-The CLI extension is installed and this checkout sets `rerere.enabled=true` and
-`remote.pushDefault=origin`. New clones need equivalent local setup. Stacks remain
-a GitHub preview; no stack is needed for the workflow setup's single PR.
+The stack extension is needed only for dependent stacks. Install it explicitly
+when using that workflow; it is not a prerequisite for ordinary contributions.
+For maintainer checkouts, `git config rerere.enabled true` can reuse recorded
+conflict resolutions, and `git config remote.pushDefault origin` selects the
+intended push remote. These settings are local to each checkout; choose the push
+remote deliberately when working from a fork. Stacks remain a GitHub preview.
 
 ## Queue configuration and operation
 
@@ -157,8 +176,7 @@ rebuilds after failed entries. Monitor the PR/queue and inspect the failed run
 and removal reason before retrying. Fix code or conflicts on the owning branch,
 review affected changes and pass PR checks before re-enqueueing. Retry a transient
 infrastructure failure only with evidence. Do not routinely jump the queue or
-remove/re-add entries: reordering can invalidate other builds. CodeRabbit remains
-optional and is not a queue requirement.
+remove/re-add entries: reordering can invalidate other builds.
 
 When administering the queue, ensure the CI trigger exists before enqueueing work.
 Keep the queue requirement active before disabling legacy strict branch freshness;
@@ -187,8 +205,10 @@ gh pr comment <pr> --body-file /tmp/agent-review.md
 gh pr checks <pr>
 ```
 
-The authenticated CLI needs `repo` and `project` scopes; organization visibility
-uses `read:org`. Built-in project workflows handle intake without copying a
+For the maintainer administration commands above, the authenticated CLI needs
+`repo` and `project` scopes; organization visibility uses `read:org`.
+Ordinary fork contributors do not need these project-administration permissions.
+Built-in project workflows handle intake without copying a
 personal token into Actions secrets. Never publish auth tokens or discovery
 registrations in issues, reviews or evidence. No release follows automatically
 from merging an issue or completing a project column.

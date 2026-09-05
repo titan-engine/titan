@@ -1,23 +1,19 @@
-## Outcome
+## What changes?
 
-Describe the concrete problem and resulting behavior. Link the approved issue
-with `Closes #...` when this PR completes it; use `Refs #...` for partial work.
+<!-- Describe the problem and the resulting behavior. Link an issue if relevant:
+Closes #... for completed work; Refs #... for partial work. Small documentation
+corrections do not need a separate issue. See CONTRIBUTING.md for the workflow. -->
 
 ## Verification
 
-Record relevant commands/results and runtime evidence. Include visual comparisons
-when rendering changes, preserved reference checksums, and material limitations.
+<!-- Which checks did you run, and what happened? Include screenshots for visual
+changes. Note checks you could not run and any limitations; maintainers can help. -->
 
-## Review and integration
+## Review notes
 
-- Approved issue/scope:
-- Independent agent review comment (reviewer/task identity, actual model name or
-  `unavailable`, UTC date/time, full reviewed SHA, findings, verification, and
-  limitations):
-- Stack position and prerequisites, if applicable:
-
-Enqueue only after required PR CI and independent review pass for the current change.
-The merge queue validates integration; do not bypass it or update solely for freshness.
-If review is carried forward across a base update, link attributed old/new SHA and
-diff-comparison evidence as required by docs/workflow.md.
-Scope changes and releases return to the user.
+<!-- Optional: tradeoffs, areas where you want feedback, dependencies, or
+substantial AI assistance. Agent reviews must be identified as such; link their
+attributed evidence if available. You do not need an agent review to submit a PR.
+The maintainer coordinates independent review, required CI, and merge queue
+integration. Scope changes require maintainer agreement; releases need separate
+authorization. Maintainer/agent procedures are in docs/workflow.md. -->

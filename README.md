@@ -5,6 +5,10 @@ agents to build and iterate on games. Edit ordinary Rust, run the game, inspect
 and control it through structured tooling, and verify the result without a
 graphical editor.
 
+**[Play in your browser](https://titan-engine.github.io/titan/)** ·
+[Build your first game](starters/minimal/README.md) ·
+[Contribute](CONTRIBUTING.md) · [Documentation](docs/README.md)
+
 **Early development:** APIs and file formats can change between revisions.
 Titan is not production-ready. Pin a Git revision when depending on it; packages
 are not distributed through crates.io.
@@ -15,13 +19,14 @@ are not distributed through crates.io.
 *The example RPG uses generated pixel art and the same game code for native,
 browser, and headless runs. [Before/after evidence](docs/art-iteration/README.md).*
 
-Current milestone: **v0.4.0**, with matching engine crate versions.
-[Release notes](docs/releases/v0.4.0.md).
+Engine crate version: **v0.4.0**. [Milestone notes](docs/releases/v0.4.0.md)
+describe that snapshot; the guides below include subsequent development.
 
 ## Try the demo
 
-Install current stable Rust with Cargo. The project is tested locally with Rust
-1.98.1; CI checks stable Rust. Native development workflows support macOS and
+The [hosted demo](https://titan-engine.github.io/titan/) runs the RPG and arena
+without installing Rust. To run the RPG locally, install stable Rust with Cargo
+and Git. Native development workflows support macOS and
 Linux. The interactive demo requires a working graphics backend and windowing
 session; the headless replay does not require a GPU.
 
@@ -45,7 +50,7 @@ This writes `target/titan/procedural-rpg.ppm`. The reference run completes after
 11 ticks with three collected shards, an active shrine, and RGBA checksum
 `f7a298f62ad75c1c`.
 
-For the browser demo, also install Python 3:
+To build the browser demo yourself, also install Python 3:
 
 ```sh
 python3 scripts/build-browser.py
@@ -75,6 +80,10 @@ in its native window and browser canvas.
 
 ## Inspect and control a running game
 
+Titan's central loop is **edit → run → inspect → replay → verify**. Games expose
+named entities, typed fields, commands, and captures so tools can check what
+actually happened. Try the same interface an agent uses:
+
 Start a paused runtime:
 
 ```sh
@@ -86,11 +95,13 @@ From another terminal in the repository:
 ```sh
 cargo run --locked -p titan-cli -- --format json --instance demo capabilities
 cargo run --locked -p titan-cli -- --format json --instance demo entities
-cargo run --locked -p titan-cli -- --format json --instance demo step 11
+cargo run --locked -p titan-cli -- --format json --instance demo input 1 --actions '{"right":{"kind":"button","value":true}}'
+cargo run --locked -p titan-cli -- --format json --instance demo step 1
 cargo run --locked -p titan-cli -- --format json --instance demo capture
 ```
 
-Stepping advances time; it does not supply movement input. The
+This submits movement for the first tick, advances that tick, and captures the
+result. Stepping alone does not supply movement input. The
 [CLI guide](docs/cli.md) shows input injection, command invocation, and validated
 field edits. Native inspection uses authenticated loopback discovery. Field
 mutation requires explicit opt-in; browser inspection starts read-only.
@@ -118,43 +129,27 @@ an editor, and a general asset pipeline are outside the current supported scope.
 
 ## Development and contributions
 
-Small bug reports and focused fixes are welcome. Include the revision, platform,
-reproduction steps, and relevant diagnostic output. Inspect artifacts before
-sharing them: game state and application logs may contain your own data. Discuss
-larger architectural changes against the current plan before implementing them.
+Titan is maintained by [Olle Lukowski (@olukowski)](https://github.com/olukowski).
+Contributions with or without AI tools are welcome. Help with documentation,
+examples, bug reports, testing, or focused engine work.
 
-The main checks are:
+- **Start here:** [contribution guide](CONTRIBUTING.md), including setup, checks,
+  and how to open a PR.
+- **Choose work:** [good first issues](https://github.com/titan-engine/titan/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+  and [help wanted](https://github.com/titan-engine/titan/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22).
+- **Ask or discuss:** [GitHub Discussions](https://github.com/titan-engine/titan/discussions).
+- **See the direction:** [vision](docs/vision.md) and
+  [public development board](https://github.com/orgs/titan-engine/projects/1).
 
-```sh
-cargo fmt --all --check
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-```
-
-[The implementation plan](docs/implementation-plan.md) includes WASM and
-separate-process acceptance commands. Keep examples and documentation consistent
-with API changes. GPU integration tests are opt-in; normal tests run without a
-GPU.
+Comment on an unassigned Ready issue to coordinate with the maintainer. Proposed
+issues need scope discussion first. You do not need access to private planning
+sessions or project administration to participate.
 
 ## Documentation
 
-- [Vision and principles](docs/vision.md)
-- [Original design answers and requirement coverage](docs/design-requirements.md)
-- [Current milestone: starter and arena demo](docs/second-milestone.md)
-- [Implementation plan](docs/implementation-plan.md)
-- [Open design questions](docs/open-questions.md)
-- [Save/load design boundary](docs/save-load.md)
-- [Arena snapshot workflow and verification](docs/arena-save-load.md)
-- [Copy the minimal game starter](starters/minimal/README.md)
-- [Starter boundary audit](docs/starter-audit.md)
-- [ECS authoring](docs/ecs-authoring.md)
-- [Deterministic swarm workload and measurements](docs/swarm.md)
-- [CLI workflow](docs/cli.md)
-- [In-process inspection](docs/inspection.md)
-- [Browser inspection](docs/browser.md)
-- [Interactive rendering](docs/rendering.md)
-- [Entity-based game UI](docs/ui.md)
-- [Repository-local agent workflow](.agents/skills/titan-workflow/SKILL.md)
+The [documentation index](docs/README.md) groups guides by trying Titan, building
+a game, understanding the architecture, and contributing. Verification reports
+and historical milestone evidence have their own section.
 
 ## License
 
