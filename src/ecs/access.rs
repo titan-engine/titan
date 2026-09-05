@@ -17,7 +17,7 @@ pub enum AccessTarget {
     Commands,
     World,
 }
-/// Declared access used for validation; execution remains sequential.
+/// Declared access used for validation and executor compatibility checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemAccess {
     pub target: AccessTarget,
@@ -75,6 +75,27 @@ pub(crate) fn validate(accesses: &[SystemAccess]) -> Result<(), SystemError> {
     }
     Ok(())
 }
+/// Whether two already-validated typed systems may share a batch.
+pub(crate) fn compatible(left: &[SystemAccess], right: &[SystemAccess]) -> bool {
+    left.iter().all(|a| {
+        right.iter().all(|b| {
+            a.target != b.target
+                || a.type_id != b.type_id
+                || (a.mode == AccessMode::Read && b.mode == AccessMode::Read)
+        })
+    })
+}
+pub(crate) fn check_resources(world: &World, accesses: &[SystemAccess]) -> Result<(), SystemError> {
+    for access in accesses {
+        if access.target == AccessTarget::Resource && !world.resources.contains_key(&access.type_id)
+        {
+            return Err(SystemError::MissingResource {
+                type_name: access.type_name,
+            });
+        }
+    }
+    Ok(())
+}
 /// Internal safe borrow preparation shared by the sealed parameter implementations.
 #[doc(hidden)]
 pub struct SystemContext<'w> {
@@ -85,21 +106,71 @@ pub struct SystemContext<'w> {
     pub(crate) commands: Option<Commands<'w>>,
 }
 impl<'w> SystemContext<'w> {
+    /// The scheduler supplies a preflighted, pairwise-compatible typed batch.
+    pub(crate) fn prepare_batch(world: &'w mut World, accesses: &[&[SystemAccess]]) -> Vec<Self> {
+        let mut contexts: Vec<_> = accesses
+            .iter()
+            .map(|_| Self {
+                shared_components: HashMap::new(),
+                mutable_components: HashMap::new(),
+                shared_resources: HashMap::new(),
+                mutable_resources: HashMap::new(),
+                commands: None,
+            })
+            .collect();
+        // Branch before lending a mutable reference: a unique writer OR shared readers.
+        for (id, storage) in &mut world.components {
+            if let Some(writer) = accesses.iter().position(|list| {
+                list.iter().any(|a| {
+                    a.target == AccessTarget::Component
+                        && a.type_id == *id
+                        && a.mode == AccessMode::Write
+                })
+            }) {
+                contexts[writer]
+                    .mutable_components
+                    .insert(*id, &mut **storage);
+            } else {
+                for (context, list) in contexts.iter_mut().zip(accesses) {
+                    if list
+                        .iter()
+                        .any(|a| a.target == AccessTarget::Component && a.type_id == *id)
+                    {
+                        context.shared_components.insert(*id, &**storage);
+                    }
+                }
+            }
+        }
+        for (id, resource) in &mut world.resources {
+            if let Some(writer) = accesses.iter().position(|list| {
+                list.iter().any(|a| {
+                    a.target == AccessTarget::Resource
+                        && a.type_id == *id
+                        && a.mode == AccessMode::Write
+                })
+            }) {
+                contexts[writer]
+                    .mutable_resources
+                    .insert(*id, &mut **resource);
+            } else {
+                for (context, list) in contexts.iter_mut().zip(accesses) {
+                    if list
+                        .iter()
+                        .any(|a| a.target == AccessTarget::Resource && a.type_id == *id)
+                    {
+                        context.shared_resources.insert(*id, &**resource);
+                    }
+                }
+            }
+        }
+        contexts
+    }
     pub(crate) fn prepare(
         world: &'w mut World,
         accesses: &[SystemAccess],
     ) -> Result<Self, SystemError> {
         validate(accesses)?;
-        // Check every required resource before handing out any mutable access.
-        for access in accesses {
-            if access.target == AccessTarget::Resource
-                && !world.resources.contains_key(&access.type_id)
-            {
-                return Err(SystemError::MissingResource {
-                    type_name: access.type_name,
-                });
-            }
-        }
+        check_resources(world, accesses)?;
         let mode = |target, id| {
             accesses
                 .iter()

@@ -1,6 +1,6 @@
 //! Deterministic headless patrol-and-fire workload. See docs/swarm.md.
-use std::{env, mem::size_of, process::ExitCode, time::Instant};
-use titan::{App, Component, FixedTime, FixedUpdate, Query};
+use std::{env, mem::size_of, num::NonZeroUsize, process::ExitCode, time::Instant};
+use titan::{App, Component, ExecutorPolicy, FixedTime, FixedUpdate, Query};
 
 const ARENA: i64 = 4096;
 const REPEATS: usize = 2;
@@ -28,16 +28,19 @@ struct Weapon {
 struct Config {
     entities: u32,
     steps: u64,
+    threads: NonZeroUsize,
 }
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<Config>, String> {
     let mut config = Config {
         entities: 10_000,
         steps: 120,
+        threads: NonZeroUsize::MIN,
     };
     let mut args = args.into_iter();
     let mut seen_entities = false;
     let mut seen_steps = false;
+    let mut seen_threads = false;
     while let Some(flag) = args.next() {
         if flag == "--help" || flag == "-h" {
             return Ok(None);
@@ -45,6 +48,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<Config>, 
         let seen = match flag.as_str() {
             "--entities" => &mut seen_entities,
             "--steps" => &mut seen_steps,
+            "--threads" => &mut seen_threads,
             _ => return Err(format!("unknown argument: {flag}")),
         };
         if *seen {
@@ -67,6 +71,11 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<Config>, 
                 config.steps = value
                     .parse()
                     .map_err(|_| "--steps must be a nonnegative u64 integer")?
+            }
+            "--threads" => {
+                config.threads = value
+                    .parse()
+                    .map_err(|_| "--threads must be a positive integer")?;
             }
             _ => unreachable!(),
         }
@@ -208,6 +217,11 @@ fn elapsed_ns(start: Instant) -> Result<u64, String> {
 fn run_once(config: Config) -> Result<(u64, Timings), String> {
     let start = Instant::now();
     let mut app = setup(config.entities);
+    if config.threads.get() > 1 {
+        app.set_executor_policy(ExecutorPolicy::Parallel {
+            max_threads: config.threads,
+        });
+    }
     let initialization_ns = elapsed_ns(start)?;
     let start = Instant::now();
     app.try_advance_fixed(config.steps)
@@ -241,7 +255,8 @@ fn execute(config: Config) -> Result<serde_json::Value, String> {
         size_of::<Identity>() + size_of::<Position>() + size_of::<Velocity>() + size_of::<Weapon>();
     Ok(serde_json::json!({
         "schema_version": 1, "workload": "swarm", "entities": config.entities,
-        "steps": config.steps, "repeats": REPEATS, "checksum": format!("{:016x}", checksum.unwrap()),
+        "steps": config.steps, "executor": if config.threads.get() == 1 { "sequential" } else { "parallel" },
+        "max_threads": config.threads.get(), "repeats": REPEATS, "checksum": format!("{:016x}", checksum.unwrap()),
         "correctness": {"expected_state": true, "repeat_agreement": true}, "runs": runs,
         "memory": {"bytes_per_entity": bytes_per_entity, "logical_component_payload_bytes": u64::from(config.entities) * bytes_per_entity as u64},
         "environment": {"os": env::consts::OS, "arch": env::consts::ARCH, "debug_assertions": cfg!(debug_assertions)}
@@ -251,7 +266,7 @@ fn execute(config: Config) -> Result<serde_json::Value, String> {
 fn main() -> ExitCode {
     let result = parse_args(env::args().skip(1)).and_then(|config| match config {
         Some(config) => execute(config).map(|report| println!("{report}")),
-        None => { println!("Usage: swarm [--entities N] [--steps N]\nDefaults: --entities 10000 --steps 120. Each invocation validates two fresh runs."); Ok(()) }
+        None => { println!("Usage: swarm [--entities N] [--steps N] [--threads N]\nDefaults: --entities 10000 --steps 120 --threads 1. Threads above 1 opt into parallel execution. Each invocation validates two fresh runs."); Ok(()) }
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -270,9 +285,30 @@ mod tests {
     fn closed_form_matches_wrapping_and_firing_across_sizes() {
         for entities in [0, 1, 17, 257] {
             for steps in [0, 1, 15, 120, 513] {
-                let config = Config { entities, steps };
+                let config = Config {
+                    entities,
+                    steps,
+                    threads: NonZeroUsize::MIN,
+                };
                 let first = run_once(config).unwrap().0;
                 assert_eq!(first, run_once(config).unwrap().0);
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_matches_sequential_oracle_and_checksums() {
+        for entities in [0, 1, 257, 10000] {
+            for steps in [0, 1, 120] {
+                let mut config = Config {
+                    entities,
+                    steps,
+                    threads: NonZeroUsize::MIN,
+                };
+                let sequential = run_once(config).unwrap().0;
+                config.threads = NonZeroUsize::new(2).unwrap();
+                assert_eq!(run_once(config).unwrap().0, sequential);
+                assert_eq!(run_once(config).unwrap().0, sequential);
             }
         }
     }
@@ -282,6 +318,7 @@ mod tests {
         let config = Config {
             entities: 3,
             steps: 20,
+            threads: NonZeroUsize::MIN,
         };
         let mut app = setup(config.entities);
         app.try_advance_fixed(config.steps).unwrap();
@@ -311,6 +348,7 @@ mod tests {
         let config = Config {
             entities: 2,
             steps: 1,
+            threads: NonZeroUsize::MIN,
         };
         assert_eq!(run_once(config).unwrap().0, 0x71ac72405e5d407b);
         let app = setup(0);
@@ -319,7 +357,8 @@ mod tests {
                 &app,
                 Config {
                     entities: 0,
-                    steps: 1
+                    steps: 1,
+                    threads: NonZeroUsize::MIN,
                 }
             )
             .is_err()
@@ -335,6 +374,8 @@ mod tests {
             vec!["--steps", "18446744073709551616"],
             vec!["--steps", "1", "--steps", "2"],
             vec!["--wat"],
+            vec!["--threads", "0"],
+            vec!["--threads", "2", "--threads", "3"],
         ] {
             assert!(parse_args(args.into_iter().map(str::to_owned)).is_err());
         }
@@ -342,7 +383,8 @@ mod tests {
             parse_args(["--entities", "0", "--steps", "0"].map(str::to_owned)).unwrap(),
             Some(Config {
                 entities: 0,
-                steps: 0
+                steps: 0,
+                threads: NonZeroUsize::MIN,
             })
         );
     }

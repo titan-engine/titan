@@ -2,7 +2,8 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
 use crate::{
-    DeferredCommandError, FixedTime, IntoSystem, SystemError, SystemMetadata, World, system::System,
+    DeferredCommandError, ExecutorPolicy, FixedTime, IntoSystem, SystemError, SystemMetadata,
+    World, system::System,
 };
 
 /// Identifies an independently runnable collection of systems.
@@ -67,6 +68,7 @@ pub struct App {
     startup_complete: bool,
     errors: Vec<AppError>,
     extractors: Vec<Extractor>,
+    executor_policy: ExecutorPolicy,
 }
 
 impl Default for App {
@@ -79,6 +81,7 @@ impl Default for App {
             startup_complete: false,
             errors: Vec::new(),
             extractors: Vec::new(),
+            executor_policy: ExecutorPolicy::default(),
         }
     }
 }
@@ -87,6 +90,17 @@ impl App {
     /// Creates an application with a 60 Hz fixed clock.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets execution policy for all schedules. The default is sequential.
+    pub fn set_executor_policy(&mut self, policy: ExecutorPolicy) -> &mut Self {
+        self.executor_policy = policy;
+        self
+    }
+
+    /// Returns the configured policy, including on targets using its fallback.
+    pub const fn executor_policy(&self) -> ExecutorPolicy {
+        self.executor_policy
     }
 
     /// Returns the application's world.
@@ -318,7 +332,65 @@ impl App {
 
     fn run_schedule(&mut self, label: TypeId) {
         if let Some(schedule) = self.schedules.get_mut(&label) {
-            for system in &mut schedule.systems {
+            let limit = self.executor_policy.concurrency();
+            let mut index = 0;
+            while index < schedule.systems.len() {
+                if limit > 1 {
+                    let mut end = index;
+                    while end < schedule.systems.len() && end - index < limit {
+                        let candidate = &schedule.systems[end];
+                        if !candidate.is_parallel_candidate()
+                            || schedule.systems[index..end].iter().any(|prior| {
+                                !crate::ecs::access::compatible(
+                                    &prior.metadata().accesses,
+                                    &candidate.metadata().accesses,
+                                )
+                            })
+                            || crate::ecs::access::check_resources(
+                                &self.world,
+                                &candidate.metadata().accesses,
+                            )
+                            .is_err()
+                        {
+                            break;
+                        }
+                        end += 1;
+                    }
+                    if end - index > 1 {
+                        let batch = &mut schedule.systems[index..end];
+                        let accesses: Vec<_> = batch
+                            .iter()
+                            .map(|system| system.metadata().accesses.as_slice())
+                            .collect();
+                        let contexts = crate::ecs::access::SystemContext::prepare_batch(
+                            &mut self.world,
+                            &accesses,
+                        );
+                        std::thread::scope(|scope| {
+                            let handles: Vec<_> = batch
+                                .iter_mut()
+                                .zip(contexts)
+                                .map(|(system, context)| {
+                                    scope.spawn(move || system.run_prepared(context))
+                                })
+                                .collect();
+                            let mut panic = None;
+                            for handle in handles {
+                                if let Err(payload) = handle.join()
+                                    && panic.is_none()
+                                {
+                                    panic = Some(payload);
+                                }
+                            }
+                            if let Some(payload) = panic {
+                                std::panic::resume_unwind(payload);
+                            }
+                        });
+                        index = end;
+                        continue;
+                    }
+                }
+                let system = &mut schedule.systems[index];
                 if system.is_deferred_boundary() {
                     let failures = self.world.apply_deferred();
                     if !failures.is_empty() {
@@ -333,6 +405,7 @@ impl App {
                     });
                     break;
                 }
+                index += 1;
             }
         }
         self.errors.extend(

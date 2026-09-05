@@ -76,6 +76,7 @@ jobs:
         run: |
           python3 scripts/test-swarm-measurement.py
           python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1
+          python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1 --threads 2
 
       - name: Verify generated asset cache across processes
         run: python3 scripts/test-generated-assets.py
