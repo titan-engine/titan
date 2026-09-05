@@ -23,6 +23,10 @@ ARENA = COMMON + (
     "play/entities.mjs", "play/pointer.mjs", "play/save.mjs",
     "inspector/pkg/titan_game.js", "inspector/pkg/titan_game_bg.wasm",
 )
+COLLECTION_ROOM = (
+    "play/index.html", "play/play.js", "play/keys.mjs",
+    "inspector/pkg/titan_game.js", "inspector/pkg/titan_game_bg.wasm",
+)
 
 
 def reject_symlink_path(path):
@@ -40,7 +44,8 @@ def main(argv=None):
     parser.add_argument("--no-build", action="store_true", help="stage existing browser builds")
     args = parser.parse_args(argv)
     if not args.no_build:
-        for script in ("scripts/build-browser.py", "games/arena/scripts/build-browser.py"):
+        for script in ("scripts/build-browser.py", "games/arena/scripts/build-browser.py",
+                       "games/collection-room/scripts/build-browser.py"):
             subprocess.run([sys.executable, str(ROOT / script)], cwd=ROOT, check=True)
 
     target = ROOT / "target"
@@ -56,7 +61,8 @@ def main(argv=None):
                  (ROOT / "LICENSE-MIT", "LICENSE-MIT"),
                  (ROOT / "LICENSE-APACHE", "LICENSE-APACHE")]
         for source, prefix, paths in ((ROOT / "web", "rpg", RPG),
-                                      (ROOT / "games/arena/web", "arena", ARENA)):
+                                      (ROOT / "games/arena/web", "arena", ARENA),
+                                      (ROOT / "games/collection-room/web", "collection-room", COLLECTION_ROOM)):
             files.extend((source / path, f"{prefix}/{path}") for path in paths)
         for source, relative in files:
             reject_symlink_path(source)

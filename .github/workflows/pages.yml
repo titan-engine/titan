@@ -36,6 +36,7 @@ jobs:
         run: |
           node scripts/test-browser.mjs
           node games/arena/scripts/test-browser.mjs
+          node games/collection-room/scripts/test-browser.mjs
       - name: Upload public site
         uses: actions/upload-pages-artifact@v3
         with:
