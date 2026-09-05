@@ -117,8 +117,10 @@ room 1. R always restarts the displayed room; it never secretly returns to room 
 Only room 2 contains a block: a 900x900 footprint, height 750, ground-supported.
 It occupies one of three socket centers on a north/south rail:
 `(5500,5500)`, `(5500,4500)`, `(5500,3500)`. It starts at the first socket.
-Both north and south pushes are allowed; there is no pulling, grabbing, throwing,
-stacking, friction simulation or rotation.
+North and south pushes are allowed when the required stance is reachable. The
+final north socket is terminal: its reverse stance is inside the ledge, so R is
+the way to restore the block after that placement. There is no pulling, grabbing,
+throwing, stacking, friction simulation or rotation.
 
 For E plus exactly one effective cardinal direction, Strong must be grounded on
 the floor, within 100 of the stance point one metre behind the block relative
@@ -243,22 +245,21 @@ Solution route:
    A, drops south off L (steer east of K), crosses the doorway and enters E.
    Strong follows into E. Slice completion latches.
 
-At earlier sockets K is too far from L: even at Z=4.5 the nearest supported foot
-center must travel over 0.65 m to overlap L, while a jump from K is at or above
-ledge height for only 14 ticks (0.84 m of axial travel); the approach must also
-reach that height before the ledge face. **Do not use distance alone as the
-socket gate:** require K at the final socket before A can activate in room 2.
-Show "Move the block to the marked end" if Jumper reaches A otherwise. The final
-socket has a visible outlined target linked to A. This explicit plate condition
-makes the intended two pushes part of the puzzle even if an edge jump can reach
-L from an earlier socket; it is an authored rule, not a physics assumption.
+An edge jump may reach L from the intermediate socket. **Do not use distance
+alone as the socket gate:** require K at the final socket before A can activate
+in room 2. Show "Move the block to the marked end" if Jumper reaches A otherwise.
+The final socket has a visible outlined target linked to A. This explicit plate
+condition makes the intended two pushes part of the puzzle; it is an authored
+rule, not a physics assumption.
 
 A failed jump lands on floor/block or enters the pit. A character on K prevents
 pushing; switch and step off before retrying. A character in the push corridor
-causes rejection rather than displacement. All sockets allow Strong to reach
-the opposite stance via the open east side (X about 6.5), so permitted pushes
-are reversible. Restart is always available if the player loses track of the
-arrangement. B still provides the return path if D closes early.
+causes rejection rather than displacement. At the intermediate socket, Strong can reach the south-push stance `(5.5,3.5)`
+via the east side (X about 6.5) and reverse the first push. At the final socket,
+the reverse stance `(5.5,2.5)` is inside L and unreachable on the floor. This
+terminal placement is the intended solution, not a failed arrangement: it leaves
+the jump and doorway routes clear. R restores the starting arrangement if the
+player wants to retry. B still provides the return path if D closes early.
 
 ## Recovery and reset
 
@@ -292,6 +293,7 @@ route; replay should reproduce semantic state in headless native and actual WASM
 | Switch with movement/Space/E held, including midair and alias keys | Immediate selection; no inherited action; release/repress restores control; gravity continues. |
 | Switch while inactive character stands on A/B | Plate remains active until that character actually leaves support/plate. |
 | Press/release plate; enter doorway and release last plate | Defined one-tick collision timing; obstruction holds open without crushing; closes after clearance. |
+| Reverse the intermediate push; try reversing final placement; restart | Intermediate reverse succeeds from its floor stance; final reverse has no valid floor stance; R restores K to its initial socket. |
 | Push each direction at rail ends; push as Jumper, airborne or with ambiguous direction | Stable rejection with no partial block motion. |
 | Push occupied K, push into grounded/airborne body, stand just outside swept volume | Reject overlaps/support occupancy; accept clear moves; never carry or trap characters. |
 | Miss jumps, drop from ledge, fall into pit while either character is active | Ordinary landing preserves state; pit threshold reconstructs whole room even for inactive fall. |
