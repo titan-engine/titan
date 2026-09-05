@@ -1,19 +1,21 @@
 # Starter boundary audit
 
 The RPG remains the accepted regression game. The starter is a separate Cargo
-package under `starters/minimal`, with a replaceable `src/game.rs`. Milestone 2 needed no engine changes. The subsequent
+package under `starters/minimal`, with a replaceable `src/game.rs`.
+Milestone 2 needed no engine changes. The subsequent
 [host setup audit](host-setup-audit.md) extracts demonstrated host responsibilities
 without introducing a generator or game framework.
 
-| Existing piece | Reusable responsibility | Game assumptions to remove |
+| Current piece | Shared responsibility | Game-owned responsibility |
 | --- | --- | --- |
-| `examples/procedural_rpg.rs` | Bounded server lifecycle, authenticated discovery, safe-point queue drain, mutation policy, diagnostic wrapper | RPG construction, reference replay, filenames, quest and position state |
-| `examples/play_rpg.rs` | winit lifecycle, key aliases, focus clearing, fixed-time accumulator, bounded presentation | RPG builder, title, status, reference replay, movement sampler |
-| `examples/support/gpu_surface.rs` | Surface configuration and rendering public `RenderFrame` / `ImageAssets` | Device label only |
-| `crates/titan-browser/src/lib.rs` | Synchronous protocol boundary, schema/target correlation, control opt-in, PNG encoding | RPG constructor, inspector registration, render hook, reference tests |
-| `crates/titan-browser/src/player.rs` | Canvas lifecycle and bounded 60 Hz accumulation | RPG input, status and reference replay |
-| `scripts/build-browser.py` | Match wasm-bindgen CLI to resolved library version | Root paths, package and WASM stem, output directories |
-| `web/inspector`, `web/play` | Same-window/origin bridge, keyboard lifecycle | RPG copy, commands, entity fields and replay route |
+| `titan_remote::Server`, queue, `DiagnosticInspector` | Authenticated discovery, safe-point dispatch, bounded diagnostic policy/history/writing | Controlled runner lifetime, construction, replay, paths and diagnostic state |
+| `titan::input::update_button_alias` | Combining held physical aliases | Action mapping, focus clearing, movement sampler |
+| `titan_render_wgpu::SurfaceRenderer` | Surface configuration and presentation of `RenderFrame` / `ImageAssets` | Window/canvas creation, extraction, title, size and cadence |
+| `titan::inspection::BrowserSession` | Synchronous protocol boundary, schema/target correlation and control opt-in | Constructor, inspector registration and exported JS wrapper |
+| `titan_diagnostics::png_capture` / `write_png` | Exact PNG encoding | Render hook and capture destination policy |
+| Native `play` / browser player adapters | Explicit composition of public APIs | Lifecycle, accumulator, status, restart and reference replay |
+| `scripts/titan_build.py` | Matching wasm-bindgen tooling and Cargo-reported binary bundling | Package/binding/application names and entrypoints |
+| Copied `web/inspector`, `web/play` | Standalone same-origin bridge and keyboard lifecycle, with tests | UI, commands, entity fields and replay route |
 
 The RPG's interactive input helper emits tile movement pulses every six ticks.
 That is a game rule, not generic keyboard sampling. Starter input uses its own

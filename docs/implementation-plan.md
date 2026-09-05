@@ -24,9 +24,10 @@ Implementation and local verification are complete:
 - Copied host setup fell from 1,066 to 739 lines per game. No build-speed gain is
   claimed. The audit records scope, reproducible counts and verification evidence.
 
-Await remote CI for these increments before selecting further work. No additional
-engine objective is inferred from this consolidation; future work needs a
-concrete game requirement or the user's next priority.
+Remote CI is the final gate for pushed increments; inspect the main commit's
+GitHub Actions result before selecting further work. No additional engine
+objective is inferred from this consolidation; future work needs a concrete
+game requirement or the user's next priority.
 
 No crate publication, visibility changes or new tags are authorized. Engine crate
 versions remain 0.1.0. See [host setup audit](host-setup-audit.md) for boundaries
