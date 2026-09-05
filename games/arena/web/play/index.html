@@ -14,7 +14,7 @@
 <p>Avoid the coral pursuers. Three health points, one arena, twenty seconds to survive.</p>
 <div class="toolbar"><button id="start">Play</button><button id="pause" disabled>Pause</button><button id="restart" disabled>Restart</button><span class="status" id="status" role="status">Ready</span></div>
 <div id="error" class="error" role="alert" hidden></div>
-<div class="scene"><canvas id="game" width="640" height="448" tabindex="0" aria-label="Arena survival. Move with arrow keys or W A S D. Press Space to dash."></canvas><p class="hint">Move with arrow keys or W A S D. Press Space to dash. Dash follows your movement or last direction and recharges in two seconds. R restarts. Click the scene to focus.</p></div>
+<div class="scene"><canvas id="game" width="640" height="448" tabindex="0" aria-label="Arena survival. Move with arrow keys or W A S D. Press Space to dash."></canvas><p class="hint">Move with arrow keys or W A S D. Press Space to dash. Dash follows your movement or last direction and recharges in two seconds. Press R or click the in-game restart label to restart. Click the scene to focus.</p></div>
 <div class="directions" aria-label="Game controls"><button data-action="left" aria-label="Move left" disabled>←</button><button data-action="up" aria-label="Move up" disabled>↑</button><button data-action="down" aria-label="Move down" disabled>↓</button><button data-action="right" aria-label="Move right" disabled>→</button><button data-action="dash" aria-label="Dash" disabled>Dash</button></div>
 <p id="result" role="status"></p>
 <section class="inspection" aria-labelledby="live-heading">
@@ -25,7 +25,7 @@
 <p>Recordings contain at most 3,600 ticks from the latest restart. Replay an export from the arena directory with <code>cargo run --bin replay -- RECORDING.json</code>.</p>
 <p id="live-summary" role="status">Read-only inspection is the default.</p>
 <div id="live-entities" class="entity-list" hidden><table><caption id="live-entity-caption"></caption><thead><tr><th scope="col">Name</th><th scope="col">ID</th><th scope="col">Activity</th><th scope="col">Position</th></tr></thead><tbody id="live-entity-body"></tbody></table></div>
-<details><summary>Raw inspection details</summary><pre id="live-output"></pre></details>
+<details><summary>Inspection JSON</summary><pre id="live-output"></pre></details>
 <img id="live-capture" alt="Capture of the live arena session" hidden>
 </section>
 <footer>60 fixed ticks per second · GPU sprite rendering · Same game as the headless and browser inspection tests.</footer>

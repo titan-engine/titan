@@ -34,3 +34,15 @@ export function entityRow(entity) {
     position && Number.isFinite(position.x) && Number.isFinite(position.y) ? `(${position.x}, ${position.y})` : '—',
   ];
 }
+
+// Keep the whole scene readable in the panel. Field metadata remains available
+// through the entity protocol; repeated metadata need not fill the JSON view.
+export function inspectionDetails(state, snapshot) {
+  return {
+    state,
+    entities: {
+      ...snapshot,
+      entities: snapshot.entities.map(({ id, name, components }) => ({ id, name, components })),
+    },
+  };
+}

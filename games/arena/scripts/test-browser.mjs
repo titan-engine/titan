@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { inspectEntities, entityRow } from '../web/play/entities.mjs';
+import { inspectEntities, entityRow, inspectionDetails } from '../web/play/entities.mjs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
@@ -28,6 +28,12 @@ for (const [change, code] of [[{ schema_version: 999 }, 'protocol_mismatch'], [{
 }
 assert.equal(JSON.parse(readonly.handle('no JSON')).error.code, 'invalid_value');
 const inactiveEntities = inspectEntities(request => raw(readonly, request));
+const panelDetails = inspectionDetails(raw(readonly, {type:'query', name:'arena_state'}), inactiveEntities);
+const panelJson = JSON.stringify(panelDetails, null, 2);
+assert.ok(panelJson.length <= 12000, `complete inspection JSON exceeds panel limit: ${panelJson.length}`);
+assert.equal(JSON.parse(panelJson).entities.entities.length, 18);
+assert.ok(JSON.parse(panelJson).entities.entities.some(entity => entity.name === 'ui/restart' && Object.keys(entity.components).some(name => name.endsWith('::UiText'))));
+
 assert.equal(inactiveEntities.entities.length, 18);
 assert.equal(inactiveEntities.truncated, false);
 assert.equal(inactiveEntities.entities.filter(entity => entityRow(entity)[2] === 'Player').length, 1);

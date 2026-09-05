@@ -1,7 +1,7 @@
 import init, { BrowserPlayer, verify_recording_json } from '../inspector/pkg/titan_game.js';
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
-import { inspectEntities, entityRow } from './entities.mjs';
+import { inspectEntities, entityRow, inspectionDetails } from './entities.mjs';
 import { bindCanvasPointer } from './pointer.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
@@ -137,7 +137,7 @@ document.querySelector('#inspect').addEventListener('click', () => panel(() => {
   body.replaceChildren(...rows);
   document.querySelector('#live-entity-caption').textContent = `${snapshot.entities.length} entities at frame ${snapshot.observed_frame}${snapshot.truncated ? ' · display limited to 1,000 entities' : ''}`;
   document.querySelector('#live-entities').hidden = false;
-  showDetails({ state, entities: snapshot });
+  showDetails(inspectionDetails(state, snapshot));
 }));
 document.querySelector('#capture').addEventListener('click', () => panel(() => {
   const response = request({ type: 'capture' });
