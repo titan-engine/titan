@@ -1,6 +1,11 @@
 //! Renderer-neutral 2D drawing and deterministic software rendering.
 
+#[cfg(feature = "image-png")]
+mod png;
 mod software;
+
+#[cfg(feature = "image-png")]
+pub use png::{ImageDecodeError, ImageDecodeLimits};
 
 pub use software::SoftwareRenderer;
 
