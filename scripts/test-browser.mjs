@@ -37,7 +37,7 @@ for (const request of [
   assert.equal(result.state_revision, 0);
   assert.equal(result.error.code, 'mutation_disabled');
 }
-assert.equal(call(readOnly, { type: 'entities' }).response.entities.length, 5);
+assert.equal(call(readOnly, { type: 'entities' }).response.entities.length, 6);
 assert.equal(call(readOnly, { type: 'capture' }).response.checksum, readOnlyCapture);
 assert.deepEqual(call(readOnly, { type: 'entity', entity: readOnlyPlayer }).response, readOnlyDetails);
 readOnly.free();
@@ -49,6 +49,11 @@ const supported = controlledCapabilities.operations;
 for (const operation of ['invoke', 'step', 'inject_input', 'capture', 'mutate']) assert.ok(supported.includes(operation));
 const entities = call(runtime, { type: 'entities' }).response.entities;
 const shrine = entities.find(entity => entity.name === 'shrine').id;
+const hud = entities.find(entity => entity.name === 'ui/quest').id;
+const hudDetails = () => call(runtime, { type: 'entity', entity: hud }).response;
+const uiText = Object.keys(hudDetails().components).find(name => name.endsWith('::UiText'));
+assert.equal(hudDetails().components[uiText].text, 'SHARDS 0/3');
+assert.equal(hudDetails().component_fields[uiText].text.writable, false);
 assert.equal(call(runtime, { type: 'commands' }).response.commands[0].name, 'spawn_shard');
 let frame = 0;
 for (const [action, ticks] of [['right', 2], ['down', 3], ['right', 6]]) {
@@ -61,9 +66,10 @@ const stepped = call(runtime, { type: 'step', frames: 11 });
 assert.equal(stepped.observed_frame, 11);
 const details = call(runtime, { type: 'entity', entity: shrine }).response;
 assert.ok(Object.keys(details.components).some(name => name.endsWith('::ActiveShrine')));
-assert.equal(call(runtime, { type: 'entities' }).response.entities.length, 2);
+assert.equal(call(runtime, { type: 'entities' }).response.entities.length, 3);
+assert.equal(hudDetails().components[uiText].text, 'SHARDS 3/3  SHRINE ACTIVE');
 const capture = call(runtime, { type: 'capture' }).response;
-assert.equal(capture.checksum, '190a92085def5677');
+assert.equal(capture.checksum, 'f7a298f62ad75c1c');
 assert.deepEqual([capture.width, capture.height], [160, 112]);
 assert.ok(capture.artifact.startsWith('data:image/png;base64,'));
 const png = Buffer.from(capture.artifact.split(',')[1], 'base64');

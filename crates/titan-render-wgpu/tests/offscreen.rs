@@ -281,7 +281,7 @@ fn completed_rpg_replay_matches_software_capture() {
         let assets = app.world().resource::<ImageAssets>().unwrap();
         let reference = SoftwareRenderer::render(frame, assets).unwrap();
         let reference_checksum = game::image_checksum(&reference);
-        assert_eq!(reference_checksum, 0x190a92085def5677);
+        assert_eq!(reference_checksum, 0xf7a298f62ad75c1c);
         let tolerance = std::env::var("TITAN_GPU_TOLERANCE")
             .map(|s| s.parse::<u8>().expect("TITAN_GPU_TOLERANCE must be a u8"))
             .unwrap_or(2);

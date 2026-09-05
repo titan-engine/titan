@@ -59,7 +59,7 @@ def main():
                 capabilities = cli("capabilities")["response"]["operations"]
                 assert {"inspect", "invoke", "inject_input", "step", "capture"} <= set(capabilities)
                 entities = cli("entities")["response"]["entities"]
-                assert len(entities) == 5
+                assert len(entities) == 6
                 shrine = next(entity["id"] for entity in entities if entity["name"] == "shrine")
                 assert cli("commands")["response"]["commands"][0]["name"] == "spawn_shard"
                 frame = 0
@@ -73,7 +73,7 @@ def main():
                 assert any(name.endswith("::ActiveShrine") for name in details["components"])
                 assert len(cli("entities")["response"]["entities"]) == 2
                 capture = cli("capture")["response"]
-                assert capture["checksum"] == "190a92085def5677", capture
+                assert capture["checksum"] == "f7a298f62ad75c1c", capture
                 artifact = Path(capture["artifact"])
                 assert artifact.is_absolute(), capture
                 assert artifact.read_bytes().startswith(b"P6\n160 112\n255\n")
@@ -89,7 +89,7 @@ def main():
                 assert bundle["response"]["error"]["code"] == "invalid_value"
                 assert len(bundle["history"]["accepted_inputs"]) == 11
                 assert bundle["world_state"]["quest"] == {"collected_shards": 3, "shrine_active": True}
-                assert bundle["capture"]["checksum"] == "190a92085def5677"
+                assert bundle["capture"]["checksum"] == "f7a298f62ad75c1c"
                 assert (manifest.parent / bundle["capture"]["artifact"]).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 assert "spawn_shard" in (manifest.parent / "api.txt").read_text()
                 assert "request" in bundle["timings_us"]

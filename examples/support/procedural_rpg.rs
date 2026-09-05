@@ -15,6 +15,7 @@ use titan::input::{InputRecording, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
+use titan::ui::{BitmapFont, UiNode, UiText, append_ui, register_ui_inspection};
 use titan::{
     App, Commands, Component, FixedTime, FixedUpdate, Name, Query, Res, ResMut, Startup, World,
 };
@@ -40,6 +41,9 @@ struct Shrine;
 
 #[derive(Component)]
 struct ActiveShrine;
+
+#[derive(Component)]
+struct QuestHud;
 
 #[derive(Default)]
 struct ScheduledInput {
@@ -92,6 +96,7 @@ pub fn build_game() -> App {
     app.add_systems(FixedUpdate, move_player);
     app.add_systems(FixedUpdate, collect_shards);
     app.add_systems(FixedUpdate, activate_shrine);
+    app.add_systems(FixedUpdate, sync_quest_ui);
     app.add_extractor(render_frame);
     app
 }
@@ -130,6 +135,7 @@ pub fn inspector_with_capture(
     capture: impl FnMut(&App) -> Result<CaptureResult, ProtocolError> + Send + 'static,
 ) -> Inspector {
     let mut inspector = Inspector::new(config);
+    register_ui_inspection(&mut inspector).expect("unique UI fields");
     for (field, maximum) in [("x", MAP_WIDTH - 1), ("y", MAP_HEIGHT - 1)] {
         inspector
             .register_field::<Position, i32>(
@@ -288,7 +294,9 @@ fn apply_scheduled_input(
 fn setup(world: &mut World) {
     let mut assets = ImageAssets::new();
     let art = generate_art(&mut assets);
+    let font = BitmapFont::tiny(&mut assets);
     world.insert_resource(assets);
+    world.insert_resource(font);
     world.insert_resource(art);
 
     spawn_at(world, Position { x: 2, y: 2 }, Player, "player");
@@ -296,6 +304,25 @@ fn setup(world: &mut World) {
     spawn_at(world, Position { x: 4, y: 5 }, Shard, "shard-2");
     spawn_at(world, Position { x: 8, y: 5 }, Shard, "shard-3");
     spawn_at(world, Position { x: 10, y: 5 }, Shrine, "shrine");
+    world.spawn_with((
+        Name::new("ui/quest"),
+        QuestHud,
+        UiNode::new(4, 4, 152, 5),
+        UiText::new("SHARDS 0/3").with_color(Color::rgb(255, 248, 217)),
+    ));
+}
+
+fn sync_quest_ui(state: Res<QuestState>, mut labels: Query<(&mut UiText, &QuestHud)>) {
+    let text = format!(
+        "SHARDS {}/3{}",
+        state.collected_shards,
+        if state.shrine_active {
+            "  SHRINE ACTIVE"
+        } else {
+            ""
+        },
+    );
+    labels.for_each(|_, (label, _)| label.text.clone_from(&text));
 }
 
 fn spawn_at<T: Component>(world: &mut World, position: Position, marker: T, name: &str) {
@@ -418,6 +445,7 @@ fn render_frame(world: &World) -> RenderFrame {
             .with_layer(layer),
         );
     }
+    append_ui(world, &mut frame);
     frame
 }
 
@@ -829,7 +857,7 @@ mod tests {
         let frame = app.extracted::<titan::render::RenderFrame>().unwrap();
         let image = SoftwareRenderer::render(frame, app.world().resource::<ImageAssets>().unwrap())
             .unwrap();
-        assert_eq!(image_checksum(&image), 0x190a_9208_5def_5677);
+        assert_eq!(image_checksum(&image), 0xf7a2_98f6_2ad7_5c1c);
     }
 
     fn request(
@@ -885,7 +913,23 @@ mod tests {
         )) else {
             panic!("expected entities")
         };
-        assert_eq!(page.entities.len(), 5);
+        assert_eq!(page.entities.len(), 6);
+        let hud = page
+            .entities
+            .iter()
+            .find(|entity| entity.name.as_deref() == Some("ui/quest"))
+            .unwrap()
+            .id;
+        let Response::Entity(hud_details) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entity { entity: hud },
+        )) else {
+            panic!("expected UI entity")
+        };
+        let ui_text = std::any::type_name::<titan::ui::UiText>();
+        assert_eq!(hud_details.components[ui_text]["text"], "SHARDS 0/3");
+        assert!(!hud_details.component_fields[ui_text]["text"].writable);
         assert!(
             page.entities
                 .iter()
@@ -921,6 +965,17 @@ mod tests {
         let response = request(&mut app, &mut inspector, Request::Step { frames: 11 });
         assert_eq!(response.observed_frame, 11);
         success(response);
+        let Response::Entity(hud_details) = success(request(
+            &mut app,
+            &mut inspector,
+            Request::Entity { entity: hud },
+        )) else {
+            panic!("expected updated UI entity")
+        };
+        assert_eq!(
+            hud_details.components[ui_text]["text"],
+            "SHARDS 3/3  SHRINE ACTIVE"
+        );
         let Response::Entity(details) = success(request(
             &mut app,
             &mut inspector,
@@ -944,14 +999,14 @@ mod tests {
         )) else {
             panic!("expected entities")
         };
-        assert_eq!(page.entities.len(), 2);
+        assert_eq!(page.entities.len(), 3);
         let Response::Capture(capture) =
             success(request(&mut app, &mut inspector, Request::Capture))
         else {
             panic!("expected capture")
         };
         assert_eq!((capture.width, capture.height), (160, 112));
-        assert_eq!(capture.checksum, "190a92085def5677");
+        assert_eq!(capture.checksum, "f7a298f62ad75c1c");
         assert_eq!(capture.artifact, path.to_string_lossy());
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(b"P6\n160 112\n255\n"));
@@ -1023,7 +1078,7 @@ mod tests {
                 matches!(response.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::InvalidValue)
             );
         }
-        assert_eq!(app.world().entities().count(), 5);
+        assert_eq!(app.world().entities().count(), 6);
         assert!(
             !app.world()
                 .resource::<super::ScheduledInput>()

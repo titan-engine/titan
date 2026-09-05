@@ -173,7 +173,7 @@ mod tests {
         let Response::Capture(capture) = success(call(&mut runtime, Request::Capture)) else {
             panic!("capture")
         };
-        assert_eq!(capture.checksum, "190a92085def5677");
+        assert_eq!(capture.checksum, "f7a298f62ad75c1c");
         let bytes = STANDARD
             .decode(
                 capture
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!((info.width, info.height), (160, 112));
         assert_eq!(info.color_type, png::ColorType::Rgba);
         let decoded = titan::render::Image::new(info.width, info.height, pixels).unwrap();
-        assert_eq!(game::image_checksum(&decoded), 0x190a_9208_5def_5677);
+        assert_eq!(game::image_checksum(&decoded), 0xf7a2_98f6_2ad7_5c1c);
         success(call(
             &mut runtime,
             Request::Invoke {
