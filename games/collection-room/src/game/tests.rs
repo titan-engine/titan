@@ -194,3 +194,19 @@ fn recording_is_bounded_and_truncated_replay_rejected() {
     assert!(recording.truncated);
     assert!(replay(&mut app, recording).is_err());
 }
+
+#[test]
+fn ecs_overlay_tracks_progress_completion_and_restart() {
+    let mut app = app();
+    let text = |app: &App| app.world().iter::<UiText>().next().unwrap().1.text.clone();
+    assert_eq!(text(&app), "GEMS 0/3");
+    let initial = app.extracted::<RenderFrame>().unwrap().clone();
+    assert_eq!(initial.clear_color(), Color::rgba(0, 0, 0, 0));
+    assert!(!initial.sprites().is_empty());
+    win(&mut app);
+    assert_eq!(text(&app), "GEMS 3/3  ROOM COMPLETE");
+    assert!(app.extracted::<RenderFrame>().unwrap().sprites().len() > initial.sprites().len());
+    restart(&mut app);
+    assert_eq!(text(&app), "GEMS 0/3");
+    assert_eq!(app.extracted::<RenderFrame>().unwrap(), &initial);
+}

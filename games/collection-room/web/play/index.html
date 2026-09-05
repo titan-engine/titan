@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Titan Collection Room</title>
+<style>body{margin:0;background:#111c29;color:#edf4fc;font:16px system-ui}main{max-width:1100px;margin:28px auto;padding:0 20px}h1{font-size:26px}canvas{display:block;width:100%;aspect-ratio:16/9;background:#243044;outline:none}canvas:focus{outline:2px solid #63d7ea}button,label{margin:12px 8px 12px 0}button{padding:9px 15px;border:0;border-radius:5px;background:#d2e8f2;color:#132130;cursor:pointer}pre{white-space:pre-wrap;color:#adc5dc}#error{color:#ffb49c}small{display:block;color:#adc5dc}</style></head>
+<body><main><h1>Collection Room</h1><p>Collect the three gold cubes. Move with WASD or arrow keys.</p>
+<canvas width="960" height="540" tabindex="0" aria-label="Collection room game"></canvas>
+<div><button id="play">Play</button><button id="pause" disabled>Pause</button><button id="step" disabled>Step</button><button id="restart" disabled>Restart</button><button id="replay" disabled>Replay route</button><button id="export" disabled>Export recording</button><label>Load recording <input id="import" type="file" accept="application/json,.json" disabled></label></div>
+<label><input id="control" type="checkbox"> Enable inspector control</label><small>Space pauses/resumes. N steps while paused. R restarts. Replay advances the same simulation one fixed tick at a time. The game canvas shows collection progress.</small>
+<p id="error" role="alert"></p><pre id="status">Ready. Requires WebGPU or WebGL2 with floating-point color attachments.</pre>
+</main><script type="module" src="play.js"></script></body></html>

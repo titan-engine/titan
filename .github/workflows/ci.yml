@@ -141,8 +141,8 @@ jobs:
       - name: Check and drive headless collection room
         run: |
           cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
-          cargo test --manifest-path games/collection-room/Cargo.toml --all-targets
-          cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
+          cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/collection-room/scripts/test-control.py
 
       - name: Check and drive independent arena game
@@ -232,6 +232,7 @@ jobs:
         run: |
           python3 games/collection-room/scripts/build-browser.py
           node games/collection-room/scripts/test-browser.mjs
+          node --test games/collection-room/web/play/*.test.mjs
 
       - name: Exercise headless 3D primitives in actual WebAssembly
         run: node scripts/test-render-3d.mjs
@@ -307,7 +308,9 @@ jobs:
       - name: Verify native 3D shaders and offscreen readback
         env:
           TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
-        run: cargo test -p titan-render-wgpu --test three_d -- --ignored
+        run: |
+          cargo test -p titan-render-wgpu --test three_d -- --ignored
+          cargo test -p titan-render-wgpu --test composition -- --ignored
 
       - name: Retain native 3D GPU comparison evidence
         if: always()

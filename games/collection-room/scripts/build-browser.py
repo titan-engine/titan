@@ -5,5 +5,5 @@ from titan_tools import ROOT, load
 if __name__ == "__main__":
     tools, metadata = load()
     package = next(p for p in metadata["packages"] if p["id"] == metadata["resolve"]["root"])
-    tools.browser(ROOT, metadata, package_name=package["name"], out_name="titan_game")
-    print("Built headless browser and Node bindings; run node scripts/test-browser.mjs.")
+    tools.browser(ROOT, metadata, package_name=package["name"], out_name="titan_game", features=("player",))
+    print("Built playable browser and Node bindings; serve web/ and open /play/.")

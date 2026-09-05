@@ -66,7 +66,7 @@ def copy_assets(source, destination):
         staged.rename(destination)
 
 
-def browser(root, metadata, *, package_name, out_name, assets_source=None):
+def browser(root, metadata, *, package_name, out_name, assets_source=None, features=()):
     """Build bindings and replace web/assets from assets_source (default root/assets)."""
     root = Path(root).resolve()
     resources = asset_source(root, assets_source)
@@ -109,7 +109,8 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None):
         bindgen = tool_root / "bin/wasm-bindgen"
     processes.run(["rustup", "target", "add", "wasm32-unknown-unknown"], cwd=root, check=True, phase="build")
     processes.run(["cargo", "build", "--package", package_name, "--lib", "--target",
-                    "wasm32-unknown-unknown", "--release"], cwd=root, check=True, phase="build")
+                    "wasm32-unknown-unknown", "--release",
+                    *(["--features", ",".join(features)] if features else [])], cwd=root, check=True, phase="build")
     wasm = target / "wasm32-unknown-unknown/release" / (libraries[0]["name"].replace("-", "_") + ".wasm")
     for flavor, output in [("web", root / "web/inspector/pkg"), ("nodejs", target / "titan/browser-node")]:
         processes.run([str(bindgen), str(wasm), "--target", flavor, "--out-dir", str(output),
