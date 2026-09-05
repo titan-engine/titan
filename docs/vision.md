@@ -230,8 +230,10 @@ by humans, AI systems or procedural code.
 The [file-backed image exercise](assets.md) now loads two loose PNGs into the
 same RGBA `Image` used by procedural generation, with host startup and packaging
 verified across native/browser/headless paths. This is evidence for a shared
-image boundary; caching, asset identity/dependencies, additional formats and
-broader generation support remain future work.
+image boundary. A separate [generated PNG fixture](generated-assets.md) exercises
+build-time and lazy generation, disk-cache reuse, input/version invalidation and
+corrupt-entry recovery. General asset identity/dependencies, additional formats
+and broader generation support remain future work.
 
 ### Determinism and verification
 
