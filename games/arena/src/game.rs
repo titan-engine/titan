@@ -19,7 +19,7 @@ use titan::ui::{
     BitmapFont, UiButton, UiNode, UiPointer, UiPointerResult, UiText, append_ui,
     register_ui_inspection,
 };
-use titan::{App, Component, FixedTime, FixedUpdate, Name, Res, ResMut, Startup, World};
+use titan::{App, Component, FixedTime, FixedUpdate, Inspect, Name, Res, ResMut, Startup, World};
 use titan_protocol::{
     CaptureResult, CommandMetadata, ErrorCode, FieldMetadata, InputValue, ProtocolError,
 };
@@ -32,8 +32,10 @@ pub const SURVIVAL_TICKS: u32 = 1200;
 pub const DASH_TICKS: u32 = 6;
 pub const DASH_COOLDOWN_TICKS: u32 = 120;
 const DASH_SPEED: i32 = 4;
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Inspect, Clone, Copy)]
 struct Enemy {
+    /// Whether this pooled enemy is active in the arena
+    #[inspect]
     active: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -256,19 +258,8 @@ pub fn inspector_with_capture(
     let mut inspector = Inspector::new(config);
     register_ui_inspection(&mut inspector).expect("unique UI fields");
     inspector
-        .register_read_only_field::<Enemy, bool>(
-            "active",
-            FieldMetadata {
-                type_name: "bool".into(),
-                description: "Whether this pooled enemy is active in the arena".into(),
-                writable: false,
-                minimum: None,
-                maximum: None,
-                unit: None,
-            },
-            |enemy| enemy.active,
-        )
-        .expect("unique enemy active field");
+        .register_inspectable::<Enemy>()
+        .expect("unique enemy fields");
     for (field, maximum) in [("x", WIDTH - DOT_SIZE), ("y", HEIGHT - DOT_SIZE)] {
         inspector
             .register_field::<Position, i32>(
@@ -780,6 +771,25 @@ mod tests {
         let entity = a.world().iter::<Player>().next().unwrap().0;
         let p = a.world().get::<Position>(entity).unwrap();
         (p.x, p.y)
+    }
+    #[test]
+    fn enemy_inspection_metadata_remains_read_only() {
+        let inspector = inspector_with_capture(
+            InspectionConfig::controlled("metadata-test", "arena"),
+            |_| unreachable!("capture is not used by this test"),
+        );
+        let components = inspector.component_field_metadata();
+        let active = &components[std::any::type_name::<Enemy>()]["active"];
+        assert_eq!(active.type_name, "bool");
+        assert_eq!(
+            active.description,
+            "Whether this pooled enemy is active in the arena"
+        );
+        assert!(!active.writable);
+        assert_eq!(
+            (active.minimum, active.maximum, &active.unit),
+            (None, None, &None)
+        );
     }
     #[test]
     fn dash_locks_direction_and_counts_exact_cooldown() {

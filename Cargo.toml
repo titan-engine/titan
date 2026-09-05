@@ -35,6 +35,7 @@ titan-remote = { path = "crates/titan-remote" }
 pollster = "0.4"
 winit = "0.30"
 titan-render-wgpu = { path = "crates/titan-render-wgpu" }
+trybuild = "1"
 
 # These hosts load PNG files at startup; procedural-only library users can
 # disable default features without compiling asset-dependent examples.
