@@ -163,7 +163,7 @@ impl ImageId {
 }
 
 /// Deterministically allocated CPU image assets.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ImageAssets {
     next_id: u64,
     images: BTreeMap<ImageId, Image>,

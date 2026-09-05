@@ -15,6 +15,37 @@ use titan_protocol::{
     RequestEnvelope, RunMode,
 };
 
+/// Presentation and captures share this clear color and ECS extraction.
+pub const CAPTURE_CLEAR: titan::render::three_d::BaseColor =
+    titan::render::three_d::BaseColor::rgb(17, 28, 41);
+
+/// Fresh owned assets, scene and UI at one application safe point.
+pub struct FrozenCapture {
+    pub scene: titan::render::three_d::RenderFrame3d,
+    pub overlay: titan::render::RenderFrame,
+    pub assets: titan::render::ImageAssets,
+}
+impl FrozenCapture {
+    pub fn new(app: &App) -> Result<Self, ProtocolError> {
+        Ok(Self {
+            scene: game::extract(app.world()).map_err(|e| {
+                ProtocolError::new(
+                    ErrorCode::Internal,
+                    format!("capture extraction failed: {e}"),
+                )
+            })?,
+            overlay: game::extract_overlay(app.world()),
+            assets: app
+                .world()
+                .resource::<titan::render::ImageAssets>()
+                .ok_or_else(|| {
+                    ProtocolError::new(ErrorCode::Internal, "missing capture image assets")
+                })?
+                .clone(),
+        })
+    }
+}
+
 #[derive(Default)]
 struct Control {
     paused: bool,
@@ -203,6 +234,20 @@ impl PlayerSession {
             enable_control,
         }
     }
+    /// Install an owned producer; freezing occurs synchronously at acceptance.
+    pub fn register_capture(
+        &mut self,
+        handler: impl FnMut(
+            &App,
+            titan_protocol::CaptureIdentity,
+            titan::inspection::CaptureCompleter,
+        ) -> Result<(), ProtocolError>
+        + Send
+        + 'static,
+    ) {
+        self.inspector
+            .register_async_capture_handler(960, 540, handler);
+    }
     pub fn set_control_enabled(&mut self, enabled: bool) {
         self.enable_control = enabled;
         self.inspector.set_mutation_enabled(enabled);
@@ -242,6 +287,7 @@ impl PlayerSession {
     pub fn restart(&mut self) {
         // Restart returns to live play and cancels every previous input source.
         game::restart(&mut self.app);
+        self.inspector.reset_capture_session();
         clear(self.app.world_mut());
         let control = self.app.world_mut().resource_mut::<Control>().unwrap();
         control.replay = None;
@@ -258,6 +304,7 @@ impl PlayerSession {
     }
     pub fn load_replay(&mut self, recording: Recording) -> Result<(), ProtocolError> {
         load(&mut self.app, recording)?;
+        self.inspector.reset_capture_session();
         self.inspector.note_external_change();
         Ok(())
     }
@@ -350,6 +397,9 @@ impl PlayerSession {
             self.enable_control && allowed,
             request,
         );
+        if game::status(&self.app)["session_generation"] != generation {
+            self.inspector.reset_capture_session();
+        }
         if game::status(&self.app)["session_generation"] != generation
             && !matches!(&request.request, Request::Invoke {name,..} if name == "load_replay")
         {
@@ -434,6 +484,169 @@ mod tests {
                 response: Response::QueryResult { value },
             } => value,
             _ => panic!("query failed: {response:?}"),
+        }
+    }
+    #[test]
+    fn captures_freeze_partial_failed_edits_at_unchanged_tick_and_revision() {
+        use std::sync::{Arc, Mutex};
+        let mut player = session();
+        let snapshots = Arc::new(Mutex::new(Vec::new()));
+        let observed = snapshots.clone();
+        player.register_capture(move |app, identity, done| {
+            observed
+                .lock()
+                .unwrap()
+                .push((identity.clone(), FrozenCapture::new(app)?));
+            done.complete(Ok(titan_protocol::CaptureResult {
+                identity,
+                width: 960,
+                height: 540,
+                format: "test".into(),
+                artifact: "owned".into(),
+                checksum: "test".into(),
+            }));
+            Ok(())
+        });
+        player
+            .inspector
+            .register_command(
+                CommandMetadata {
+                    name: "partial_failure".into(),
+                    description: "test partial mutation".into(),
+                    arguments: Default::default(),
+                },
+                |app, _: Empty| -> Result<(), ProtocolError> {
+                    let id = app.world().iter::<game::Progress>().next().unwrap().0;
+                    app.world_mut().get_mut::<game::Position>(id).unwrap().x += 250;
+                    let hud = app.world().iter::<titan::ui::UiText>().next().unwrap().0;
+                    app.world_mut()
+                        .get_mut::<titan::ui::UiText>(hud)
+                        .unwrap()
+                        .text = "PARTIAL FAILURE".into();
+                    Err(ProtocolError::new(
+                        ErrorCode::Internal,
+                        "deliberate partial failure",
+                    ))
+                },
+            )
+            .unwrap();
+        let capture = |player: &mut PlayerSession| {
+            let Dispatch::Pending(mut pending) =
+                player.dispatch(&RequestEnvelope::new("capture", Request::Capture))
+            else {
+                panic!("capture must use owned completion")
+            };
+            assert!(matches!(
+                pending.poll(Duration::ZERO).unwrap().outcome,
+                ResponseOutcome::Success { .. }
+            ));
+        };
+        capture(&mut player);
+        let failure = request(
+            &mut player,
+            Request::Invoke {
+                name: "partial_failure".into(),
+                arguments: Default::default(),
+            },
+        );
+        assert!(matches!(failure.outcome, ResponseOutcome::Failure { .. }));
+        capture(&mut player);
+        let frozen = snapshots.lock().unwrap();
+        assert_eq!(frozen[0].0.observed_frame, frozen[1].0.observed_frame);
+        assert_eq!(frozen[0].0.state_revision, frozen[1].0.state_revision);
+        assert_ne!(
+            format!("{:?}", frozen[0].1.scene),
+            format!("{:?}", frozen[1].1.scene)
+        );
+        assert_ne!(frozen[0].1.overlay, frozen[1].1.overlay);
+        let image = frozen[0].1.overlay.sprites()[0].image;
+        player
+            .app
+            .world_mut()
+            .resource_mut::<titan::render::ImageAssets>()
+            .unwrap()
+            .remove(image);
+        assert!(frozen[0].1.assets.get(image).is_some());
+    }
+    #[test]
+    fn freeze_ignores_cached_extraction_without_a_tick_or_refresh() {
+        let mut player = session();
+        let before = FrozenCapture::new(player.app()).unwrap();
+        let hud = player
+            .app
+            .world()
+            .iter::<titan::ui::UiText>()
+            .next()
+            .unwrap()
+            .0;
+        player
+            .app
+            .world_mut()
+            .get_mut::<titan::ui::UiText>(hud)
+            .unwrap()
+            .text = "UNREFRESHED".into();
+        let after = FrozenCapture::new(player.app()).unwrap();
+        assert_ne!(before.overlay, after.overlay);
+        assert_eq!(
+            before.overlay,
+            *player
+                .app
+                .extracted::<titan::render::RenderFrame>()
+                .unwrap()
+        );
+        assert_eq!(state(&player)["session_tick"], 0);
+    }
+    #[test]
+    fn pending_captures_are_invalidated_by_every_restart_path() {
+        use std::sync::{Arc, Mutex};
+        for path in 0..4 {
+            let mut player = session();
+            let hold = Arc::new(Mutex::new(None));
+            let producer = hold.clone();
+            player.register_capture(move |_, _, done| {
+                *producer.lock().unwrap() = Some(done);
+                Ok(())
+            });
+            let Dispatch::Pending(mut pending) =
+                player.dispatch(&RequestEnvelope::new("capture", Request::Capture))
+            else {
+                panic!("pending")
+            };
+            let busy = request(&mut player, Request::Capture);
+            assert!(
+                matches!(busy.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::Busy)
+            );
+            match path {
+                0 => player.restart(),
+                1 => player.load_replay(reference_recording()).unwrap(),
+                2 => {
+                    request(
+                        &mut player,
+                        Request::Invoke {
+                            name: "restart".into(),
+                            arguments: Default::default(),
+                        },
+                    );
+                }
+                _ => {
+                    request(
+                        &mut player,
+                        Request::Invoke {
+                            name: "load_replay".into(),
+                            arguments: [(
+                                "recording".into(),
+                                serde_json::to_value(reference_recording()).unwrap(),
+                            )]
+                            .into(),
+                        },
+                    );
+                }
+            }
+            assert!(matches!(
+                pending.poll(Duration::ZERO).unwrap().outcome,
+                ResponseOutcome::Failure { .. }
+            ));
+            assert!(hold.lock().unwrap().as_ref().unwrap().is_cancelled());
         }
     }
     #[test]

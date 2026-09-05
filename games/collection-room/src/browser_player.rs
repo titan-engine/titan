@@ -5,7 +5,7 @@ use crate::{
 };
 use titan::render::{
     ImageAssets, RenderFrame,
-    three_d::{BaseColor, Frame3dError, RenderFrame3d},
+    three_d::{Frame3dError, RenderFrame3d},
 };
 use titan_protocol::RunMode;
 use titan_render_wgpu::{SurfaceRenderer3d, wgpu};
@@ -15,6 +15,7 @@ use web_sys::HtmlCanvasElement;
 #[wasm_bindgen]
 pub struct BrowserPlayer {
     session: PlayerSession,
+    captures: crate::capture::CaptureQueue,
     renderer: SurfaceRenderer3d,
     canvas: HtmlCanvasElement,
     accumulated_ms: f64,
@@ -41,15 +42,17 @@ impl BrowserPlayer {
         let renderer = SurfaceRenderer3d::new(&instance, surface, canvas.width(), canvas.height())
             .await
             .map_err(js)?;
-        let session = PlayerSession::new(
+        let mut session = PlayerSession::new(
             "collection-room-browser-player",
             "collection-room",
             RunMode::Browser,
             false,
         );
+        let captures = crate::capture::CaptureQueue::install(&mut session);
         let epoch = session.clock_epoch();
         Ok(Self {
             session,
+            captures,
             renderer,
             canvas,
             accumulated_ms: 0.0,
@@ -92,7 +95,7 @@ impl BrowserPlayer {
             .resource::<ImageAssets>()
             .ok_or_else(|| js("missing UI images"))?;
         self.renderer
-            .render(scene, BaseColor::rgb(17, 28, 41), overlay, images)
+            .render(scene, crate::player::CAPTURE_CLEAR, overlay, images)
             .map_err(js)
     }
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -159,7 +162,10 @@ impl BrowserPlayer {
     /// Dispatch owns its eventual result; the app borrow ends before awaiting.
     pub fn dispatch(&mut self, json: &str) -> js_sys::Promise {
         titan::inspection::response_promise(self.session.capture_timeout(), || {
-            self.session.dispatch_json(json)
+            let dispatch = self.session.dispatch_json(json);
+            let (device, queue) = self.renderer.capture_device();
+            self.captures.start(device, queue);
+            dispatch
         })
     }
 }
