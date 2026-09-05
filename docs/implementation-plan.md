@@ -79,6 +79,7 @@ python3 scripts/test-control-loop.py
 python3 scripts/build-browser.py
 node scripts/test-browser.mjs
 node --test web/inspector/bridge.test.mjs
+node --test web/shared/input.test.mjs
 ```
 
 Preserve CI coverage for the starter and both games. Run

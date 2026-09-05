@@ -72,6 +72,7 @@ jobs:
           python3 scripts/build-browser.py
           node scripts/test-browser.mjs
           node --test web/inspector/bridge.test.mjs
+          node --test web/shared/input.test.mjs
 
       - name: Build starter WASM and exercise its control loop
         run: |

@@ -10,7 +10,7 @@ use titan_protocol::{
     CaptureResult, CommandMetadata, ErrorCode, FieldMetadata, InputValue, ProtocolError,
 };
 
-use titan::input::{ActionValue, InputFrame, InputTracker};
+use titan::input::{ActionValue, BufferedButtons, InputFrame, InputTracker};
 use titan::input::{InputRecording, RecordingHeader};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
@@ -789,6 +789,33 @@ mod tests {
     }
 
     #[test]
+    fn interactive_cancellation_discards_a_pending_tap() {
+        let mut app = build_game();
+        let mut input = super::InteractiveInput::default();
+        input.set_action("right", true).unwrap();
+        input.set_action("right", false).unwrap();
+        input.clear();
+        input.tick(&mut app);
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        assert_eq!(app.world().get::<super::Position>(player).unwrap().x, 2);
+    }
+
+    #[test]
+    fn canceling_one_direction_preserves_another_pending_tap() {
+        let mut app = build_game();
+        let mut input = super::InteractiveInput::default();
+        for direction in ["right", "down"] {
+            input.set_action(direction, true).unwrap();
+            input.set_action(direction, false).unwrap();
+        }
+        input.cancel_action("down").unwrap();
+        input.tick(&mut app);
+        let player = app.world().iter::<super::Player>().next().unwrap().0;
+        let position = app.world().get::<super::Position>(player).unwrap();
+        assert_eq!((position.x, position.y), (3, 2));
+    }
+
+    #[test]
     fn recorded_walk_collects_every_shard_and_activates_the_shrine() {
         let mut app = build_game();
         let recording = recorded_walk();
@@ -1050,30 +1077,37 @@ mod tests {
 /// Protocol recordings bypass this helper and keep their exact per-tick input.
 #[derive(Default)]
 pub struct InteractiveInput {
-    held: std::collections::BTreeSet<Action>,
-    pending_presses: std::collections::BTreeSet<Action>,
+    buttons: BufferedButtons<Action>,
     tracker: InputTracker<Action>,
     repeat_in: u8,
 }
 
 impl InteractiveInput {
-    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
-        let action = match name {
+    pub fn clear(&mut self) {
+        self.buttons.clear();
+        self.tracker = InputTracker::default();
+        self.repeat_in = 0;
+    }
+
+    fn action(name: &str) -> Result<Action, String> {
+        Ok(match name {
             "up" => Action::Up,
             "down" => Action::Down,
             "left" => Action::Left,
             "right" => Action::Right,
             _ => return Err(format!("unknown action: {name}")),
-        };
-        let changed = if pressed {
-            self.held.insert(action)
-        } else {
-            self.held.remove(&action)
-        };
-        if changed {
-            if pressed {
-                self.pending_presses.insert(action);
-            }
+        })
+    }
+
+    pub fn cancel_action(&mut self, name: &str) -> Result<(), String> {
+        self.buttons.cancel(&Self::action(name)?);
+        self.repeat_in = 0;
+        Ok(())
+    }
+
+    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
+        let action = Self::action(name)?;
+        if self.buttons.set(action, pressed, true) {
             self.repeat_in = 0;
         }
         Ok(())
@@ -1082,14 +1116,13 @@ impl InteractiveInput {
     pub fn tick(&mut self, app: &mut App) {
         let values = if self.repeat_in == 0 {
             self.repeat_in = 5;
-            let values = self
-                .held
-                .union(&self.pending_presses)
+            let presses = self.buttons.take_presses();
+            self.buttons
+                .held()
+                .union(&presses)
                 .copied()
                 .map(|action| (action, ActionValue::PRESSED))
-                .collect::<Vec<_>>();
-            self.pending_presses.clear();
-            values
+                .collect::<Vec<_>>()
         } else {
             self.repeat_in -= 1;
             Vec::new()

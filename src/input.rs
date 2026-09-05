@@ -28,6 +28,64 @@ pub fn update_button_alias<K: Copy + Eq + Hash, A: PartialEq>(
     Some((action, active))
 }
 
+/// Accumulates held digital actions and optional presses between fixed ticks.
+///
+/// Callers choose which actions buffer short taps, when to consume those taps,
+/// and how to turn them into game input. Repeated presses while held do not
+/// enqueue another tap. Multiple taps before consumption coalesce to one press.
+/// Physical aliases should be combined before calling [`Self::set`].
+pub struct BufferedButtons<A: Ord> {
+    held: BTreeSet<A>,
+    presses: BTreeSet<A>,
+}
+
+impl<A: Ord> Default for BufferedButtons<A> {
+    fn default() -> Self {
+        Self {
+            held: BTreeSet::new(),
+            presses: BTreeSet::new(),
+        }
+    }
+}
+
+impl<A: Clone + Ord> BufferedButtons<A> {
+    /// Updates a logical button, returning whether its held state changed.
+    /// Releasing a button preserves any buffered press until consumption or clear.
+    pub fn set(&mut self, action: A, pressed: bool, buffer_press: bool) -> bool {
+        if pressed {
+            let changed = self.held.insert(action.clone());
+            if changed && buffer_press {
+                self.presses.insert(action);
+            }
+            changed
+        } else {
+            self.held.remove(&action)
+        }
+    }
+
+    pub fn held(&self) -> &BTreeSet<A> {
+        &self.held
+    }
+
+    /// Consumes buffered presses without releasing held actions.
+    pub fn take_presses(&mut self) -> BTreeSet<A> {
+        std::mem::take(&mut self.presses)
+    }
+
+    /// Cancels one action, including its buffered press, without affecting others.
+    pub fn cancel(&mut self, action: &A) {
+        self.held.remove(action);
+        self.presses.remove(action);
+    }
+
+    /// Cancels held actions and buffered presses, for pause or focus loss.
+    /// Reset any caller-owned sampler or repeat timer at the same boundary.
+    pub fn clear(&mut self) {
+        self.held.clear();
+        self.presses.clear();
+    }
+}
+
 /// A deterministic signed action value.
 ///
 /// Buttons use zero or [`PRESSED`](Self::PRESSED). Analog actions can use the
@@ -230,6 +288,39 @@ mod tests {
     enum Action {
         Move,
         Interact,
+    }
+
+    #[test]
+    fn buffered_buttons_preserve_taps_and_cancel_independently() {
+        let mut buttons = super::BufferedButtons::default();
+        assert!(buttons.set(Action::Move, true, true));
+        assert!(!buttons.set(Action::Move, true, true));
+        assert!(buttons.set(Action::Move, false, true));
+        buttons.set(Action::Interact, true, true);
+        buttons.cancel(&Action::Interact);
+        assert_eq!(buttons.take_presses(), [Action::Move].into());
+        assert!(buttons.take_presses().is_empty());
+        assert!(buttons.held().is_empty());
+        buttons.set(Action::Move, true, true);
+        buttons.clear();
+        assert!(buttons.held().is_empty());
+        assert!(buttons.take_presses().is_empty());
+    }
+
+    #[test]
+    fn buffering_is_opt_in_and_repress_survives_between_ticks() {
+        let mut buttons = super::BufferedButtons::default();
+        buttons.set(Action::Move, true, false);
+        assert!(buttons.held().contains(&Action::Move));
+        assert!(buttons.take_presses().is_empty());
+        buttons.set(Action::Interact, true, true);
+        assert_eq!(buttons.take_presses(), [Action::Interact].into());
+        buttons.set(Action::Interact, true, true);
+        assert!(buttons.take_presses().is_empty());
+        buttons.set(Action::Interact, false, true);
+        buttons.set(Action::Interact, true, true);
+        assert_eq!(buttons.take_presses(), [Action::Interact].into());
+        assert!(buttons.held().contains(&Action::Interact));
     }
 
     #[test]

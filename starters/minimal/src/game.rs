@@ -1,12 +1,12 @@
 //! Replace this module with your game. Hosts depend only on the functions below.
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use titan::input::{ActionValue, InputFrame, InputTracker};
+use titan::input::{ActionValue, BufferedButtons, InputFrame, InputTracker};
 use titan::inspection::{InspectionConfig, Inspector};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
@@ -261,29 +261,40 @@ fn render_frame(world: &World) -> RenderFrame {
 }
 #[derive(Default)]
 pub struct InteractiveInput {
-    held: BTreeSet<Action>,
+    buttons: BufferedButtons<Action>,
     tracker: InputTracker<Action>,
 }
 impl InteractiveInput {
-    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
-        let action = match name {
+    pub fn clear(&mut self) {
+        self.buttons.clear();
+        self.tracker = InputTracker::default();
+    }
+
+    fn action(name: &str) -> Result<Action, String> {
+        Ok(match name {
             "up" => Action::Up,
             "down" => Action::Down,
             "left" => Action::Left,
             "right" => Action::Right,
             _ => return Err(format!("unknown action: {name}")),
-        };
-        if pressed {
-            self.held.insert(action);
-        } else {
-            self.held.remove(&action);
-        }
+        })
+    }
+
+    pub fn cancel_action(&mut self, name: &str) -> Result<(), String> {
+        self.buttons.cancel(&Self::action(name)?);
+        Ok(())
+    }
+
+    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
+        let action = Self::action(name)?;
+        self.buttons.set(action, pressed, false);
         Ok(())
     }
     pub fn tick(&mut self, app: &mut App) {
         app.world_mut().insert_resource(
             self.tracker.sample(
-                self.held
+                self.buttons
+                    .held()
                     .iter()
                     .copied()
                     .map(|action| (action, ActionValue::PRESSED)),

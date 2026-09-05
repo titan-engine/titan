@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { bindPlayerInput } from '../shared/input.mjs';
 
 // Exercise the shipped handlers with a buffered-input double. Actual WASM
 // game semantics are covered separately by scripts/test-browser.mjs.
@@ -33,6 +34,10 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       pending = false;
       for (const action in held) held[action] = false;
     },
+    cancel_action(action) {
+      held[action] = false;
+      if (action === 'dash') pending = false;
+    },
     set_action(action, pressed) {
       if (action === 'dash' && pressed && !held[action]) pending = true;
       held[action] = pressed;
@@ -45,10 +50,11 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
     window, document, URLSearchParams, location: { search: '' },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     ResizeObserver: class { observe() {} },
+    bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
     init: async () => {}, BrowserPlayer: { create: async () => player },
   };
   vm.createContext(context);
-  vm.runInContext(readFileSync(new URL('./play.js', import.meta.url), 'utf8').replace(/^import.*\n/, ''), context);
+  vm.runInContext(readFileSync(new URL('./play.js', import.meta.url), 'utf8').replace(/^import.*\n/gm, ''), context);
   const key = (type, value = ' ', code = 'Space') => window.handlers[type]({ key: value, code, target: ids.game, preventDefault() {} });
   const dash = buttons.at(-1);
   const pointer = (type, pointerId) => dash.handlers[type]({ pointerId, preventDefault() {} });

@@ -42,6 +42,13 @@ def browser(root, metadata, *, package_name, out_name):
     candidates = [tool_root / "bin/wasm-bindgen"]
     # Reuse an engine checkout's tool or PATH only when its version matches.
     engine = package_by_name(metadata, "titan")
+    # Ship shared browser controls from the Cargo-resolved engine, including
+    # when the game lives outside this checkout. The root page uses the source.
+    shared_input = Path(engine["manifest_path"]).parent / "web/shared/input.mjs"
+    output_input = root / "web/shared/input.mjs"
+    if shared_input.resolve() != output_input.resolve():
+        output_input.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(shared_input, output_input)
     candidates.append(Path(engine["manifest_path"]).parent / "target/titan/tools/bin/wasm-bindgen")
     if installed := shutil.which("wasm-bindgen"):
         candidates.append(Path(installed))

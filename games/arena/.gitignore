@@ -1,2 +1,3 @@
 /target/
 /web/inspector/pkg/
+/web/shared/input.mjs

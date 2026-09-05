@@ -1,12 +1,12 @@
 //! Replace this module with your game. Hosts depend only on the functions below.
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use titan::input::{ActionValue, InputFrame, InputTracker};
+use titan::input::{ActionValue, BufferedButtons, InputFrame, InputTracker};
 use titan::inspection::{InspectionConfig, Inspector};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
@@ -564,33 +564,39 @@ fn run_status(world: &World) -> serde_json::Value {
 }
 #[derive(Default)]
 pub struct InteractiveInput {
-    held: BTreeSet<Action>,
-    pending_dash: bool,
+    buttons: BufferedButtons<Action>,
     tracker: InputTracker<Action>,
 }
 impl InteractiveInput {
-    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
-        let action = match name {
+    pub fn clear(&mut self) {
+        self.buttons.clear();
+        self.tracker = InputTracker::default();
+    }
+
+    fn action(name: &str) -> Result<Action, String> {
+        Ok(match name {
             "up" => Action::Up,
             "down" => Action::Down,
             "left" => Action::Left,
             "right" => Action::Right,
             "dash" => Action::Dash,
             _ => return Err(format!("unknown action: {name}")),
-        };
-        if pressed {
-            if action == Action::Dash && !self.held.contains(&action) {
-                self.pending_dash = true;
-            }
-            self.held.insert(action);
-        } else {
-            self.held.remove(&action);
-        }
+        })
+    }
+
+    pub fn cancel_action(&mut self, name: &str) -> Result<(), String> {
+        self.buttons.cancel(&Self::action(name)?);
+        Ok(())
+    }
+
+    pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), String> {
+        let action = Self::action(name)?;
+        self.buttons.set(action, pressed, action == Action::Dash);
         Ok(())
     }
     pub fn tick(&mut self, app: &mut App) {
-        let mut actions = self.held.clone();
-        if std::mem::take(&mut self.pending_dash) {
+        let mut actions = self.buttons.held().clone();
+        if self.buttons.take_presses().contains(&Action::Dash) {
             // A physical release/repress may happen between fixed ticks.
             // Prime the sampler with Dash released so that edge is retained.
             self.tracker.sample(
@@ -765,8 +771,8 @@ mod tests {
         let mut input = InteractiveInput::default();
         input.set_action("dash", true).unwrap();
         input.set_action("dash", false).unwrap();
-        // Hosts reset their input on focus loss, pause and restart.
-        input = InteractiveInput::default();
+        // Focus loss and pause must discard an already released tap too.
+        input.clear();
         input.tick(&mut a);
         assert_eq!(player_position(&a), (80, 65));
         assert_eq!(a.world().resource::<Run>().unwrap().dash_cooldown, 0);

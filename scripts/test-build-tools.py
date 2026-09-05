@@ -19,6 +19,9 @@ class BuildTools(unittest.TestCase):
         self.root = Path(self.directory.name).resolve()
         self.target = self.root / "custom target"
         self.engine = self.root / "engine checkout"
+        self.shared_input = self.engine / "web/shared/input.mjs"
+        self.shared_input.parent.mkdir(parents=True)
+        self.shared_input.write_text("export const engineInput = true;\n")
         self.metadata = {
             "target_directory": str(self.target),
             "packages": [
@@ -42,6 +45,7 @@ class BuildTools(unittest.TestCase):
             run.return_value.returncode = 0
             run.return_value.stdout = "wasm-bindgen 0.2.126\n"
             titan_build.browser(self.root, self.metadata, package_name="independent-game", out_name="game_bindings")
+        self.assertEqual((self.root / "web/shared/input.mjs").read_text(), self.shared_input.read_text())
         commands = [call.args[0] for call in run.call_args_list]
         install = next(command for command in commands if command[:2] == ["cargo", "install"])
         self.assertEqual(install[install.index("--version") + 1], "0.2.127")

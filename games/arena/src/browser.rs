@@ -99,6 +99,11 @@ mod player {
             self.input = game::InteractiveInput::default();
         }
 
+        /// Cancel one interrupted gesture without dropping other buffered actions.
+        pub fn cancel_action(&mut self, name: &str) -> Result<(), JsValue> {
+            self.input.cancel_action(name).map_err(js_error)
+        }
+
         /// Advance fixed 60 Hz ticks, then render. Long background pauses are capped.
         /// Calling frame(0) renders current state without advancing the game.
         pub fn frame(&mut self, elapsed_ms: f64) -> Result<(), JsValue> {
