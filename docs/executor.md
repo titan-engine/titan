@@ -46,3 +46,21 @@ compares both policies against the existing baseline, including small-workload
 thread overhead. Native and actual-WASM game regressions preserve reference
 checksums. Independent design review precedes implementation; final authored
 code receives a separate independent review.
+
+## Verification evidence
+
+Native integration tests in `tests/parallel_executor.rs` use bounded handshakes
+to prove read/read overlap, disjoint component/resource mutation and the worker
+limit. They cover serialization of conflicts, namespace separation, command
+reservation/insertion order without extra flushes, explicit/exclusive barriers,
+missing-resource prefixes, deferred failure order and joined panic propagation.
+Library tests retain sequential/default behavior and resource error coverage.
+Swarm checks both policies against a closed-form oracle and historical checksums;
+[measurements](swarm.md#comparing-executor-policies) record small-workload overhead.
+
+Local verification on 2026-09-05 passed workspace tests and strict Clippy,
+formatting, procedural-only core and WASM core checks. Native and actual-WASM
+RPG control, snapshot/replay and two-sprite asset checks preserved canonical
+state/pixels. Browser inspector/shared/play unit tests and measurement-runner
+checks also passed. The required PR and queued integration CI retain coverage
+for both games, the copied starter and macOS app bundles.

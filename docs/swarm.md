@@ -97,3 +97,25 @@ small systems can cost more to dispatch than to execute. This slice has no
 persistent pool or intra-query parallelism. The historical baseline above is
 preserved; fresh sequential measurements distinguish current machine conditions
 and refactoring overhead from parallel dispatch cost.
+
+
+Measured 2026-09-05 on the same macOS arm64 machine with 18 logical CPUs and
+rustc 1.98.1, release profile, 120 steps. The [raw comparison](evidence/swarm-executor.json)
+records clean revision `c8e93686668ca90af0b8522fc091da825a1fbff3`.
+Three fresh processes per size/policy each execute two simulations; medians use
+all six simulation durations and RSS ranges use three whole-process peaks.
+
+| Entities | Sequential median (ms) | Parallel, limit 2 median (ms) | Sequential peak RSS range (bytes) | Parallel peak RSS range (bytes) |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 0.789 | 4.037 | 2,736,128–2,752,512 | 2,932,736–2,981,888 |
+| 10,000 | 7.220 | 7.377 | 6,258,688–9,191,424 | 6,438,912–6,471,680 |
+| 100,000 | 73.337 | 44.921 | 34,766,848–37,208,064 | 35,684,352–36,569,088 |
+
+Both policies match every historical checksum in the baseline table. For this
+sample, dispatch overhead dominates at 1,000 entities; at 100,000 entities the
+independent patrol and weapon work amortizes that overhead. The 10,000-entity
+result lies near the crossover on this machine. Fresh sequential results also
+differ from the historical measurements. Other development/build tasks were
+active during this session and CPU load/power mode were not controlled, so these
+numbers do not establish a general speedup or a performance threshold. Retaining
+the sequential default avoids imposing worker costs on small games.
