@@ -115,6 +115,10 @@ asynchronous captures below remain agreed design, **not implemented 3D
 capabilities**. Their execution scope lives in the linked issues of
 [#42](https://github.com/titan-engine/titan/issues/42).
 
+The [standalone collection room](../games/collection-room/README.md) now supplies
+headless fixed-tick game rules, inspection/replay and extracted 3D frames using
+this boundary. It does not yet provide a player or image capture.
+
 ### Coordinates and data
 
 Use right-handed coordinates, +Y up, and an XZ ground plane. One world unit is
