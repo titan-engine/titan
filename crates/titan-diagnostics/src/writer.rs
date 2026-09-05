@@ -85,12 +85,7 @@ pub fn write_bundle(
         let capture_path = if let Some(image) = capture {
             let path = directory.join("capture.png");
             let file = private_file(&path)?;
-            let mut encoder = png::Encoder::new(file, image.width(), image.height());
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header()?;
-            writer.write_image_data(image.pixels())?;
-            writer.finish()?;
+            crate::write_png(image, file)?;
             let checksum = image
                 .pixels()
                 .iter()

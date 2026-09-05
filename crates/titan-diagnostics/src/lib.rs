@@ -4,6 +4,8 @@
 mod inspector;
 #[cfg(not(target_arch = "wasm32"))]
 pub use inspector::{DiagnosticInspector, DiagnosticResult};
+mod capture;
+pub use capture::{png_capture, write_png};
 mod compare;
 mod history;
 #[cfg(not(target_arch = "wasm32"))]

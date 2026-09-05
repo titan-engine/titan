@@ -1840,6 +1840,7 @@ dependencies = [
 name = "titan-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "png",
  "serde",
  "serde_json",
@@ -1851,9 +1852,7 @@ dependencies = [
 name = "titan-game"
 version = "0.1.0"
 dependencies = [
- "base64",
  "ctrlc",
- "png",
  "pollster",
  "serde",
  "serde_json",

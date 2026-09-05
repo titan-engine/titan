@@ -40,6 +40,26 @@ Captures are PNG data URIs in the existing `CaptureResult.artifact` field.
 The checksum is computed from the uncompressed RGBA image, so native PPM and
 browser PNG captures share the same exact reference checksum.
 
+## Reusing the synchronous host
+
+The RPG, starter and arena delegate JSON handling to
+`titan::inspection::BrowserSession::new(app, inspector, enable_control)` and
+`session.handle(request_json)`. Construct the game and run `Startup` first;
+register its commands, validated fields, input and capture hook on its inspector.
+The session sets browser run mode, paused execution and the opt-in mutation
+policy consistently. It owns the app and inspector so handling is exclusive.
+The WASM export and same-origin JavaScript bridge remain in each game.
+
+For an inline image capture, pass the game-rendered `Image` to
+`titan_diagnostics::png_capture(&image)`. `titan-diagnostics` is consequently an
+all-target dependency in copied games. It also exposes `write_png` for native
+artifact destinations; native bundle permissions and size bounds remain in the
+bundle writer. Games retain their rendering hooks and presentation choices.
+
+Migration from milestone 2 removes the local JSON parsing/control-policy helpers
+and PNG encoder; no protocol envelope, exported JavaScript method or checksum
+changes. The standalone starter shows the complete small wrapper.
+
 ## Message bridge
 
 The page accepts this message shape:

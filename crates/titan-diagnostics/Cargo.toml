@@ -13,3 +13,4 @@ titan-protocol = { path = "../titan-protocol" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 png = "0.18"
+base64 = "0.22"

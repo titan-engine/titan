@@ -1,5 +1,8 @@
 //! Transport-neutral inspection of a Titan [`App`](crate::App).
 
+mod browser;
+pub use browser::BrowserSession;
+
 use std::collections::BTreeMap;
 use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]

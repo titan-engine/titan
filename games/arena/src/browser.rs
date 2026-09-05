@@ -3,15 +3,11 @@
 //! JavaScript owns the same-origin message boundary. Each synchronous `handle`
 //! call owns the application exclusively; no simulation tick runs between calls.
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use titan::{
     App, Startup,
-    inspection::{InspectionConfig, Inspector},
+    inspection::{BrowserSession, InspectionConfig},
 };
-use titan_protocol::{
-    CaptureResult, ErrorCode, Operation, ProtocolError, Request, RequestEnvelope, Response,
-    ResponseEnvelope, ResponseOutcome, RunMode,
-};
+use titan_protocol::{CaptureResult, ProtocolError};
 use wasm_bindgen::prelude::*;
 
 use crate::game;
@@ -19,9 +15,7 @@ use crate::game;
 /// An isolated, paused game instance. Controls require an explicit `true`.
 #[wasm_bindgen]
 pub struct BrowserRuntime {
-    app: App,
-    inspector: Inspector,
-    enable_control: bool,
+    session: BrowserSession,
 }
 
 #[wasm_bindgen]
@@ -30,123 +24,22 @@ impl BrowserRuntime {
     pub fn new(enable_control: bool) -> Self {
         let mut app = game::build_game();
         app.update_schedule(Startup);
-        let mut config = InspectionConfig::controlled("arena-browser", "arena");
-        config.run_mode = RunMode::Browser;
-        // The explicit control opt-in also permits registered component fields.
-        config.mutation_enabled = enable_control;
+        let config = InspectionConfig::controlled("arena-browser", "arena");
         let inspector = game::inspector_with_capture(config, capture);
         Self {
-            app,
-            inspector,
-            enable_control,
+            session: BrowserSession::new(app, inspector, enable_control),
         }
     }
 
-    /// Executes a protocol envelope and returns exactly one JSON response envelope.
-    /// Malformed input produces InvalidValue with the request ID when recoverable.
+    /// Executes one request at a safe point and returns its JSON response envelope.
     pub fn handle(&mut self, request_json: &str) -> String {
-        let response = match serde_json::from_str::<RequestEnvelope>(request_json) {
-            Ok(request) => self.execute(&request),
-            Err(error) => {
-                let request_id = serde_json::from_str::<serde_json::Value>(request_json)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("request_id")
-                            .and_then(|id| id.as_str())
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_default();
-                let request = RequestEnvelope::new(request_id, Request::Status);
-                self.failure(
-                    &request,
-                    ProtocolError::new(
-                        ErrorCode::InvalidValue,
-                        format!("invalid request: {error}"),
-                    ),
-                )
-            }
-        };
-        serde_json::to_string(&response).expect("protocol responses contain serializable values")
-    }
-}
-
-impl BrowserRuntime {
-    fn execute(&mut self, request: &RequestEnvelope) -> ResponseEnvelope {
-        if !self.enable_control
-            && matches!(
-                request.request,
-                Request::Step { .. }
-                    | Request::Invoke { .. }
-                    | Request::InjectInput { .. }
-                    | Request::SetField { .. }
-            )
-        {
-            return self.failure(
-                request,
-                ProtocolError::new(
-                    ErrorCode::MutationDisabled,
-                    "browser controls were not explicitly enabled",
-                ),
-            );
-        }
-        let mut response = self.inspector.handle(&mut self.app, request);
-        if !self.enable_control {
-            match &mut response.outcome {
-                ResponseOutcome::Success {
-                    response: Response::Capabilities(capabilities),
-                } => {
-                    capabilities.operations.retain(|operation| {
-                        matches!(operation, Operation::Inspect | Operation::Capture)
-                    });
-                }
-                ResponseOutcome::Success {
-                    response: Response::Commands { commands },
-                } => commands.clear(),
-                _ => {}
-            }
-        }
-        response
-    }
-
-    fn failure(&mut self, request: &RequestEnvelope, error: ProtocolError) -> ResponseEnvelope {
-        // Preserve schema/target validation and exact frame/revision correlation.
-        let probe = RequestEnvelope {
-            request: Request::Status,
-            ..request.clone()
-        };
-        let mut response = self.inspector.handle(&mut self.app, &probe);
-        if matches!(response.outcome, ResponseOutcome::Success { .. }) {
-            response.outcome = ResponseOutcome::Failure { error };
-        }
-        response
+        self.session.handle(request_json)
     }
 }
 
 fn capture(app: &App) -> Result<CaptureResult, ProtocolError> {
     let image = game::render_image(app.world())?;
-    let mut bytes = Vec::new();
-    {
-        let mut encoder = png::Encoder::new(&mut bytes, image.width(), image.height());
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().map_err(capture_error)?;
-        writer
-            .write_image_data(image.pixels())
-            .map_err(capture_error)?;
-        writer.finish().map_err(capture_error)?;
-    }
-    Ok(CaptureResult {
-        width: image.width(),
-        height: image.height(),
-        format: "png".into(),
-        artifact: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
-        checksum: format!("{:016x}", game::image_checksum(&image)),
-    })
-}
-
-fn capture_error(error: png::EncodingError) -> ProtocolError {
-    ProtocolError::new(ErrorCode::Internal, format!("PNG capture failed: {error}"))
+    titan_diagnostics::png_capture(&image)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -260,6 +153,10 @@ fn restart_player(app: &mut App, input: &mut game::InteractiveInput, accumulated
 mod tests {
     use super::*;
     use titan_protocol::EntityId;
+    use titan_protocol::ErrorCode;
+    use titan_protocol::{
+        Operation, Request, RequestEnvelope, Response, ResponseEnvelope, ResponseOutcome, RunMode,
+    };
 
     #[test]
     fn player_restart_preserves_frame_and_clears_input() {
