@@ -1,8 +1,9 @@
 # Starter boundary audit
 
 The RPG remains the accepted regression game. The starter is a separate Cargo
-package under `starters/minimal`, with a replaceable `src/game.rs`. No engine
-feature or generator is required by this audit.
+package under `starters/minimal`, with a replaceable `src/game.rs`. Milestone 2 needed no engine changes. The subsequent
+[host setup audit](host-setup-audit.md) extracts demonstrated host responsibilities
+without introducing a generator or game framework.
 
 | Existing piece | Reusable responsibility | Game assumptions to remove |
 | --- | --- | --- |
@@ -20,9 +21,9 @@ continuous movement and exact future-frame snapshots. Commands, explicitly
 validated fields, scene construction and diagnostic state remain game-owned.
 
 The small host adapters live in the copied package and call public Titan APIs.
-This keeps their customization visible without creating an unproven host
-framework. The duplicate surface adapter is a candidate for later consolidation;
-it is not a dependency on RPG support files.
+Surface management, browser request policy, PNG encoding and packaging are now
+shared, while construction, mappings, capture selection and lifecycle composition
+remain visible in the game. No adapter depends on RPG support files.
 
 A standalone `[workspace]` and explicit package metadata prevent accidental
 workspace inheritance. Dependency paths must be configured after copying. The

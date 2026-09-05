@@ -11,7 +11,7 @@ The [starter verification](starter-verification.md),
 [verification summary](milestone-2/verification.json) record the evidence.
 The reusable macOS bundle step also makes the native window accessible to
 Computer Use. CI now covers copied bundles, starter setup and both games' native/WASM control loops; the
-new local commits have not been pushed or run on GitHub.
+accepted commit is pushed on main and v0.2.0, with CI passing on the tagged commit.
 
 ## Goal
 
@@ -95,5 +95,5 @@ reflection, parallel scheduling, and asset import are not prerequisites.
 
 Continue using the existing native diagnostic integration and browser control
 model. Automatic browser bundle export and new platform support are separate
-work unless they prove necessary for this exercise. Resolve concrete design
-choices through the [open questions](open-questions.md), not speculative systems.
+work unless they prove necessary for this exercise. The exercise answered its authoring and diagnosis questions; see the current
+[open questions](open-questions.md) for remaining measured host costs.

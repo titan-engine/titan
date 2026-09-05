@@ -104,7 +104,8 @@ instances. Play and inspection are separate instances of the same game builder.
   fields, input queue, capture and diagnostic state.
 - `src/main.rs`: native authenticated control queue, bounded lifecycle and
   diagnostic bundle writing. Drain requests only between simulation operations.
-- `src/bin/play.rs`, `src/surface.rs`: native keyboard/window and GPU surface glue.
+- `src/bin/play.rs`: native keyboard/window adapter using the public
+  `titan_render_wgpu::SurfaceRenderer`; GPU surface setup lives in Titan.
 - `src/browser.rs`, `web/`: synchronous protocol policy, browser player and UI.
 
 These are visible, editable host adapters, not an engine-owned application

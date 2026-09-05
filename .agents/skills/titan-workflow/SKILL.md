@@ -16,7 +16,10 @@ repository root, three directories above this skill folder.
 Start with `starters/minimal/README.md`: copy the standalone package, configure
 its Titan path dependencies, and put game definitions in `src/game.rs`. The
 starter has its own native controlled runner, GPU player, browser adapters and
-portable build script. It does not import RPG support code.
+portable build script. It does not import RPG support code. Shared host APIs
+are documented in `docs/host-setup-audit.md`, `docs/rendering.md` and
+`docs/host-tooling.md`: surface presentation, browser inspection policy, PNG
+encoding and build packaging are reused; game inputs and presentation stay local.
 For native macOS visual verification, use the package's
 `scripts/build-macos-app.py --name "My Game" --bundle-id dev.example.my-game`.
 The README documents this unsigned local app bundle; select its printed absolute
