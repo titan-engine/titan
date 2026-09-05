@@ -23,7 +23,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       click() { return handlers.click?.(); },
     };
   }
-  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'save', 'load-save', 'load-recording', 'restart-playback', 'exit-playback', 'playback-status', 'live-entities', 'live-summary'].map(key => [key, surface()]));
+  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'save', 'load-save', 'load-recording', 'restart-playback', 'exit-playback', 'playback-status', 'seek-position', 'seek-playback', 'playback-speed', 'live-entities', 'live-summary'].map(key => [key, surface()]));
   const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
   const window = surface();
   const document = Object.assign(surface(), {
@@ -170,7 +170,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(ids.step.disabled, true, 'revoking controls disables step');
   assert.equal(ids['load-save'].disabled, true, 'revoking controls disables file loading');
 
-  playback = { active: true, position: 0, total: 2, complete: false };
+  playback = { active: true, position: 0, total: 2, complete: false, seeking: false, speed: 1 };
   epoch++;
   ids['enable-controls'].handlers.change({ target: { checked: false } });
   assert.equal(ids.step.disabled, false, 'local playback step does not require inspection opt-in');

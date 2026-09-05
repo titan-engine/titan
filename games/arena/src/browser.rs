@@ -245,12 +245,15 @@ mod player {
                 self.accumulated_ms = 0.0;
             } else if !self.session.paused() {
                 self.accumulated_ms += elapsed_ms.min(250.0) * self.session.replay_speed();
-                for _ in 0..120 {
-                    if self.accumulated_ms < 1000.0 / 60.0 || self.session.paused() {
+                // Compute the budget once: repeated floating-point subtraction can
+                // turn exactly four ticks into three at 4x speed.
+                let ticks = (self.accumulated_ms / (1000.0 / 60.0)).floor().min(120.0) as usize;
+                self.accumulated_ms -= ticks as f64 * (1000.0 / 60.0);
+                for _ in 0..ticks {
+                    if self.session.paused() {
                         break;
                     }
                     self.session.tick();
-                    self.accumulated_ms -= 1000.0 / 60.0;
                 }
                 if self.session.paused() {
                     self.accumulated_ms = 0.0;

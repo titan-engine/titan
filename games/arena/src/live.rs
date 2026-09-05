@@ -884,6 +884,13 @@ mod tests {
             recording["final_snapshot"]
         );
         assert_eq!(recording_value(target.app()).unwrap(), recording);
+        target.seek_replay(300).unwrap();
+        assert_eq!(target.replay_status()["verified"], serde_json::Value::Null);
+        while target.replay_seeking() {
+            target.update_replay_seek();
+        }
+        target.step_replay().unwrap();
+        assert_eq!(target.replay_status()["verified"], true);
         target.restart_replay().unwrap();
         assert_eq!(target.replay_status()["verified"], serde_json::Value::Null);
         assert_eq!(target.replay_speed(), 1.0);
@@ -891,6 +898,33 @@ mod tests {
         target.stop_replay().unwrap();
         assert_eq!(target.update_replay_seek(), 0);
         assert!(!target.replay_seeking());
+    }
+
+    #[test]
+    fn empty_replay_seek_is_immediate_and_current_position_cancels_pending_seek() {
+        let mut target = session(true);
+        let empty = recording_value(target.app()).unwrap();
+        target.load_replay(empty).unwrap();
+        target.seek_replay(0).unwrap();
+        assert_eq!(target.update_replay_seek(), 0);
+        assert_eq!(target.replay_status()["verified"], true);
+        target.stop_replay().unwrap();
+        target.resume();
+        for _ in 0..121 {
+            target.tick();
+        }
+        target.pause();
+        target
+            .load_replay(recording_value(target.app()).unwrap())
+            .unwrap();
+        target.seek_replay(121).unwrap();
+        assert_eq!(target.update_replay_seek(), 120);
+        target.seek_replay(120).unwrap();
+        assert_eq!(target.update_replay_seek(), 0);
+        assert!(!target.replay_seeking());
+        assert_eq!(target.replay_status()["position"], 120);
+        target.step_replay().unwrap();
+        assert_eq!(target.replay_status()["verified"], true);
     }
 
     #[test]

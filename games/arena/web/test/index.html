@@ -117,7 +117,7 @@ document.querySelector('#seeking').onclick = async () => {
       if (response.status !== 'success') throw new Error(JSON.stringify(response));
       return response.response;
     };
-    const state = () => JSON.parse(player.status()).replay;
+    const state = () => JSON.parse(player.playback_status());
     const check = (condition, message) => { if (!condition) throw new Error(message); };
     const recording = call({type:'query', name:'recording'}).value;
     const verified = JSON.parse(verify_recording_json(JSON.stringify(recording)));

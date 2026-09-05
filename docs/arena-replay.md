@@ -133,3 +133,20 @@ The first arena exercise was game-owned and passed CI at `fb9b1d5`. The arena
 now adopts [shared engine recording/playback primitives](replay.md) alongside
 the RPG. Snapshot origins and playback policy remain in each game session; the
 hosts supply local controls. Existing arena recording files remain compatible.
+
+### Bounded controls exercise (#7)
+
+The 2026-09-05 acceptance run passed workspace/arena tests and strict Clippy,
+WASM builds, native control loops, actual-WASM replay tests, browser input tests,
+RPG replay/assets regressions, copied-starter checks and macOS bundle checks.
+The native GPU live-player script also passed forward/backward reconstruction,
+paused speed changes, input isolation and exact completion comparisons.
+
+The real browser GPU fixture’s **Seeking and speed** scenario passed ¼× and 4×
+frame pacing, zero-elapsed rendering, bounded seek updates, backward/forward
+reconstruction and EOF verification after a speed change to ½×. It completed
+at 1200/1200 with checksum `b5cf61da6f50efd7`; the rendered winning canvas was
+visually inspected. A floating-point subtraction issue found by this scenario
+was fixed by calculating each update’s tick budget once. Canonical initial and
+RPG references remain `e096abf94fd12c24` and `f7a298f62ad75c1c`. No reference
+image or README preview changed.
