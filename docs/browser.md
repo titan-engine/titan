@@ -57,7 +57,7 @@ The session sets browser run mode, paused execution and the opt-in mutation
 policy consistently. It owns the app and inspector so handling is exclusive.
 The WASM export and same-origin JavaScript bridge remain in each game.
 Export `dispatch` by returning
-`titan::inspection::response_promise(|| session.dispatch_json(request_json))`.
+`titan::inspection::response_promise(session.capture_timeout(), || session.dispatch_json(request_json))`.
 The closure accepts immediately, before the Promise is returned; no mutable
 session borrow crosses the wait. Timer tasks (using a monotonic clock sampled
 before acceptance) poll completion independently of animation frames or ticks.
@@ -129,3 +129,7 @@ The page uses the existing same-window, exact-origin message bridge.
 pause/restart transitions share input cancellation and clock reset boundaries.
 The separate `/inspector/` page remains an isolated paused instance. Other demos
 continue using that model; live integration is currently demonstrated by arena.
+
+Browser hosts enable Titan’s `browser-capture` feature for the JavaScript Promise
+and monotonic clock bridge. It is optional: raw headless WASM keeps no JavaScript
+imports. Other WASM hosts provide their own elapsed-time completion driver.

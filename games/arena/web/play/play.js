@@ -264,7 +264,7 @@ document.querySelector('#step').addEventListener('click', () => panel(() => {
 window.addEventListener('message', async event => {
   if (!player) return;
   const response = await bridgeResponse(event, { origin: location.origin, source: window, handle: json => player.dispatch(json) });
-  if (response) window.postMessage(response, location.origin);
+  if (response) { window.postMessage(response, location.origin); if (player) { syncSession(); player.frame(0); updateStatus(); } }
 });
 new ResizeObserver(() => { try { resize(); } catch (error) { failure(error); } }).observe(canvas);
 window.addEventListener('pagehide', () => { cancelAnimationFrame(animation); input.cancel(); canvasPointer.cancel(); player?.free(); player = undefined; });

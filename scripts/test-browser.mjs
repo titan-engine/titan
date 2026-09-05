@@ -132,3 +132,25 @@ console.log('WASM browser control loop passed: read-only policy, replay, exact c
   assert.equal(stepped.observed_frame, 1);
   assert.equal(captured.response.identity.instance_id, captured.instance_id);
 }
+
+// A capture may meet its GPU/encoding budget but expire while preparing its
+// final JSON. Drive the host monotonic clock at that boundary deterministically.
+{
+  const originalPerformance = globalThis.performance;
+  let finalizing = false;
+  let reads = 0;
+  globalThis.performance = { now: () => finalizing && ++reads > 1 ? 6000 : 0 };
+  const runtime = new BrowserRuntime(true);
+  try {
+    const promise = runtime.dispatch(JSON.stringify({ schema_version: 2, request_id: 'serialization-timeout', request: { type: 'capture' } }));
+    finalizing = true;
+    const response = JSON.parse(await promise);
+    assert.equal(response.request_id, 'serialization-timeout');
+    assert.equal(response.status, 'failure');
+    assert.equal(response.error.code, 'timeout');
+    assert.equal(response.observed_frame, 0);
+  } finally {
+    runtime.free();
+    globalThis.performance = originalPerformance;
+  }
+}

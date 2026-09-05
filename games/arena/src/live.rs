@@ -493,6 +493,7 @@ impl ArenaSession {
         let before = game::restart_epoch(&self.app);
         let result = game::handle_ui_pointer(&mut self.app, position, pressed);
         if game::restart_epoch(&self.app) != before {
+            self.inspector.reset_capture_session();
             self.reset_timing_and_input();
             self.inspector.note_external_change();
         }
@@ -613,13 +614,15 @@ impl ArenaSession {
             }
             self.app.refresh_extracted();
         }
-        if matches!(response.outcome, ResponseOutcome::Success { .. })
-            && matches!(&request.request, Request::Invoke { name, .. } if matches!(name.as_str(), "restart" | "load_replay" | "restart_replay" | "stop_replay" | "seek_replay"))
-        {
+        if game::restart_epoch(&self.app) != reset_epoch {
             self.inspector.reset_capture_session();
         }
         self.inspector.set_controlled(self.paused());
         titan::inspection::Dispatch::Ready(response)
+    }
+
+    pub fn capture_timeout(&self) -> std::time::Duration {
+        self.inspector.capture_timeout()
     }
 
     pub fn dispatch_json(&mut self, json: &str) -> titan::inspection::Dispatch {
@@ -850,6 +853,42 @@ fn finish_replay(world: &mut World) {
 mod tests {
     use super::*;
     use titan_protocol::{EntityId, InputValue, Response};
+
+    #[test]
+    fn pending_capture_survives_pause_but_is_invalidated_by_world_replacement() {
+        let mut session = session(true);
+        let work = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let sink = work.clone();
+        session
+            .inspector
+            .register_async_capture_handler(2, 2, move |_, _, completion| {
+                *sink.lock().unwrap() = Some(completion);
+                Ok(())
+            });
+        let titan::inspection::Dispatch::Pending(mut pending) =
+            session.dispatch(&RequestEnvelope::new("delayed", Request::Capture))
+        else {
+            panic!("capture must defer");
+        };
+        session.pause();
+        assert!(pending.poll(std::time::Duration::ZERO).is_none());
+        let restarted = session.handle(&RequestEnvelope::new(
+            "reset",
+            Request::Invoke {
+                name: "restart".into(),
+                arguments: Default::default(),
+            },
+        ));
+        assert!(matches!(restarted.outcome, ResponseOutcome::Success { .. }));
+        let canceled = pending.poll(std::time::Duration::ZERO).unwrap();
+        assert_eq!(canceled.request_id, "delayed");
+        assert!(
+            matches!(canceled.outcome, ResponseOutcome::Failure { error } if error.code == ErrorCode::Cancelled)
+        );
+        let producer = work.lock().unwrap().take().unwrap();
+        producer.complete(Err(ProtocolError::new(ErrorCode::Internal, "late result")));
+        assert!(pending.poll(std::time::Duration::ZERO).is_none());
+    }
 
     #[test]
     fn bounded_seek_retargets_and_matches_sequential_snapshots_and_pixels() {

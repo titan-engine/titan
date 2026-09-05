@@ -15,7 +15,7 @@ try {
   download.download = `three-d-${backend}-evidence.json`;
   download.hidden = false;
   const failures = report.evidence.images.flatMap(image => image.probes.filter(probe => !probe.passed).map(probe => `${image.name}/${image.format}: ${probe.name}, error ${probe.maximum_error}`));
-  status.textContent = `${report.evidence.passed ? "PASS" : "FAIL"} ${backend}\n${report.adapter}\n${report.evidence.images.length} image cases; channel tolerance ${report.evidence.tolerance}.\n${report.evidence.edge_policy}\n${report.evidence.lifecycle_checks.join("\n")}\nCapture responses: ${JSON.stringify(report.evidence.capture_responses?.map(response => ({request_id:response.request_id,instance_id:response.instance_id,observed_frame:response.observed_frame,state_revision:response.state_revision,outcome:response.outcome?.status,identity:response.outcome?.response?.identity})))}\n${failures.join("\n")}`;
+  status.textContent = `${report.evidence.passed ? "PASS" : "FAIL"} ${backend}\n${report.adapter}\n${report.evidence.images.length} image cases; channel tolerance ${report.evidence.tolerance}.\n${report.evidence.edge_policy}\n${report.evidence.lifecycle_checks.join("\n")}\nCapture responses: ${JSON.stringify(report.evidence.capture_responses?.map(response => ({request_id:response.request_id,instance_id:response.instance_id,observed_frame:response.observed_frame,state_revision:response.state_revision,outcome:response.status,identity:response.response?.identity})))}\n${failures.join("\n")}`;
   for (const item of report.evidence.images ?? []) {
     const figure = document.createElement('figure');
     const canvas = document.createElement('canvas');

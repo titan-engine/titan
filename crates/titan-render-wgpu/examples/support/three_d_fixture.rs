@@ -524,7 +524,7 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
     let sink = mailbox.clone();
     let mut app = titan::App::new();
     app.world_mut().insert_resource(cases().remove(1).frame);
-    app.update();
+    app.advance_fixed(7);
     let mut inspector = titan::inspection::Inspector::new(
         titan::inspection::InspectionConfig::controlled("gpu-fixture", "owned-capture-fixture"),
     );
@@ -536,7 +536,7 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
     #[cfg(not(target_arch = "wasm32"))]
     let accepted_at = std::time::Instant::now();
     #[cfg(target_arch = "wasm32")]
-    let response_promise = titan::inspection::response_promise(|| {
+    let response_promise = titan::inspection::response_promise(inspector.capture_timeout(), || {
         inspector.dispatch(
             &mut app,
             &titan_protocol::RequestEnvelope::new("gpu-owned-1", titan_protocol::Request::Capture),
@@ -566,7 +566,7 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
         vec![],
         Lighting3d::new(Vec3::ONE, 1., 0.).unwrap(),
     ));
-    app.update();
+    app.advance_fixed(3);
     let pixels = finish_owned(&mut protocol_job).await?;
     let image = titan::render::Image::new(identity.width, identity.height, pixels.clone()).unwrap();
     completion.complete(titan_diagnostics::png_capture(&image));
@@ -589,6 +589,7 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
         titan_protocol::ResponseOutcome::Success {
             response: titan_protocol::Response::Capture(capture),
         } if capture.identity == identity
+            && identity.observed_frame == 7
             && response.observed_frame == identity.observed_frame
             && capture.artifact.starts_with("data:image/png;base64,") => {}
         _ => return Err("GPU protocol provenance or artifact mismatch".into()),
@@ -602,6 +603,46 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
         pixels,
         cases().remove(1).probes,
     ));
+    #[cfg(not(target_arch = "wasm32"))]
+    drop(pending);
+    let mut canceled_response = match inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new("gpu-cancel", titan_protocol::Request::Capture),
+    ) {
+        titan::inspection::Dispatch::Pending(pending) => pending,
+        _ => return Err("GPU cancellation fixture was not deferred".into()),
+    };
+    let (frozen, identity, completion) = mailbox.lock().unwrap().take().unwrap();
+    let canceled_job = titan_render_wgpu::OwnedGpuCapture::three_d(
+        device.clone(),
+        queue.clone(),
+        frozen,
+        identity.width,
+        identity.height,
+        CLEAR,
+    )
+    .map_err(|e| e.to_string())?;
+    canceled_response
+        .cancel()
+        .ok_or("GPU cancellation response missing")?;
+    drop(canceled_response);
+    let blocked = inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new(
+            "gpu-cancel-overload",
+            titan_protocol::Request::Capture,
+        ),
+    );
+    if !matches!(
+        blocked,
+        titan::inspection::Dispatch::Ready(titan_protocol::ResponseEnvelope {
+            outcome: titan_protocol::ResponseOutcome::Failure { .. },
+            ..
+        })
+    ) {
+        return Err("canceled GPU producer released admission before retirement".into());
+    }
+    canceled_job.retire(move || drop(completion));
     // Freeze a declared source frame, then replace the local source before mapping.
     // The submitted image must still be the original scene, without another tick.
     let case = cases().remove(1);
@@ -621,6 +662,20 @@ pub async fn run(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Evidence,
         Lighting3d::new(Vec3::ONE, 1., 0.).unwrap(),
     );
     let actual = finish_owned(&mut owned).await?;
+    // Subsequent completed GPU work has driven retirement, including admission cleanup.
+    let admitted = inspector.dispatch(
+        &mut app,
+        &titan_protocol::RequestEnvelope::new(
+            "gpu-after-retirement",
+            titan_protocol::Request::Capture,
+        ),
+    );
+    if !matches!(admitted, titan::inspection::Dispatch::Pending(_)) {
+        return Err("GPU retirement did not release admission".into());
+    }
+    drop(admitted);
+    drop(mailbox.lock().unwrap().take());
+
     evidence.images.push(check_image(
         "owned-frozen-frame",
         wgpu::TextureFormat::Rgba8Unorm,

@@ -34,6 +34,10 @@ impl BrowserSession {
         }
     }
 
+    pub fn capture_timeout(&self) -> std::time::Duration {
+        self.inspector.capture_timeout()
+    }
+
     /// Accept at a safe point and release the session before awaiting completion.
     pub fn dispatch_json(&mut self, request_json: &str) -> Dispatch {
         dispatch_json_with_policy(
@@ -383,8 +387,11 @@ mod tests {
 
 /// Convert an owned dispatch into a Promise after the caller's mutable borrow ends.
 /// Timer tasks drive completion even when presentation and simulation are paused.
-#[cfg(target_arch = "wasm32")]
-pub fn response_promise(accept: impl FnOnce() -> Dispatch) -> js_sys::Promise {
+#[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
+pub fn response_promise(
+    timeout: std::time::Duration,
+    accept: impl FnOnce() -> Dispatch,
+) -> js_sys::Promise {
     use wasm_bindgen::{JsCast, JsValue};
     let clock = || -> Result<(js_sys::Function, JsValue, f64), JsValue> {
         let performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into())?;
@@ -398,23 +405,27 @@ pub fn response_promise(accept: impl FnOnce() -> Dispatch) -> js_sys::Promise {
     }();
     let dispatch = accept();
     wasm_bindgen_futures::future_to_promise(async move {
-        let response = match dispatch {
+        let elapsed = || -> Result<std::time::Duration, JsValue> {
+            let (now, performance, started) = clock.as_ref().map_err(Clone::clone)?;
+            let current = now
+                .call0(performance)?
+                .as_f64()
+                .ok_or_else(|| JsValue::from_str("invalid monotonic browser clock"))?;
+            let seconds = (current - started) / 1000.0;
+            Ok(if seconds.is_finite() && seconds >= 0.0 {
+                std::time::Duration::from_secs_f64(seconds)
+            } else {
+                std::time::Duration::MAX
+            })
+        };
+        let mut response = match dispatch {
             Dispatch::Ready(response) => response,
             Dispatch::Pending(mut pending) => {
                 let global = js_sys::global();
-                let (now, performance, started) = clock?;
-                let clock = || -> Result<f64, JsValue> {
-                    now.call0(&performance)?
-                        .as_f64()
-                        .ok_or_else(|| JsValue::from_str("invalid monotonic browser clock"))
-                };
                 let timer = js_sys::Reflect::get(&global, &"setTimeout".into())?
                     .dyn_into::<js_sys::Function>()?;
                 loop {
-                    let elapsed = std::time::Duration::from_secs_f64(
-                        ((clock()? - started) / 1000.0).max(0.0),
-                    );
-                    if let Some(response) = pending.poll(elapsed) {
+                    if let Some(response) = pending.poll(elapsed()?) {
                         break response;
                     }
                     let wait = js_sys::Promise::new(&mut |resolve, reject| {
@@ -426,8 +437,29 @@ pub fn response_promise(accept: impl FnOnce() -> Dispatch) -> js_sys::Promise {
                 }
             }
         };
-        Ok(JsValue::from_str(
-            &serde_json::to_string(&response).expect("serializable protocol response"),
-        ))
+        let capture = matches!(
+            &response.outcome,
+            ResponseOutcome::Success {
+                response: Response::Capture(_)
+            }
+        );
+        let timeout_response = |response: &mut ResponseEnvelope| {
+            response.outcome = ResponseOutcome::Failure {
+                error: ProtocolError::new(
+                    ErrorCode::Timeout,
+                    "capture deadline exceeded during response preparation",
+                ),
+            };
+        };
+        if capture && elapsed()? >= timeout {
+            timeout_response(&mut response);
+        }
+        let mut json = serde_json::to_string(&response).expect("serializable protocol response");
+        // Serialization is part of the budget; never publish an oversized-time success.
+        if capture && elapsed()? >= timeout {
+            timeout_response(&mut response);
+            json = serde_json::to_string(&response).expect("serializable timeout response");
+        }
+        Ok(JsValue::from_str(&json))
     })
 }

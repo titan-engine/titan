@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 titan-diagnostics = { path = "../../crates/titan-diagnostics" }
-titan = { path = "../.." }
+titan = { path = "../..", features = ["browser-capture"] }
 titan-protocol = { path = "../../crates/titan-protocol" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

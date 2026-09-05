@@ -249,7 +249,9 @@ window redraw. Browser dispatch exports return owned Promises and the shared
 message bridge awaits them with request correlation and same-origin checks.
 
 Migration from schema 1: update request schema to 2 and await browser dispatch.
-Capture results now carry `identity` (instance, session generation, capture ID,
+Capture request and instance IDs are limited to 256 UTF-8 bytes; an invalid ID
+is truncated in its rejection to keep the error bounded. Capture results now
+carry `identity` (instance, session generation, capture ID,
 accepted tick/revision and dimensions). CLI JSON preserves the complete result.
 The immediate hook may initialize identity with its default; the inspector
 stamps acceptance provenance centrally. Persist the complete result alongside

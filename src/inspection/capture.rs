@@ -9,6 +9,55 @@ use titan_protocol::{
     ResponseEnvelope,
 };
 
+/// Monotonic capture timing also works in browser workers and Node WASM.
+pub(super) struct CaptureTimer {
+    #[cfg(not(target_arch = "wasm32"))]
+    started: std::time::Instant,
+    #[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
+    started: Option<f64>,
+}
+impl CaptureTimer {
+    pub(super) fn new() -> Self {
+        Self {
+            #[cfg(not(target_arch = "wasm32"))]
+            started: std::time::Instant::now(),
+            #[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
+            started: browser_now(),
+        }
+    }
+    pub(super) fn elapsed(&self) -> Duration {
+        #[cfg(all(target_arch = "wasm32", not(feature = "browser-capture")))]
+        {
+            Duration::ZERO
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.started.elapsed()
+        }
+        #[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
+        {
+            self.started
+                .zip(browser_now())
+                .and_then(|(start, now)| {
+                    let seconds = (now - start) / 1000.0;
+                    (seconds.is_finite() && seconds >= 0.0)
+                        .then(|| Duration::from_secs_f64(seconds))
+                })
+                .unwrap_or(Duration::MAX)
+        }
+    }
+}
+#[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
+fn browser_now() -> Option<f64> {
+    use wasm_bindgen::JsCast;
+    let performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into()).ok()?;
+    let now = js_sys::Reflect::get(&performance, &"now".into())
+        .ok()?
+        .dyn_into::<js_sys::Function>()
+        .ok()?;
+    now.call0(&performance).ok()?.as_f64()
+}
+
 /// Host-enforced admission and end-to-end deadline limits.
 #[derive(Clone, Copy, Debug)]
 pub struct CaptureLimits {
@@ -123,8 +172,7 @@ pub struct PendingCapture {
     generation: Arc<AtomicU64>,
     limits: CaptureLimits,
     finished: bool,
-    #[cfg(not(target_arch = "wasm32"))]
-    started: std::time::Instant,
+    started: CaptureTimer,
 }
 impl PendingCapture {
     pub(super) fn new(
@@ -149,11 +197,13 @@ impl PendingCapture {
                 generation,
                 limits,
                 finished: false,
-                #[cfg(not(target_arch = "wasm32"))]
-                started: std::time::Instant::now(),
+                started: CaptureTimer::new(),
             },
             CaptureCompleter { state, limits },
         )
+    }
+    pub fn timeout(&self) -> Duration {
+        self.limits.timeout
     }
     pub fn identity(&self) -> &CaptureIdentity {
         &self.identity
@@ -203,7 +253,6 @@ impl PendingCapture {
         }
     }
     pub fn poll(&mut self, elapsed: Duration) -> Option<ResponseEnvelope> {
-        #[cfg(not(target_arch = "wasm32"))]
         let elapsed = elapsed.max(self.started.elapsed());
         if self.finished {
             return None;
@@ -248,7 +297,6 @@ impl PendingCapture {
             Ok(result)
         });
         let response = self.response(result);
-        #[cfg(not(target_arch = "wasm32"))]
         if self.started.elapsed() >= self.limits.timeout {
             return self.finish_error(
                 ErrorCode::Timeout,
@@ -294,6 +342,74 @@ mod tests {
     fn failure(response: ResponseEnvelope, code: ErrorCode) {
         assert!(matches!(response.outcome,ResponseOutcome::Failure { error } if error.code==code));
     }
+    #[test]
+    fn runtime_drop_invalidates_owned_pending_response() {
+        let mut inspector = Inspector::new(InspectionConfig::controlled("runtime", "test"));
+        let mut app = App::new();
+        inspector.register_async_capture_handler(1, 1, |_, identity, done| {
+            done.complete(Ok(result(&identity, "image")));
+            Ok(())
+        });
+        let mut pending = capture(&mut inspector, &mut app, "shutdown");
+        drop(inspector);
+        failure(pending.poll(Duration::ZERO).unwrap(), ErrorCode::Cancelled);
+    }
+
+    #[test]
+    fn invalid_capture_identity_is_bounded_before_admission() {
+        let mut inspector = Inspector::new(InspectionConfig::controlled("runtime", "test"));
+        let mut app = App::new();
+        inspector
+            .register_async_capture_handler(1, 1, |_, _, _| panic!("invalid request admitted"));
+        let request = RequestEnvelope::new("x".repeat(4096), Request::Capture);
+        let response = inspector.dispatch(&mut app, &request).into_ready();
+        assert!(response.request_id.len() <= 256);
+        assert!(serde_json::to_vec(&response).unwrap().len() < 1024);
+        failure(response, ErrorCode::InvalidValue);
+    }
+
+    #[test]
+    fn immediate_capture_checks_deadline_and_encoded_output_bounds() {
+        let mut inspector = Inspector::new(InspectionConfig::controlled("runtime", "test"));
+        let mut app = App::new();
+        inspector.set_capture_limits(CaptureLimits {
+            timeout: Duration::ZERO,
+            ..CaptureLimits::default()
+        });
+        inspector.register_capture_handler(|_| {
+            Ok(result(
+                &CaptureIdentity {
+                    width: 1,
+                    height: 1,
+                    ..Default::default()
+                },
+                "image",
+            ))
+        });
+        failure(
+            inspector.handle(
+                &mut app,
+                &RequestEnvelope::new("deadline", Request::Capture),
+            ),
+            ErrorCode::Timeout,
+        );
+        inspector.set_capture_limits(CaptureLimits::default());
+        inspector.register_capture_handler(|_| {
+            Ok(result(
+                &CaptureIdentity {
+                    width: 1,
+                    height: 1,
+                    ..Default::default()
+                },
+                &"\\".repeat(2 * 1024 * 1024),
+            ))
+        });
+        failure(
+            inspector.handle(&mut app, &RequestEnvelope::new("escaped", Request::Capture)),
+            ErrorCode::InvalidValue,
+        );
+    }
+
     #[test]
     fn owned_snapshot_reports_acceptance_after_live_changes_and_resize() {
         let mut inspector = Inspector::new(InspectionConfig::controlled("runtime", "test"));

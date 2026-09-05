@@ -125,14 +125,14 @@ impl OwnedGpuCapture {
             return Err(GpuCaptureError::Timeout);
         }
         if self.device.poll(wgpu::PollType::Poll).is_err() {
-            self.cancel();
+            self.destroy_failed();
             return Err(GpuCaptureError::Readback);
         }
         match self.receiver.try_recv() {
             Err(mpsc::TryRecvError::Empty) => return Ok(None),
             Ok(Ok(())) => {}
             _ => {
-                self.cancel();
+                self.destroy_failed();
                 return Err(GpuCaptureError::Readback);
             }
         }
@@ -150,7 +150,11 @@ impl OwnedGpuCapture {
             }
             Image::new(self.width, self.height, pixels).map_err(|_| GpuCaptureError::Readback)
         })();
-        self.cancel();
+        if result.is_ok() {
+            self.cancel();
+        } else {
+            self.destroy_failed();
+        }
         result.map(Some)
     }
     /// Cancel staging and keep host admission alive until submitted GPU work
@@ -161,9 +165,18 @@ impl OwnedGpuCapture {
         self.cancel();
         self.queue.on_submitted_work_done(on_retired);
     }
+    fn destroy_failed(&mut self) {
+        // A failed map is already unmapped; calling unmap again is a wgpu
+        // validation error on native backends.
+        if let Some(buffer) = self.buffer.take() {
+            buffer.destroy();
+        }
+    }
     pub fn cancel(&mut self) {
         if let Some(buffer) = self.buffer.take() {
-            buffer.unmap();
+            if !matches!(self.receiver.try_recv(), Ok(Err(_))) {
+                buffer.unmap();
+            }
             buffer.destroy();
         }
     }
@@ -197,6 +210,74 @@ fn layout(width: u32, height: u32, limits: &wgpu::Limits) -> Result<(u32, u64), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    #[ignore = "requires a native GPU to exercise actual map failure and retirement"]
+    fn aborted_backend_map_returns_bounded_failure_and_retires() {
+        pollster::block_on(async {
+            use titan::render::three_d::*;
+            let adapter = wgpu::Instance::default()
+                .request_adapter(&Default::default())
+                .await
+                .unwrap();
+            let (device, queue) = adapter
+                .request_device(&wgpu::DeviceDescriptor {
+                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+            let frame = RenderFrame3d::new(
+                PerspectiveCamera::new(
+                    Vec3::ZERO,
+                    Quaternion::IDENTITY,
+                    std::f32::consts::FRAC_PI_2,
+                    1.,
+                    1.,
+                    10.,
+                )
+                .unwrap(),
+                Lighting3d::new(Vec3::ONE, 1., 0.).unwrap(),
+                &MeshAssets::new(),
+                [],
+                Frame3dLimits::default(),
+            )
+            .unwrap();
+            let mut job = OwnedGpuCapture::three_d(
+                device.clone(),
+                queue,
+                frame,
+                64,
+                64,
+                BaseColor::rgb(0, 0, 0),
+            )
+            .unwrap();
+            // Abort the real outstanding map without marking the job canceled.
+            // This forces the backend callback error through the production poll path.
+            job.buffer.as_ref().unwrap().unmap();
+            let start = std::time::Instant::now();
+            loop {
+                match job.poll(start.elapsed()) {
+                    Ok(None) => std::thread::sleep(Duration::from_millis(1)),
+                    Err(GpuCaptureError::Readback) => break,
+                    other => panic!("expected readback failure, got {other:?}"),
+                }
+            }
+            assert!(job.buffer.is_none());
+            let (sender, receiver) = mpsc::channel();
+            job.retire(move || {
+                let _ = sender.send(());
+            });
+            while receiver.try_recv().is_err() {
+                assert!(
+                    start.elapsed() < MAX_CAPTURE_WAIT,
+                    "failed map resources did not retire"
+                );
+                device.poll(wgpu::PollType::Poll).unwrap();
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        });
+    }
     #[test]
     fn padded_readback_is_bounded_before_allocating() {
         let limits = wgpu::Limits::default();

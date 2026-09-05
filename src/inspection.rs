@@ -2,14 +2,14 @@
 
 mod browser;
 mod capture;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
 pub use browser::response_promise;
 pub use browser::{
     BrowserSession, dispatch_json_with_policy, dispatch_with_policy, handle_json_with_policy,
     handle_with_policy,
 };
 pub use capture::{CaptureCompleter, CaptureLimits, Dispatch, PendingCapture};
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
 pub use js_sys::Promise as BrowserPromise;
 use std::sync::{
     Arc,
@@ -173,6 +173,12 @@ pub struct Inspector {
     capture_generation: Arc<AtomicU64>,
     capture_outstanding: Arc<AtomicUsize>,
     next_capture_id: u64,
+}
+
+impl Drop for Inspector {
+    fn drop(&mut self) {
+        self.reset_capture_session();
+    }
 }
 
 impl Inspector {
@@ -475,6 +481,10 @@ impl Inspector {
         self
     }
 
+    pub fn capture_timeout(&self) -> Duration {
+        self.capture_limits.timeout
+    }
+
     /// Set bounds before registering/dispatching capture work.
     pub fn set_capture_limits(&mut self, limits: CaptureLimits) -> &mut Self {
         self.capture_limits = limits;
@@ -522,6 +532,8 @@ impl Inspector {
     /// Dispatch at a safe point; pending work owns no application reference.
     pub fn dispatch(&mut self, app: &mut App, request: &RequestEnvelope) -> Dispatch {
         if !matches!(request.request, Request::Capture)
+            || request.request_id.len() > 256
+            || self.config.instance_id.len() > 256
             || self.async_capture_handler.is_none()
             || request.schema_version != SCHEMA_VERSION
             || request
@@ -566,6 +578,22 @@ impl Inspector {
     }
 
     pub fn handle(&mut self, app: &mut App, request: &RequestEnvelope) -> ResponseEnvelope {
+        if matches!(request.request, Request::Capture)
+            && (request.request_id.len() > 256 || self.config.instance_id.len() > 256)
+        {
+            let mut bounded = request.clone();
+            bounded.request_id = request.request_id.chars().take(64).collect();
+            return ResponseEnvelope::failure(
+                &bounded,
+                self.config.instance_id.chars().take(64).collect::<String>(),
+                current_frame(app),
+                self.state_revision,
+                ProtocolError::new(
+                    ErrorCode::InvalidValue,
+                    "capture request and instance IDs must be at most 256 bytes; invalid IDs are truncated in this rejection",
+                ),
+            );
+        }
         if request.schema_version != SCHEMA_VERSION {
             return self.failure(
                 app,
@@ -894,6 +922,7 @@ impl Inspector {
                 })
             }
             Request::Capture => {
+                let started = capture::CaptureTimer::new();
                 let handler = self
                     .capture_handler
                     .as_mut()
@@ -901,13 +930,28 @@ impl Inspector {
                 let mut result = handler(app)?;
                 self.capture_limits
                     .validate_dimensions(result.width, result.height)?;
-                if result.artifact.len() > self.capture_limits.max_artifact_bytes {
+                if result.artifact.len() > self.capture_limits.max_artifact_bytes
+                    || result.format.len() > 64
+                    || result.checksum.len() > 128
+                {
                     return Err(ProtocolError::new(
                         ErrorCode::InvalidValue,
                         "capture artifact exceeds limit",
                     ));
                 }
                 result.identity = self.capture_identity(app, result.width, result.height);
+                if serde_json::to_vec(&result).map_or(true, |bytes| bytes.len() > 3 * 1024 * 1024) {
+                    return Err(ProtocolError::new(
+                        ErrorCode::InvalidValue,
+                        "capture response exceeds transport envelope limit",
+                    ));
+                }
+                if started.elapsed() >= self.capture_limits.timeout {
+                    return Err(ProtocolError::new(
+                        ErrorCode::Timeout,
+                        "capture deadline exceeded during response preparation",
+                    ));
+                }
                 Ok(Response::Capture(result))
             }
         }

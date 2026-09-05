@@ -153,3 +153,8 @@ dispatcher with a known accepted tick and PNG response, changes its source world
 before readback, and tests frozen pixels, padded resize, cancellation, timeout
 and subsequent capture after late callbacks. Its JSON includes capture response
 identity and an inline PNG, without runtime discovery credentials.
+
+Actual native mapping failure is covered by
+`cargo test -p titan-render-wgpu --lib aborted_backend_map -- --ignored`.
+It aborts a pending backend map, checks the bounded `Readback` error and verifies
+queue retirement; it does not require manufacturing driver loss.
