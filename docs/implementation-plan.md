@@ -7,9 +7,9 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Arena mid-run save/load: selected
+## Arena mid-run save/load: complete locally
 
-Implement on `codex/arena-save-load`, with frequent local commits. The user has
+Implemented on `codex/arena-save-load`, with frequent local commits. The user has
 explicitly asked not to push this new work yet. The approved `v0.3.0` tag belongs
 to the preceding UI revision after its own CI passes.
 
@@ -20,11 +20,12 @@ input and preserve the live host's frame and inspection identity. Loading must
 explicitly invalidate recordings whose origin is a restart. Do not add a general
 ECS serializer or promise save-format compatibility for this first exercise.
 
-Prove a mid-dash and contact-cooldown round trip by feeding identical subsequent
-inputs to original/restored games and comparing complete state and exact pixels.
-Exercise malformed saves without changing the live game, UI reconstruction,
-stale input cancellation, native CLI and actual browser/WASM save/load paths.
-See [the persistence boundary](save-load.md) for the intended state separation.
+Mid-dash and contact-cooldown round trips pass with identical subsequent inputs,
+complete state and exact pixels. Malformed-save rejection, HUD reconstruction,
+stale input cancellation and native CLI/browser/WASM paths are verified.
+The shared tooling addition is bounded CLI `--arguments-file` support. See
+[arena snapshots and evidence](arena-save-load.md) and
+[the persistence boundary](save-load.md). No further implementation is selected.
 
 ## Design coverage and pending scope
 
@@ -69,13 +70,14 @@ The approved sequence is implemented and verified in local commits:
 Agents can discover UI entities, inspect text and position, observe game-driven
 updates and exercise the restart button. [UI verification](ui.md) records native
 and browser pointer use, shared rendering, regressions and limitations. The
-[save/load boundary](save-load.md) is documented. No further implementation
-objective is selected; difficulty settings remain a future possibility.
+[save/load boundary](save-load.md) is documented and the subsequent arena snapshot
+exercise above is complete locally. Difficulty settings remain a future possibility.
 
-This is a candidate for a `v0.3.0` source milestone after remote CI passes on the
-chosen revision. Earlier `v0.2.0` tagged a source milestone while Cargo package
-versions stayed `0.1.0`; package version alignment is a separate choice. No tag,
-Cargo version change, push or publication was performed for this slice.
+The UI source milestone `v0.3.0` is pushed at `6fc824d`, after
+[CI run 33948720187](https://github.com/titan-engine/titan/actions/runs/33948720187)
+passed that exact revision. Cargo package versions remain `0.1.0`, consistent
+with the earlier source-milestone tags. Save/load commits are local and excluded
+from that tag; no crates were published.
 
 ## Input and live-player inspection: complete
 

@@ -17,6 +17,12 @@ text and button components. Inspect state lists these alongside the player and
 all pooled enemies, including their active/inactive state. See the
 [UI guide](../../docs/ui.md) for authoring, pointer behavior and verification.
 
+Save and restore mid-run snapshots through the browser's **Save snapshot** and
+**Load snapshot** controls or the native inspection protocol. Loading requires a
+paused live game with inspection controls enabled and invalidates restart-origin
+recordings until a new restart. See [arena snapshots](../../docs/arena-save-load.md)
+for the bounded format, CLI file workflow and verification.
+
 From this directory (stable Rust, Python 3, Node.js):
 
 ```sh

@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-05",
+  "source_commit": "eaf01c0",
+  "scope": "Local save/load branch verification; not pushed or included in v0.3.0. Timings are single-run evidence, not performance benchmarks.",
+  "checks": [
+    {
+      "command": "cargo fmt --all --check",
+      "exit_code": 0,
+      "seconds": 0.135
+    },
+    {
+      "command": "cargo test --workspace --all-targets",
+      "exit_code": 0,
+      "seconds": 1.882
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "exit_code": 0,
+      "seconds": 0.42
+    },
+    {
+      "command": "cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown",
+      "exit_code": 0,
+      "seconds": 0.16
+    },
+    {
+      "command": "python3 scripts/test-control-loop.py",
+      "exit_code": 0,
+      "seconds": 1.052
+    },
+    {
+      "command": "python3 scripts/test-build-tools.py",
+      "exit_code": 0,
+      "seconds": 0.064
+    },
+    {
+      "command": "python3 scripts/test-starter.py --browser",
+      "exit_code": 0,
+      "seconds": 2.448
+    },
+    {
+      "command": "python3 scripts/test-macos-bundles.py",
+      "exit_code": 0,
+      "seconds": 2.616
+    },
+    {
+      "command": "cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown",
+      "exit_code": 0,
+      "seconds": 0.444
+    },
+    {
+      "command": "cargo fmt --manifest-path games/arena/Cargo.toml --all --check",
+      "exit_code": 0,
+      "seconds": 0.2
+    },
+    {
+      "command": "cargo test --manifest-path games/arena/Cargo.toml --all-targets",
+      "exit_code": 0,
+      "evidence": "Previously executed during this save task after game/save.rs completion: 24 library tests and 3 native tests passed; one native GPU test ignored as designed. Not repeated."
+    },
+    {
+      "command": "cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings",
+      "exit_code": 0,
+      "evidence": "Previously executed during this save task after game/save.rs completion; finished successfully with warnings denied. Not repeated."
+    },
+    {
+      "command": "cargo test --manifest-path games/arena/Cargo.toml --lib live::tests",
+      "tests": 9,
+      "exit_code": 0
+    },
+    {
+      "command": "python3 games/arena/scripts/test-control.py",
+      "evidence": "games/arena/target/arena-evidence/native-save.json",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 games/arena/scripts/test-live-player.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 games/arena/scripts/build-browser.py",
+      "exit_code": 0,
+      "reported_cargo_release_seconds": 1.16
+    },
+    {
+      "command": "node games/arena/scripts/test-browser.mjs",
+      "exit_code": 0,
+      "coverage": "Existing arena checks plus mid-dash save/load, read-only export, paused/control load policy, malformed/unsupported/oversized rejection without mutation, preserved host frame and increased revision, canceled stale input/pointer, invalidated restart recording, exact 91-tick continuation and identical rendered checksum."
+    },
+    {
+      "command": "node --test games/arena/web/play/*.test.mjs games/arena/web/inspector/bridge.test.mjs web/shared/input.test.mjs",
+      "exit_code": 0,
+      "passed": 17,
+      "failed": 0,
+      "reported_duration_ms": 46.840958,
+      "coverage": "Includes 64 KiB file-size/UTF-8 bounds and asynchronous resume/revocation/restart/replacement rejection."
+    },
+    {
+      "command": "git diff --check -- games/arena/web/play games/arena/scripts/test-browser.mjs web/shared/input.test.mjs",
+      "exit_code": 0
+    }
+  ],
+  "browser_file_verification": {
+    "saved_host_frame": 310,
+    "loaded_host_frame": 310,
+    "saved_health": 0,
+    "restored_health": 0,
+    "reset_health_before_load": 3,
+    "saved_elapsed": 310,
+    "restored_elapsed": 310,
+    "recording_invalidated": true,
+    "evidence": "browser-restored.png"
+  }
+}

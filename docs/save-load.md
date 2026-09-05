@@ -3,8 +3,9 @@
 Early save/load and serialization design is an agreed requirement
 ([R1.47](design-requirements.md)); making every inspectable type serializable is
 still undecided ([R2.25](design-requirements.md)). This document establishes the
-boundary for that work. Titan does not yet implement a general save-file format,
-world serializer, load transaction or persistence API.
+boundary for that work. [Arena snapshots](arena-save-load.md) now exercise it with
+a game-owned format and validated load operation. Titan does not yet implement a
+general save-file format, world serializer or engine-wide persistence API.
 
 Games should define the state needed to resume gameplay. Engine inspection
 metadata, render output and a dump of all ECS components are not automatically
@@ -13,7 +14,7 @@ state without requiring every component, resource or UI element to serialize.
 
 ## Persistent gameplay and reconstructed state
 
-For the arena, a future mid-run save would need the player's position, active
+The arena snapshot contains the player's position, active
 enemies and their positions, elapsed game ticks, health, outcome, spawn progress,
 current random-generator state, contact cooldown and the complete dash state.
 That includes remaining dash ticks, dash cooldown, locked direction and last
@@ -72,14 +73,16 @@ separate capability and should not dictate the persistent save-file layout.
 
 ## First implementation proof and choices still open
 
-Before implementing a general serializer, prove a game-owned mid-run round trip:
+The arena now proves the first game-owned mid-run round trip before introducing
+a general serializer. The intended proof is:
 save during a dash or contact cooldown, construct a fresh world from the save,
 then feed identical subsequent fixed-tick inputs to both worlds. Compare semantic
 state and relevant rendered output. Also verify that rebuilt UI reflects restored
 values, malformed or unsupported saves do not disturb the current game, stale
 input is cleared, and inspection remains correlated after an in-session load.
 
-Storage location, encoding, file-size bounds, schema/version policy, asset-content
-identity and persistence of large generated worlds remain to be selected.
+Beyond the arena's initial bounded JSON format, general storage location,
+encoding, schema/version policy, asset-content identity and persistence of large
+generated worlds remain to be selected.
 Backward compatibility is not currently required. Reject unsupported formats
 clearly; do not silently infer a migration or promise durable compatibility.

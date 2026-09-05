@@ -139,6 +139,7 @@ GPU.
 - [Implementation plan](docs/implementation-plan.md)
 - [Open design questions](docs/open-questions.md)
 - [Save/load design boundary](docs/save-load.md)
+- [Arena snapshot workflow and verification](docs/arena-save-load.md)
 - [Copy the minimal game starter](starters/minimal/README.md)
 - [Starter boundary audit](docs/starter-audit.md)
 - [ECS authoring](docs/ecs-authoring.md)

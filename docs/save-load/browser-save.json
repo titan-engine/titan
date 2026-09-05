@@ -1,0 +1,126 @@
+{
+  "enemies": [
+    {
+      "active": true,
+      "position": {
+        "x": 80,
+        "y": 65
+      }
+    },
+    {
+      "active": true,
+      "position": {
+        "x": 125,
+        "y": 32
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "active": false,
+      "position": {
+        "x": 0,
+        "y": 18
+      }
+    }
+  ],
+  "format_version": 1,
+  "game_seed": 41700,
+  "player": {
+    "x": 80,
+    "y": 65
+  },
+  "run": {
+    "cooldown": 60,
+    "dash_cooldown": 0,
+    "dash_direction": {
+      "x": 1,
+      "y": 0
+    },
+    "dash_remaining": 0,
+    "elapsed": 310,
+    "facing": {
+      "x": 1,
+      "y": 0
+    },
+    "health": 0,
+    "outcome": "lost",
+    "random": 2686820790,
+    "spawned": 2
+  }
+}
