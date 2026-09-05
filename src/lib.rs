@@ -10,6 +10,7 @@ pub mod ecs;
 pub mod input;
 pub mod inspection;
 pub mod render;
+pub mod replay;
 pub mod system;
 pub mod time;
 pub mod ui;

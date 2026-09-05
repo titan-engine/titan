@@ -146,6 +146,11 @@ impl<A: Ord> InputFrame<A> {
         self.released.contains(action)
     }
 
+    /// Actions released in this frame, including those no longer in active values.
+    pub fn released_actions(&self) -> impl Iterator<Item = &A> {
+        self.released.iter()
+    }
+
     pub fn active_actions(&self) -> impl Iterator<Item = (&A, ActionValue)> {
         self.values.iter().map(|(action, value)| (action, *value))
     }

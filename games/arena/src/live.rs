@@ -1,14 +1,15 @@
 //! Inspection and bounded recordings of the actual playable arena instance.
-use std::{
-    collections::BTreeMap,
-    io::{self, Write},
-};
+use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use titan::{
     App, FixedTime, Startup, World,
-    input::{ActionValue, InputFrame, InputTracker},
+    input::InputFrame,
     inspection::{InspectionConfig, Inspector, StepBudget, handle_with_policy},
+    replay::{
+        Playback as ReplayState, RecordedButtons as RecordedFrame, RecordingIdentity,
+        SnapshotRecorder, SnapshotRecording as Recording,
+    },
 };
 use titan_protocol::{
     CommandMetadata, ErrorCode, FieldMetadata, ProtocolError, QueryMetadata, Request,
@@ -33,49 +34,17 @@ struct PlaybackControl {
     paused: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RecordedFrame {
-    active: Vec<String>,
-    pressed: Vec<String>,
-    released: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Recording {
-    format_version: u32,
-    game_seed: u32,
-    action_schema: String,
-    fixed_step_nanos: u64,
-    start_host_frame: u64,
-    recorded_ticks: usize,
-    max_ticks: usize,
-    truncated: bool,
-    invalid_reason: Option<String>,
-    frames: Vec<RecordedFrame>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    initial_snapshot: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    final_snapshot: Option<serde_json::Value>,
-    final_state: serde_json::Value,
-    final_checksum: String,
-}
-
-struct ReplayState {
-    recording: Recording,
-    position: usize,
-    verified: Option<bool>,
-    error: Option<String>,
-    expected_save: serde_json::Value,
+fn recording_identity() -> RecordingIdentity<'static> {
+    RecordingIdentity {
+        game_seed: u64::from(game::SEED),
+        action_schema: ACTION_SCHEMA,
+        fixed_step_nanos: 16_666_667,
+        max_ticks: MAX_RECORDING_TICKS,
+    }
 }
 
 struct RecordingState {
-    initial_snapshot: serde_json::Value,
-    start_host_frame: u64,
-    frames: Vec<RecordedFrame>,
-    truncated: bool,
-    invalid_reason: Option<String>,
+    recorder: SnapshotRecorder,
     expected_positions: Vec<(u32, u32, i32, i32)>,
 }
 
@@ -88,10 +57,14 @@ fn positions(world: &World) -> Vec<(u32, u32, i32, i32)> {
 
 fn invalid_reason(world: &World) -> Option<String> {
     let recording = world.resource::<RecordingState>().unwrap();
-    recording.invalid_reason.clone().or_else(|| {
-        (positions(world) != recording.expected_positions)
-            .then(|| "position field changed outside consumed input".into())
-    })
+    recording
+        .recorder
+        .invalid_reason()
+        .map(str::to_owned)
+        .or_else(|| {
+            (positions(world) != recording.expected_positions)
+                .then(|| "position field changed outside consumed input".into())
+        })
 }
 
 /// Record the post-simulation baseline so headless field edits are detected too.
@@ -121,11 +94,7 @@ pub(crate) fn begin_recording(world: &mut World) {
     let start_host_frame = world.resource::<FixedTime>().map_or(0, |time| time.tick());
     let expected_positions = positions(world);
     world.insert_resource(RecordingState {
-        initial_snapshot,
-        start_host_frame,
-        frames: Vec::new(),
-        truncated: false,
-        invalid_reason: None,
+        recorder: SnapshotRecorder::new(initial_snapshot, start_host_frame, MAX_RECORDING_TICKS),
         expected_positions,
     });
 }
@@ -139,38 +108,21 @@ struct LoadSaveArgs {
 /// Runs after the scheduled-input override and before the simulation consumes it.
 pub(crate) fn record_consumed(world: &mut World) {
     if let Some(replay) = world.resource_mut::<ReplayState>() {
-        if let Some(frame) = replay.recording.frames.get(replay.position) {
+        if let Some(frame) = replay.next_frame() {
             let input = decode_frame(frame).expect("validated replay frame");
-            replay.position += 1;
             world.insert_resource(input);
         }
         return;
     }
     let invalid_reason = invalid_reason(world);
-    let input = world.resource::<InputFrame<Action>>().unwrap();
-    let frame = RecordedFrame {
-        active: ACTIONS
-            .iter()
-            .filter(|(action, _)| input.is_active(action))
-            .map(|(_, name)| (*name).to_owned())
-            .collect(),
-        pressed: ACTIONS
-            .iter()
-            .filter(|(action, _)| input.just_pressed(action))
-            .map(|(_, name)| (*name).to_owned())
-            .collect(),
-        released: ACTIONS
-            .iter()
-            .filter(|(action, _)| input.just_released(action))
-            .map(|(_, name)| (*name).to_owned())
-            .collect(),
-    };
-    let recording = world.resource_mut::<RecordingState>().unwrap();
-    recording.invalid_reason = invalid_reason;
-    if recording.frames.len() < MAX_RECORDING_TICKS {
-        recording.frames.push(frame);
-    } else {
-        recording.truncated = true;
+    let frame = RecordedFrame::capture(world.resource::<InputFrame<Action>>().unwrap(), &ACTIONS);
+    let recording = &mut world.resource_mut::<RecordingState>().unwrap().recorder;
+    if let Some(reason) = invalid_reason {
+        recording.invalidate(reason);
+    }
+    match frame {
+        Ok(frame) => recording.push(frame),
+        Err(reason) => recording.invalidate(reason),
     }
 }
 
@@ -182,27 +134,23 @@ fn comparable_state(app: &App) -> serde_json::Value {
 
 fn recording_value(app: &App) -> Result<serde_json::Value, ProtocolError> {
     if let Some(replay) = app.world().resource::<ReplayState>() {
-        return serde_json::to_value(&replay.recording).map_err(|error| invalid(error.to_string()));
+        return serde_json::to_value(replay.recording())
+            .map_err(|error| invalid(error.to_string()));
     }
     let source = app.world().resource::<RecordingState>().unwrap();
     let image = game::render_image(app.world())?;
-    serde_json::to_value(Recording {
-        format_version: 2,
-        game_seed: game::SEED,
-        action_schema: ACTION_SCHEMA.to_owned(),
-        fixed_step_nanos: 16_666_667,
-        start_host_frame: source.start_host_frame,
-        recorded_ticks: source.frames.len(),
-        max_ticks: MAX_RECORDING_TICKS,
-        truncated: source.truncated,
-        invalid_reason: invalid_reason(app.world()),
-        frames: source.frames.clone(),
-        initial_snapshot: Some(source.initial_snapshot.clone()),
-        final_snapshot: game::export_save(app).ok(),
-        final_state: comparable_state(app),
-        final_checksum: format!("{:016x}", game::image_checksum(&image)),
-    })
-    .map_err(|error| ProtocolError::new(ErrorCode::Internal, error.to_string()))
+    let mut recording = source
+        .recorder
+        .export(
+            recording_identity(),
+            comparable_state(app),
+            game::export_save(app).ok(),
+            format!("{:016x}", game::image_checksum(&image)),
+        )
+        .map_err(invalid)?;
+    recording.invalid_reason = invalid_reason(app.world());
+    serde_json::to_value(recording)
+        .map_err(|error| ProtocolError::new(ErrorCode::Internal, error.to_string()))
 }
 
 #[derive(Deserialize)]
@@ -233,11 +181,11 @@ pub(crate) fn register_queries(inspector: &mut Inspector) {
                     .into();
                 value["replay"] = replay_status(app.world());
                 value["recording"] = if let Some(replay) = app.world().resource::<ReplayState>() {
-                    let recording = &replay.recording;
+                    let recording = replay.recording();
                     serde_json::json!({"start_host_frame":recording.start_host_frame,"recorded_ticks":recording.frames.len(),"max_ticks":MAX_RECORDING_TICKS,"truncated":recording.truncated,"invalid_reason":recording.invalid_reason})
                 } else {
-                    let recording = app.world().resource::<RecordingState>().unwrap();
-                    serde_json::json!({"start_host_frame":recording.start_host_frame,"recorded_ticks":recording.frames.len(),"max_ticks":MAX_RECORDING_TICKS,"truncated":recording.truncated,"invalid_reason":invalid_reason(app.world())})
+                    let recording = &app.world().resource::<RecordingState>().unwrap().recorder;
+                    serde_json::json!({"start_host_frame":recording.start_host_frame,"recorded_ticks":recording.len(),"max_ticks":MAX_RECORDING_TICKS,"truncated":recording.truncated(),"invalid_reason":invalid_reason(app.world())})
                 };
                 Ok(value)
             },
@@ -535,9 +483,7 @@ impl ArenaSession {
                 .app
                 .world()
                 .resource::<ReplayState>()
-                .map_or(StepBudget::DEFAULT.max_frames, |r| {
-                    (r.recording.frames.len() - r.position) as u64
-                }),
+                .map_or(StepBudget::DEFAULT.max_frames, |r| r.remaining() as u64),
             ..StepBudget::DEFAULT
         });
         let allowed = !self.replay_active()
@@ -569,7 +515,8 @@ impl ArenaSession {
                     .world_mut()
                     .resource_mut::<RecordingState>()
                     .unwrap()
-                    .invalid_reason = Some("position field changed outside consumed input".into());
+                    .recorder
+                    .invalidate("position field changed outside consumed input");
             }
             self.app.refresh_extracted();
         }
@@ -590,46 +537,8 @@ impl ArenaSession {
     }
 }
 
-fn decode_actions(names: &[String]) -> Result<Vec<Action>, String> {
-    if names.len() > ACTIONS.len() {
-        return Err("too many actions in recorded frame".into());
-    }
-    let mut actions = Vec::new();
-    for name in names {
-        let action = ACTIONS
-            .iter()
-            .find(|(_, known)| name == known)
-            .map(|(action, _)| *action)
-            .ok_or_else(|| format!("unknown recorded action: {name}"))?;
-        if actions.contains(&action) {
-            return Err("duplicate recorded action".into());
-        }
-        actions.push(action);
-    }
-    Ok(actions)
-}
-
 fn decode_frame(frame: &RecordedFrame) -> Result<InputFrame<Action>, String> {
-    let active = decode_actions(&frame.active)?;
-    let pressed = decode_actions(&frame.pressed)?;
-    let released = decode_actions(&frame.released)?;
-    if pressed.iter().any(|action| !active.contains(action))
-        || released.iter().any(|action| active.contains(action))
-    {
-        return Err("recorded edges conflict with active actions".into());
-    }
-    let before = active
-        .iter()
-        .filter(|action| !pressed.contains(action))
-        .copied()
-        .chain(released);
-    let mut tracker = InputTracker::new();
-    tracker.sample(before.map(|action| (action, ActionValue::PRESSED)));
-    Ok(tracker.sample(
-        active
-            .into_iter()
-            .map(|action| (action, ActionValue::PRESSED)),
-    ))
+    frame.decode(&ACTIONS)
 }
 
 /// Replay a raw recording or a saved CLI query response in a fresh headless app.
@@ -639,56 +548,8 @@ pub fn verify_recording(value: serde_json::Value) -> Result<serde_json::Value, S
     verify_parsed(&recording)
 }
 
-fn parse_recording(mut value: serde_json::Value) -> Result<Recording, String> {
-    struct BoundedWriter(usize);
-    impl Write for BoundedWriter {
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            self.0 = self
-                .0
-                .checked_add(bytes.len())
-                .filter(|n| *n <= MAX_RECORDING_BYTES)
-                .ok_or_else(|| io::Error::other("recording exceeds 2 MiB"))?;
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-    serde_json::to_writer(BoundedWriter(0), &value).map_err(|error| error.to_string())?;
-    if value.get("response").is_some() {
-        value = value
-            .get_mut("response")
-            .unwrap()
-            .get_mut("value")
-            .ok_or("query response lacks recording value")?
-            .take();
-    } else if value.get("value").is_some() {
-        value = value.get_mut("value").unwrap().take();
-    }
-    let recording: Recording = serde_json::from_value(value).map_err(|e| e.to_string())?;
-    if !matches!(recording.format_version, 1 | 2)
-        || recording.game_seed != game::SEED
-        || recording.action_schema != ACTION_SCHEMA
-        || recording.fixed_step_nanos != 16_666_667
-        || recording.max_ticks != MAX_RECORDING_TICKS
-    {
-        return Err("unsupported recording header".into());
-    }
-    if (recording.format_version == 2)
-        != (recording.initial_snapshot.is_some() && recording.final_snapshot.is_some())
-        || (recording.format_version == 1
-            && (recording.initial_snapshot.is_some() || recording.final_snapshot.is_some()))
-    {
-        return Err("recording snapshot/version mismatch".into());
-    }
-    if recording.truncated || recording.invalid_reason.is_some() {
-        return Err("recording is truncated or invalidated; exact replay is unavailable".into());
-    }
-    if recording.frames.len() > MAX_RECORDING_TICKS
-        || recording.frames.len() != recording.recorded_ticks
-    {
-        return Err("recording frame count exceeds bounds or differs from header".into());
-    }
+fn parse_recording(value: serde_json::Value) -> Result<Recording, String> {
+    let recording = Recording::parse(value, recording_identity(), MAX_RECORDING_BYTES, true)?;
     for frame in &recording.frames {
         decode_frame(frame)?;
     }
@@ -751,18 +612,14 @@ fn require_paused(app: &App) -> Result<(), ProtocolError> {
 fn replay_complete(world: &World) -> bool {
     world
         .resource::<ReplayState>()
-        .is_some_and(|r| r.position == r.recording.frames.len())
+        .is_some_and(ReplayState::complete)
 }
 fn replay_status(world: &World) -> serde_json::Value {
-    match world.resource::<ReplayState>() {
-        Some(r) => {
-            serde_json::json!({"active":true,"position":r.position,"total":r.recording.frames.len(),"complete":r.position == r.recording.frames.len(),"verified":r.verified,"error":r.error})
-        }
-        None => {
-            serde_json::json!({"active":false,"position":0,"total":0,"complete":false,"verified":null,"error":null})
-        }
-    }
+    world
+        .resource::<ReplayState>()
+        .map_or_else(ReplayState::inactive_status, ReplayState::status)
 }
+
 fn load_replay(app: &mut App, value: serde_json::Value) -> Result<(), ProtocolError> {
     require_paused(app)?;
     let recording = parse_recording(value).map_err(invalid)?;
@@ -775,13 +632,8 @@ fn install_replay(
     expected_save: serde_json::Value,
 ) -> Result<(), ProtocolError> {
     restore_origin(app, &recording)?;
-    app.world_mut().insert_resource(ReplayState {
-        recording,
-        position: 0,
-        verified: None,
-        error: None,
-        expected_save,
-    });
+    app.world_mut()
+        .insert_resource(ReplayState::new(recording, expected_save));
     let buttons: Vec<_> = app
         .world()
         .iter::<titan::ui::UiButton>()
@@ -802,8 +654,8 @@ fn restart_replay(app: &mut App) -> Result<(), ProtocolError> {
         .world()
         .resource::<ReplayState>()
         .ok_or_else(|| invalid("no replay loaded"))?;
-    let recording = replay.recording.clone();
-    let expected_save = replay.expected_save.clone();
+    let recording = replay.recording().clone();
+    let expected_save = replay.expected_snapshot().clone();
     install_replay(app, recording, expected_save)
 }
 fn stop_replay(app: &mut App) -> Result<(), ProtocolError> {
@@ -815,15 +667,21 @@ fn stop_replay(app: &mut App) -> Result<(), ProtocolError> {
     Ok(())
 }
 fn finish_replay(world: &mut World) {
-    if !replay_complete(world) || world.resource::<ReplayState>().unwrap().verified.is_some() {
+    if !replay_complete(world)
+        || world
+            .resource::<ReplayState>()
+            .unwrap()
+            .verified()
+            .is_some()
+    {
         return;
     }
     let result = game::render_image(world).and_then(|image| {
         let r = world.resource::<ReplayState>().unwrap();
         let save = game::export_save_world(world)?;
         let matched = format!("{:016x}", game::image_checksum(&image))
-            == r.recording.final_checksum
-            && r.expected_save == save;
+            == r.recording().final_checksum
+            && *r.expected_snapshot() == save;
         if matched {
             Ok(())
         } else {
@@ -831,8 +689,8 @@ fn finish_replay(world: &mut World) {
         }
     });
     let r = world.resource_mut::<ReplayState>().unwrap();
-    r.verified = Some(result.is_ok());
-    r.error = result.err().map(|e| e.message);
+    r.finish(result.map_err(|e| e.message))
+        .expect("completed unverified replay");
     if let Some(control) = world.resource_mut::<PlaybackControl>() {
         control.paused = true;
     }
