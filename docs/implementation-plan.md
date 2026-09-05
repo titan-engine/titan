@@ -15,8 +15,8 @@ completion. The coverage record accounts for both original planning answer
 rounds, including tentative preferences and [unresolved questions](open-questions.md).
 An unscheduled capability is not a discarded requirement.
 
-The current documentation audit restores that intent before any entity-listing
-fix. The arena's browser inspection summary currently requests only the player;
+The completed documentation audit restored that intent before the entity-listing
+work. The arena's browser inspection summary currently requests only the player;
 enemies are entities, but are excluded by that request. Its HUD currently draws
 text directly from game state. It does not yet fulfill the agreed direction that
 in-game UI use the same entity/component model as the world. Browser host controls
@@ -30,7 +30,30 @@ interactive playback of input recordings; the full generated/file-backed asset
 model and eventual native asset format; and the longer-term rendering and
 multiplayer directions in the vision. Existing headless replay, snapshots and
 procedural demo assets do not establish completion of those broader requirements.
-These are retained commitments, not a newly selected implementation sequence.
+These are retained commitments; the selected increment below exercises UI first.
+
+## Entity-based UI: selected
+
+The user approved this sequence, with frequent coherent commits:
+
+1. Show all arena entities and expose pooled enemies' active state.
+2. Convert the existing arena HUD to named UI entities with shared text and
+   position components, preserving its appearance initially.
+3. Make the in-game restart label an interactive button. Exercise logical pointer
+   coordinates, hit testing and input consumption through headless, native and
+   browser paths.
+4. Reuse the components in the RPG for a compact quest-status display. Review
+   before/after captures and retain gameplay assertions when updating its visual
+   reference; this is an intentional visual change.
+5. Document the save/load boundary between persistent game state and transient
+   UI/host state, without implementing a general persistence system in this slice.
+
+Agents must be able to discover UI entities, inspect text and position, observe
+game-driven updates and exercise the restart button. Keep the first API grounded
+in these two games rather than adding a speculative layout framework.
+Record validation and material limitations in the UI guide. Recommend a version
+or tag when this forms a useful verified release boundary; publication and tag
+creation remain separate from that recommendation.
 
 ## Input and live-player inspection: complete
 
@@ -46,8 +69,8 @@ session, clock transitions and bounded consumed-input recording/replay. The
 starter remains externally copyable. No broader application framework was needed.
 
 The user accepted dash playability; its cooldown remains unchanged. Difficulty
-settings are a possible future feature, not selected work. No further engine
-objective is selected. Remote CI remains a gate if these local commits are pushed.
+settings are a possible future feature, not selected work. The next engine
+objective is the UI exercise above. Remote CI remains a gate if these local commits are pushed.
 No crate publication, visibility changes or new tags are authorized. Engine crate
 versions remain 0.1.0.
 
