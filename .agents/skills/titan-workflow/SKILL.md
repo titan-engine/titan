@@ -6,7 +6,8 @@ description: Build, run, inspect, replay, and diagnose Titan games using the sta
 # Titan game iteration
 
 Run commands from the repository root. Read `docs/implementation-plan.md` for
-current priorities and `docs/cli.md` for flags and structured output. Use
+quality gates and follow `docs/workflow.md` plus the GitHub board for approved
+priorities. Read `docs/cli.md` for flags and structured output. Use
 `docs/ecs-authoring.md` when editing systems, `docs/browser.md` for WASM, and
 `docs/rendering.md` for interactive or GPU work. These paths are relative to the
 repository root, three directories above this skill folder.

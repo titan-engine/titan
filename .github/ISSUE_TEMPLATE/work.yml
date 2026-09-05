@@ -1,0 +1,33 @@
+name: Idea, investigation, or work item
+description: Capture an outcome and the evidence needed to select or complete it.
+labels: [investigation]
+body:
+  - type: markdown
+    attributes:
+      value: "New issues enter Proposed. Filing an issue or assigning priority does not approve implementation."
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome or question
+      description: What user/game problem should this solve, or what decision needs evidence?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance criteria and verification
+      description: Observable results, relevant native/browser/headless checks, and evidence needed before selecting implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Scope and non-goals
+      description: Distinguish firm requirements, tentative preferences, and undecided choices. Record approval here when the scope is selected.
+    validations:
+      required: true
+  - type: textarea
+    id: relationships
+    attributes:
+      label: Dependencies and sources
+      description: Link real prerequisite issues, parent objectives, requirements, and relevant docs. Set blocking relationships in the sidebar.

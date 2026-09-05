@@ -2,14 +2,22 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# Only superseded runs of the same PR cancel each other. Main and manual runs
+# have unique groups so even a third queued push cannot replace a pending check.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   native:
@@ -23,6 +31,32 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy
           rustup default stable
+
+      - name: Identify Rust build cache
+        id: rust-cache
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          import hashlib, os, subprocess
+          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
+          print("version=" + hashlib.sha256(identity).hexdigest())
+          PYTHON
+
+      # Cache build outputs, never target/titan runtime captures or discovery data.
+      # Copied games retain their own target directories and still build and run.
+      - name: Cache Cargo downloads and Rust builds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            target/debug
+            target/starter-smoke/debug
+            games/arena/target/debug
+          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
 
       - name: Check portable build tooling policy
         run: python3 scripts/test-build-tools.py
@@ -73,6 +107,45 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
           rustup default stable
 
+      - name: Identify Rust build cache
+        id: rust-cache
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          import hashlib, os, subprocess
+          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
+          print("version=" + hashlib.sha256(identity).hexdigest())
+          PYTHON
+
+      # Cache build outputs, never target/titan runtime captures or discovery data.
+      # Copied games retain their own target directories and still build and run.
+      - name: Cache Cargo downloads and Rust builds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            target/debug
+            target/wasm32-unknown-unknown
+            target/starter-smoke/debug
+            target/starter-smoke/wasm32-unknown-unknown
+            games/arena/target/debug
+            games/arena/target/wasm32-unknown-unknown
+          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
+
+      # The helper checks the executable version before reusing it. Copied
+      # starter/arena builds also look here; do not cache the rest of target/titan.
+      - name: Cache matching wasm-bindgen CLI
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/titan/tools
+          key: bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-
+
       - name: Check engine and protocol for WebAssembly
         run: cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 
@@ -109,6 +182,32 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+
+      - name: Identify Rust build cache
+        id: rust-cache
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          import hashlib, os, subprocess
+          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
+          print("version=" + hashlib.sha256(identity).hexdigest())
+          PYTHON
+
+      # Cache build outputs, never target/titan runtime captures or discovery data.
+      # Copied games retain their own target directories and still build and run.
+      - name: Cache Cargo downloads and Rust builds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            target/debug
+            target/macos-bundle-smoke/debug
+            games/arena/target/debug
+          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
 
       - name: Build and run relocated bundles from copied games
         run: python3 scripts/test-macos-bundles.py

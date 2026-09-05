@@ -1,0 +1,24 @@
+name: Bug report
+description: Report incorrect existing behavior with reproduction evidence.
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and environment
+      description: Include revision, platform, commands or recording, and bounded diagnostic evidence. Never include discovery bearer tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What verifies the fix and which reference behaviors must remain unchanged?
+    validations:
+      required: true
