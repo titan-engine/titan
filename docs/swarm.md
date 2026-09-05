@@ -62,3 +62,19 @@ Compare several release samples on the same machine and toolchain. Checksums and
 oracle results establish correctness; timings and RSS are observations without
 pass/fail thresholds. Do not infer million-entity support or scheduler speedups
 from these baselines. Scheduler work remains separately scoped in issue #6.
+
+## Recorded baseline
+
+Measured 2026-09-05T09:56:08.655556+00:00 on macOS-27.0-arm64-arm-64bit with 18 logical CPUs,
+Rust rustc 1.98.1 (48a229cea 2026-09-01), release profile, 120 steps.
+The [raw report](evidence/swarm-baseline.json) records the clean measured
+implementation revision `f96d98590089a75f6bfbb132a242490404b19f8e`.
+Three fresh processes per size each execute two simulations. The table takes
+the median of six simulation durations and the range of three peak RSS values;
+these are local observations with no performance budget.
+
+| Entities | Simulation median (ms / 120 steps) | Peak process RSS range (bytes) | Logical payload (bytes) | Checksum |
+| ---: | ---: | ---: | ---: | --- |
+| 1,000 | 0.815 | 2,719,744–2,736,128 | 60,000 | `4003ab8d05979666` |
+| 10,000 | 7.888 | 6,029,312–9,158,656 | 600,000 | `c958f2333dc726d9` |
+| 100,000 | 101.676 | 39,911,424–54,788,096 | 6,000,000 | `901b70e007e1a7f7` |
