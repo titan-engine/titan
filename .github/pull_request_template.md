@@ -16,5 +16,8 @@ when rendering changes, preserved reference checksums, and material limitations.
   limitations):
 - Stack position and prerequisites, if applicable:
 
-Merge only after required CI and independent review pass for the current change.
+Enqueue only after required PR CI and independent review pass for the current change.
+The merge queue validates integration; do not bypass it or update solely for freshness.
+If review is carried forward across a base update, link attributed old/new SHA and
+diff-comparison evidence as required by docs/workflow.md.
 Scope changes and releases return to the user.

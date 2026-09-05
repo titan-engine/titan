@@ -8,8 +8,10 @@ prerequisites; record Owner and use an isolated worktree plus a `codex/` branch.
 Use subagents for substantial independent implementation and review. Keep
 coherent local commits, submit reviewable batches through PRs, and continue
 independent approved work while CI runs. Never push directly to main or bypass
-its required checks. Merge approved scope autonomously after independent review
-and green CI; scope changes and releases require user input. Verify the exact
+its required checks. Enqueue approved scope autonomously after independent review
+and green PR CI; the required merge queue validates integration before merging.
+Do not refresh branches solely because main advanced. Review carry-forward and
+conflict handling follow docs/workflow.md; scope changes and releases require user input. Verify the exact
 merged main revision's CI before reporting completion.
 
 Agent review comments are authorized and must clearly say they are agent reviews,

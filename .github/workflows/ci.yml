@@ -4,10 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 # Only superseded runs of the same PR cancel each other. Main and manual runs
-# have unique groups so even a third queued push cannot replace a pending check.
+# and merge-group runs have unique groups so independent integrations never cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

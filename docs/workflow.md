@@ -55,16 +55,20 @@ Set In review explicitly when the linked implementation is ready.
    and checksums unless an intentional visual change was approved.
 5. Obtain independent agent review, address findings, and move the issue to
    In review. Record the review on the PR using the attribution format below.
-6. Merge approved scope autonomously only after independent review, resolved
-   review discussions, and all required CI checks pass for the current change.
-   Reconcile main changes and rerun affected review/checks when needed. Never use
-   an admin bypass or force-push main. Return scope changes and releases to the user.
+6. Enqueue approved scope autonomously only after independent review, resolved
+   review discussions, and all required PR checks pass for the current change.
+   Do not update branches merely because main advanced: the queue tests the latest
+   main plus preceding queued changes before merging. Address real conflicts and
+   failures, with renewed review where needed. Never bypass the queue/protections
+   or force-push main. Return scope changes and releases to the user.
 7. Verify CI for the exact resulting main SHA. Link the result in the PR/issue,
    ensure the issue is completed, and release its worktree when no longer needed.
    While checks run, continue another eligible issue if independent work exists.
 
-GitHub protects main with PR requirements, up-to-date required checks, resolved
-conversations and no force pushes/deletion, including for admins. Required jobs
+GitHub protects main with PR requirements, a required merge queue, resolved
+conversations and no force pushes/deletion, including for admins. Legacy branch
+protection retains the required checks with strict branch freshness disabled; the
+active `Main merge queue` ruleset requires queued integration with no bypass actors. Required jobs
 are Native checks, WebAssembly core check, and macOS development app bundles.
 GitHub approval count is zero because all agents currently share the author's
 account and cannot cast independent approval votes. Independent review is a
@@ -95,6 +99,17 @@ owner may post another agent's review with explicit attribution. Review material
 changes made after the reviewed SHA again; do not treat an earlier clean review
 as covering unseen changes. Use `--body-file` for exact multiline comments.
 
+Review covers authored changes; queue CI covers their integration with current
+main. A queue-generated commit does not change the PR head or require another
+full authored-code review. If a branch is rebased or merged with main without
+changing its authored diff, an integration owner may carry forward the independent
+review after comparing old/new diffs (for example with `git range-diff`) and
+checking relevant main changes for semantic interactions. Post attributed evidence
+with old/new full head SHAs, comparison performed, and why review still applies.
+Do not assume a conflict-free merge proves semantic equivalence. Conflict
+resolutions, substantive edits, or relevant changed assumptions need independent
+review of the affected changes before re-enqueueing. When uncertain, obtain review.
+
 ## Branches and stacks
 
 Use ordinary PRs for independent changes. Use short `gh stack` stacks when later
@@ -110,25 +125,51 @@ gh stack init codex/foundation
 gh stack add codex/integration
 gh stack submit --auto --remote origin
 gh stack view --json
-# Merge only the reviewed, green, approved range:
-gh stack merge <top-PR-number> --yes --squash
+# Enqueue only the reviewed, green, approved range:
+gh stack merge <top-PR-number> --yes
 ```
 
 Stack creation commands above illustrate alternatives to a normal independent
 branch, not a requirement to stack every change. Use `gh stack` to rebase/sync
 stack branches and merge a stack; do not use `gh pr merge` for stacks. Never
 rewrite a branch another owner is editing without coordination. Ordinary PRs can
-use `gh pr merge --squash --match-head-commit <reviewed-SHA>`.
+use `gh pr merge <PR-number> --match-head-commit <reviewed-SHA>` after PR
+checks pass; this enqueues rather than bypasses integration. Do not use `--admin`.
+For stacks, `gh stack merge` queues the selected range and the queue chooses the
+merge method. Queued stack layers may land in separate groups; do not promise
+atomic landing of an entire stack.
 
 The CLI extension is installed and this checkout sets `rerere.enabled=true` and
 `remote.pushDefault=origin`. New clones need equivalent local setup. Stacks remain
 a GitHub preview; no stack is needed for the workflow setup's single PR.
 
+## Queue configuration and operation
+
+The main queue uses squash merging, at most three concurrent integration builds,
+`ALLGREEN` (every queue entry must pass), groups of one to three PRs, and a
+60-minute check timeout. The minimum group size is one, so there is no batching
+wait (the configured one-minute minimum-group wait is inactive at that minimum).
+Merge limits control landing groups, not how many CI builds are combined.
+
+Keep all three required jobs on PRs and merge groups. Queue CI validates current
+main plus earlier queued work; it does not eliminate integration testing or
+rebuilds after failed entries. Monitor the PR/queue and inspect the failed run
+and removal reason before retrying. Fix code or conflicts on the owning branch,
+review affected changes and pass PR checks before re-enqueueing. Retry a transient
+infrastructure failure only with evidence. Do not routinely jump the queue or
+remove/re-add entries: reordering can invalidate other builds. CodeRabbit remains
+optional and is not a queue requirement.
+
+When administering the queue, ensure the CI trigger exists before enqueueing work.
+Keep the queue requirement active before disabling legacy strict branch freshness;
+never remove required checks to make an entry merge. Inspect both legacy branch
+protection and active rulesets when diagnosing blocked integration.
+
 ## CI and routine CLI use
 
-CI runs on PRs, pushes to main, and manual dispatch. Feature-branch pushes do not
+CI runs on PRs, `merge_group: checks_requested`, pushes to main, and manual dispatch. Feature-branch pushes do not
 also start a duplicate push run. Superseded runs cancel only within the same PR;
-main runs remain independent. Build/download caches are separated by platform,
+main and merge-group runs remain independent. Build/download caches are separated by platform,
 job and toolchain, with manifest/lockfile keys. Runtime diagnostic/discovery data
 is excluded. Cache misses affect speed, not whether verification runs. All stack
 layers retain full required gates; no stack-top-only exception is configured.
