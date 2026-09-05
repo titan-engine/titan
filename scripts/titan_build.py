@@ -66,7 +66,7 @@ def copy_assets(source, destination):
         staged.rename(destination)
 
 
-def browser(root, metadata, *, package_name, out_name, assets_source=None):
+def browser(root, metadata, *, package_name, out_name, assets_source=None, features=()):
     """Build bindings and replace web/assets from assets_source (default root/assets)."""
     root = Path(root).resolve()
     resources = asset_source(root, assets_source)
@@ -109,7 +109,8 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None):
         bindgen = tool_root / "bin/wasm-bindgen"
     processes.run(["rustup", "target", "add", "wasm32-unknown-unknown"], cwd=root, check=True, phase="build")
     processes.run(["cargo", "build", "--package", package_name, "--lib", "--target",
-                    "wasm32-unknown-unknown", "--release"], cwd=root, check=True, phase="build")
+                    "wasm32-unknown-unknown", "--release",
+                    *(["--features", ",".join(features)] if features else [])], cwd=root, check=True, phase="build")
     wasm = target / "wasm32-unknown-unknown/release" / (libraries[0]["name"].replace("-", "_") + ".wasm")
     for flavor, output in [("web", root / "web/inspector/pkg"), ("nodejs", target / "titan/browser-node")]:
         processes.run([str(bindgen), str(wasm), "--target", flavor, "--out-dir", str(output),
@@ -118,7 +119,7 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None):
     copy_assets(resources, root / "web/assets")
 
 
-def macos_app(root, metadata, argv=None, *, assets_source=None):
+def macos_app(root, metadata, argv=None, *, assets_source=None, features=()):
     """Bundle a binary/example and replace Resources/assets when a source exists."""
     root = Path(root).resolve()
     parser = argparse.ArgumentParser(description="Bundle a native Cargo binary as an unsigned local-development macOS app.")
@@ -144,6 +145,8 @@ def macos_app(root, metadata, argv=None, *, assets_source=None):
         parser.error(f"no executable {target_kind} target named {target_name!r} in {package['name']}")
     resources = asset_source(root, assets_source)
     command = ["cargo", "build", "--package", package["name"], f"--{target_kind}", target_name, "--message-format=json-render-diagnostics"]
+    if features:
+        command.extend(["--features", ",".join(features)])
     if args.release:
         command.append("--release")
     executable = None

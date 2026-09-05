@@ -1,0 +1,108 @@
+{
+  "verified_at_utc": "2026-09-05 18:25:14 UTC",
+  "fixture": "collection-room-v1",
+  "native": {
+    "backend": "Metal",
+    "adapter": "Apple M5 Pro",
+    "harness": "scripts/test-player.py",
+    "native_gpu_frames": 170,
+    "replay_ticks": 44,
+    "semantic_equivalence": true,
+    "completed_state": {
+      "collected": 3,
+      "completed": true,
+      "fixture": "collection-room-v1",
+      "frame": 88,
+      "pending_inputs": 0,
+      "position": {
+        "x": 3000,
+        "z": -2000
+      },
+      "recorded_ticks": 44,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "remaining": [],
+      "session_generation": 1,
+      "session_tick": 44,
+      "total": 3
+    },
+    "capture_registered": false,
+    "surface_lifecycle_verified": true
+  },
+  "browser": [
+    {
+      "backend": "WebGPU",
+      "adapter": "BrowserWebGpu (browser does not expose device name)",
+      "page": "web/play/test.html?backend=webgpu",
+      "passed": true,
+      "checks": [
+        "initial GPU presentation",
+        "control opt-in defaults disabled",
+        "capture unsupported",
+        "44-tick keyboard route equals headless",
+        "interactive recording replay ends at 44 ticks paused",
+        "zero-size suspension",
+        "nonzero resize resumes",
+        "released tap retained",
+        "focus cancellation discards input",
+        "paused replay step",
+        "restart clears progress/playback",
+        "invalid backend visible error"
+      ]
+    },
+    {
+      "backend": "WebGL2",
+      "adapter": "ANGLE Metal Renderer: Apple M5 Pro; Chromium WebGL 2.0",
+      "page": "web/play/test.html?backend=webgl2",
+      "passed": true,
+      "checks": [
+        "initial GPU presentation",
+        "control opt-in defaults disabled",
+        "capture unsupported",
+        "44-tick keyboard route equals headless",
+        "interactive recording replay ends at 44 ticks paused",
+        "zero-size suspension",
+        "nonzero resize resumes",
+        "released tap retained",
+        "focus cancellation discards input",
+        "paused replay step",
+        "restart clears progress/playback",
+        "invalid backend visible error"
+      ]
+    }
+  ],
+  "browser_semantic_state": {
+    "position": {
+      "x": 3000,
+      "z": -2000
+    },
+    "collected": 3,
+    "completed": true,
+    "session_tick": 44,
+    "remaining": [],
+    "live_host_frame": 44,
+    "replay_host_frame": 88
+  },
+  "composition": {
+    "backend": "Metal",
+    "cases": 24,
+    "per_channel_tolerance": 2,
+    "formats": [
+      "Rgba8Unorm",
+      "Rgba8UnormSrgb",
+      "Bgra8Unorm",
+      "Bgra8UnormSrgb"
+    ],
+    "harness": "cargo test -p titan-render-wgpu --test composition -- --ignored"
+  },
+  "manual_ui": [
+    "browser Play, invalid Step while running remains nonfatal, Replay route reaches completion",
+    "native app window and ECS overlay inspected; P toggles pause/resume"
+  ],
+  "limitations": [
+    "No physical device-loss event was forced; failure policy branches are unit-tested.",
+    "No portable exact 3D image hash is claimed.",
+    "Collection-room capture remains unregistered; #48 integrates it.",
+    "Other native operating systems are compile targets, not locally GPU-verified."
+  ]
+}

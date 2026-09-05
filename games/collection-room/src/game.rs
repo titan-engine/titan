@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use titan::input::{ActionValue, InputFrame, InputRecording, InputTracker, RecordingHeader};
 use titan::inspection::{InspectionConfig, Inspector};
 use titan::render::three_d::*;
+use titan::render::{Color, ImageAssets, RenderFrame};
 use titan::replay::RecordedButtons;
+use titan::ui::{BitmapFont, UiNode, UiText, append_ui, register_ui_inspection};
 use titan::{App, Component, FixedTime, FixedUpdate, Name, Startup, World};
 use titan_protocol::{
     CommandMetadata, ErrorCode, FieldMetadata, InputValue, ProtocolError, QueryMetadata,
@@ -28,6 +30,8 @@ pub struct Position {
 #[derive(Component)]
 struct Player;
 #[derive(Component)]
+struct Hud;
+#[derive(Component)]
 struct Collectible {
     collected: bool,
 }
@@ -50,7 +54,7 @@ pub enum Action {
     Left,
     Right,
 }
-const SCHEMA: [(Action, &str); 4] = [
+pub(crate) const SCHEMA: [(Action, &str); 4] = [
     (Action::Up, "up"),
     (Action::Down, "down"),
     (Action::Left, "left"),
@@ -112,12 +116,23 @@ pub fn build_game() -> App {
     app.add_systems(Startup, setup);
     app.add_systems(FixedUpdate, tick);
     app.add_extractor(extract);
+    app.add_extractor(extract_overlay);
     app
 }
 fn initial_position() -> Position {
     Position { x: -3000, z: 3000 }
 }
 fn setup(world: &mut World) {
+    let mut images = ImageAssets::default();
+    let font = BitmapFont::tiny(&mut images);
+    world.insert_resource(images);
+    world.insert_resource(font);
+    world.spawn_with((
+        Name::new("ui/progress"),
+        Hud,
+        UiNode::new(8, 8, 304, 5),
+        UiText::new("GEMS 0/3").with_color(Color::rgb(255, 240, 190)),
+    ));
     let mut assets = MeshAssets::new();
     let cube = assets.insert(Mesh::cube(1.0).unwrap()).unwrap();
     let floor = assets.insert(Mesh::floor(10.0).unwrap()).unwrap();
@@ -229,7 +244,11 @@ pub fn restart(app: &mut App) {
     app.world_mut().insert_resource(ScheduledInput::default());
     app.world_mut()
         .insert_resource(InputFrame::<Action>::default());
+    sync_hud(app.world_mut());
     app.refresh_extracted();
+}
+pub(crate) fn clear_scheduled_input(world: &mut World) {
+    world.insert_resource(ScheduledInput::default());
 }
 fn permitted(position: Position) -> bool {
     position.x.abs() <= ROOM_BOUND
@@ -240,6 +259,7 @@ fn permitted(position: Position) -> bool {
         })
 }
 fn tick(world: &mut World) {
+    crate::player::prepare_tick(world);
     let next = world.resource::<FixedTime>().unwrap().tick() + 1;
     let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
     let frame = if scheduled.enabled {
@@ -301,6 +321,27 @@ fn tick(world: &mut World) {
     } else {
         session.truncated = true;
     }
+    sync_hud(world);
+}
+fn sync_hud(world: &mut World) {
+    let progress = world.iter::<Progress>().next().unwrap().1;
+    let text = format!(
+        "GEMS {}/3{}",
+        progress.collected,
+        if progress.completed {
+            "  ROOM COMPLETE"
+        } else {
+            ""
+        }
+    );
+    let hud = world.iter::<Hud>().next().unwrap().0;
+    world.get_mut::<UiText>(hud).unwrap().text = text;
+}
+/// Transparent ECS text layer, shared by players and future capture composition.
+pub fn extract_overlay(world: &World) -> RenderFrame {
+    let mut frame = RenderFrame::new(320, 180, Color::rgba(0, 0, 0, 0));
+    append_ui(world, &mut frame);
+    frame
 }
 /// CPU-owned immutable 3D snapshot; collected objects remain inspectable but hidden.
 pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
@@ -415,6 +456,7 @@ fn field(type_name: &str, description: &str) -> FieldMetadata {
 pub fn configured_inspector(config: InspectionConfig) -> Inspector {
     let mutation_enabled = config.mutation_enabled;
     let mut inspector = Inspector::new(config);
+    register_ui_inspection(&mut inspector).unwrap();
     inspector
         .register_read_only_field::<Position, _>(
             "x",

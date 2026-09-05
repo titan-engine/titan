@@ -3,8 +3,9 @@
 A standalone Titan game derived from the minimal starter's public-API workflow.
 The same Rust simulation runs headlessly on native and actual WebAssembly. This
 package owns its rules, generated meshes, camera, input, inspection and replay;
-it imports no RPG support code and has no GPU dependency. Interactive players,
-HUD composition and image capture are separate work. No software 3D image is
+it imports no RPG support code. The optional `player` feature adds native and
+browser GPU hosts; default headless builds keep GPU dependencies disabled.
+Image capture remains unregistered for the later capture integration. No software 3D image is
 substituted for a GPU render.
 
 ## Run and inspect
@@ -33,8 +34,7 @@ target/debug/titan --format json --project games/collection-room --instance room
 ```
 
 Inputs are complete button snapshots for future host ticks. Missing injected
-frames release all actions. Names are `up`, `down`, `left`, `right`; a future
-player can map WASD/arrows to them. The host frame stays monotonic across
+frames release all actions. Names are `up`, `down`, `left`, `right`; the players map WASD/arrows to them. The host frame stays monotonic across
 restart; the game timeline and recording reset, input is cleared, and the
 session generation increments. Completion stays latched until restart.
 
@@ -84,8 +84,9 @@ not part of semantic final-state equality.
 `game::build_game()` returns an `App`; run `Startup`, then refresh extraction.
 `app.extracted::<Result<RenderFrame3d, Frame3dError>>()` owns the resolved meshes,
 fixed elevated perspective camera and lighting. Mesh data is procedural and
-uses the shared `titan::render::three_d` boundary. A future host can consume the
-frame without putting rendering dependencies into simulation.
+uses the shared `titan::render::three_d` boundary. The players consume the frame without putting GPU dependencies into simulation.
+The `RenderFrame` extraction and `ImageAssets` resource contain the transparent
+ECS progress/completion text used by the shared compositor.
 
 ```sh
 cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
@@ -97,15 +98,99 @@ node games/collection-room/scripts/test-browser.mjs
 ```
 
 The portable starter build helper emits browser and Node bindings under
-`web/inspector/pkg` and `target/titan/browser-node`; this increment supplies an API adapter, not a player page.
+`web/inspector/pkg` and `target/titan/browser-node`; the player page is at `web/play/`.
 Actual WASM acceptance executes the Node bindings in a bounded child process.
 Native acceptance uses bounded separate CLI/runtime processes and sanitized
 failure evidence. The CPU tests cover collisions, collection, input semantics,
 restart, replay and immutable extracted geometry without opening a window.
 
+
+## Play natively
+
+```sh
+cargo run --manifest-path games/collection-room/Cargo.toml --features player --bin play
+python3 games/collection-room/scripts/build-macos-app.py --name "Titan Collection Room" --bundle-id dev.titan.collection-room
+```
+
+The second command builds an unsigned local development app and prints its path.
+WASD/arrows move, P pauses/resumes, N advances one paused tick, R restarts and
+clears the replay, and Escape exits. Focus loss pauses and cancels held keys and
+buffered taps. A released tap still reaches the next tick; physical aliases are
+tracked separately. Playback uses the same fixed system as manual/headless play.
+
+Use `--recording PATH` to load an exported recording paused at its origin, then
+P to play it one tick at a time. Playback pauses at the exact recording end;
+N can single-step it. `--frames N` limits presented frames and `--run-for-ms MS`
+bounds wall-clock execution. Use the latter for unattended playback.
+
+Add `--inspect --allow-control --project games/collection-room --instance room-player`
+to expose the authenticated inspector on the exact played instance. Omit
+`--allow-control` for read-only inspection. Query `state`, `recording` and `playback`;
+invoke `pause`, `resume`, `restart`, or `load_replay` with a `recording` argument.
+The headless instant `replay` command is disabled in players: `load_replay` and
+subsequent ticks provide interactive replay. Stepping requires pause; a step
+beyond a recording end is rejected. Capture reports unsupported.
+
+## Play in a browser
+
+```sh
+python3 games/collection-room/scripts/build-browser.py
+python3 -m http.server 8000 --bind 127.0.0.1 --directory games/collection-room/web
+```
+
+Open `/play/` and click Play. Focus the canvas to move; Space pauses/resumes,
+N steps, and R restarts. Host buttons export/import recordings and replay the
+44-tick reference route. Imported recordings start paused; Resume plays them on
+the same canvas. Controls and the ECS overlay work without inspector permission.
+Check **Enable inspector control** to authorize tool-driven writes on the played
+instance. The same-page `window.collectionRoom.dispatch(JSON.stringify(envelope))`
+returns a Promise for a schema-2 response; runtime policy enforces the checkbox.
+Reload returns to disabled control. No native discovery token is exposed.
+
+Use `?backend=webgpu` or `?backend=webgl2` to request exactly one backend; the
+ordinary page permits either. WebGL2 requires floating-point color attachments
+for the existing text/sprite renderer. Unsupported adapters and GPU errors are
+visible and stop graphics; reload starts a fresh GPU session. Invalid control
+operations and recording imports are reported without stopping graphics.
+
+The fixed camera and 320 × 180 text layer stretch with the surface. Pixel sizes
+are bounded to 2048 per axis; zero size suspends drawing until a nonzero resize.
+Long frame gaps are capped at 250 ms and input is canceled on focus loss. These
+hosts target native desktop winit platforms and browser WebGPU/WebGL2; they do
+not add mobile/console targets or a software 3D fallback.
+
+## Player acceptance
+
+```sh
+cargo test --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
+cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
+python3 games/collection-room/scripts/test-player.py
+node --test games/collection-room/web/play/*.test.mjs
+# With the browser server above, open each actual GPU test page:
+# /play/test.html?backend=webgpu
+# /play/test.html?backend=webgl2
+cargo test -p titan-render-wgpu --test composition -- --ignored
+```
+
+The native harness requires an actual window/GPU. It drives the played instance
+through the authenticated CLI, exports the 44-tick winning route, steps the
+recording once, resumes interactive playback and compares semantic state.
+The browser test page executes actual generated WASM and renders each fixed tick,
+checking the same keyboard route, replay, focus cancellation, pause/step/restart,
+control policy and zero-size suspension/resizing. Its JSON result declares the
+requested backend; an unavailable backend is a failure, not a fallback pass.
+The shared composition test checks linear-light alpha and UI color conversion
+for sRGB and non-sRGB targets with per-channel tolerance 2, retaining expected,
+actual and difference images. Exact portable 3D pixel equality is not claimed.
 The semantic host uses protocol schema 2. Browser clients may await
 `runtime.dispatch(JSON.stringify(envelope))`; it returns one correlated Promise
 without retaining the runtime borrow. `handle` remains an immediate-only
 convenience for semantic calls. Native requests use the same owned dispatch and
 deferred reply boundary. This package still advertises no capture capability;
 collection-room GPU capture wiring belongs to #48.
+
+[Recorded player acceptance](evidence/player-acceptance.json) verifies native Metal
+on Apple M5 Pro, actual browser WebGPU, and Chromium WebGL2 via ANGLE Metal.
+The actual native run presented 170 GPU frames and verified a real 800 × 500
+window resize as well as zero-size suspension. Device loss was not physically
+forced; supported failure-policy branches have unit coverage.

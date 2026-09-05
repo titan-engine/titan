@@ -112,13 +112,15 @@ The CPU data/math boundary is implemented in `titan::render::three_d` alongside
 unchanged 2D APIs. `titan_render_wgpu::GpuRenderer3d` consumes these frames into
 bounded offscreen color and depth targets. `OwnedGpuCapture` submits fresh owned
 frames for asynchronous readback through the common inspection capture contract.
-Game players and UI composition remain separate integration work. Their
-execution scope lives in the linked issues of
+Collection-room players and UI composition use shared surface/device lifecycle.
+Game capture integration remains agreed design, **not yet an implemented
+collection-room capability**. Execution scope lives in the linked issues of
 [#42](https://github.com/titan-engine/titan/issues/42).
 
 The [standalone collection room](../games/collection-room/README.md) now supplies
 headless fixed-tick game rules, inspection/replay and extracted 3D frames using
-this boundary. It does not yet provide a player or image capture.
+this boundary. It also provides native and browser GPU players with a shared ECS overlay.
+Image capture is not registered yet.
 
 ### Coordinates and data
 
@@ -233,18 +235,20 @@ Use an sRGB attachment's conversion or an explicit conversion for a non-sRGB
 output, never both. Do not apply the 2D renderer's byte-space lighting/blending
 convention to 3D.
 
-Player/overlay integration remains future work: reuse the existing entity-based
-text UI for a small progress/completion overlay.
-Compose it after the scene with depth disabled, accounting explicitly for its
-byte-space color convention at the output boundary. Include that overlay in
-captures. This does not select new widgets, typography or general UI layout.
+`SurfaceRenderer3d` shares device acquisition, bounded surface resize, suspension
+and failure policy with the 2D `SurfaceRenderer`. It composes the existing
+entity-based text UI after the scene with depth disabled. `GpuSceneRenderer3d`
+provides the same composition into caller-owned offscreen targets for later
+capture integration. The 2D overlay retains its byte-space rendering convention;
+the compositor decodes its straight-alpha color to linear light, blends over
+the decoded 3D scene, and encodes exactly once for the output format. This does not select new widgets, typography or general UI layout.
 Surface/device setup should be shared with 2D where useful. Public APIs may be
 redesigned; migrate current callers and document material changes instead of
 preserving obsolete interfaces. Keep the existing 2D visual references intact.
 
 The validation targets are native Metal on the reference macOS machine and
 actual browser WebGPU and WebGL2 paths. The low-level GPU verification fixture below exercises this matrix separately
-from future game-player integration. Probe required color/depth/readback
+from game-player integration. Probe required color/depth/readback
 formats and limits on each backend; explicitly report unavailable capability,
 with no silent software 3D fallback. Existing 2D WebGL2 requires floating-point
 color attachments; a shared overlay path must account for that requirement.
@@ -305,3 +309,15 @@ browser WebGL2 (Chromium ANGLE Metal). Each backend passed 36 image cases with
 the low-level offscreen renderer, not a native/browser 3D game player. Native
 artifacts default to the system temporary directory's `titan-3d-evidence` folder;
 set `TITAN_3D_EVIDENCE_DIR` to retain them elsewhere.
+
+### Collection-room players
+
+See the [game README](../games/collection-room/README.md) for native/browser
+launch commands, controls, interactive recording playback and opt-in inspection.
+The CPU-only game and controller remain available without the `player` feature.
+The fixed 320 × 180 ECS overlay is scaled with nearest sampling over the scene;
+window/canvas dimensions are bounded to 2048 pixels per axis. Zero sizes suspend
+presentation until a nonzero resize. Outdated surfaces are reconfigured and
+retried on a later frame, timeouts/occlusion skip presentation, and unrecoverable
+surface/device errors stop the host with a diagnostic. No software 3D fallback
+is selected. Native OS suspension drops and recreates the surface on resume.
