@@ -1,0 +1,5 @@
+error: numeric bounds are not supported for bool inspection fields
+ --> tests/ui/inspection_bool/bounds.rs:6:14
+  |
+6 |     enabled: bool,
+  |              ^^^^

@@ -18,10 +18,11 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Generates opt-in inspection registration for annotated `i32` fields.
+/// Generates opt-in inspection registration for annotated `i32` and `bool` fields.
 /// Named, nongeneric structs are supported. Unannotated fields remain opaque;
 /// annotated fields are read-only unless `writable` is specified. Field docs
 /// become descriptions, with optional `minimum`, `maximum`, and `unit` metadata.
+/// Numeric bounds apply only to `i32` fields.
 #[proc_macro_derive(Inspect, attributes(inspect))]
 pub fn derive_inspect(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -64,19 +65,27 @@ fn expand_inspect(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         if attrs.is_empty() {
             continue;
         }
-        if !matches!(&field.ty, syn::Type::Path(ty) if ty.qself.is_none() && ty.path.is_ident("i32"))
+        let (value_type, type_name, supports_bounds) = if matches!(&field.ty, syn::Type::Path(ty) if ty.qself.is_none() && ty.path.is_ident("i32"))
         {
+            (quote!(::core::primitive::i32), "i32", true)
+        } else if matches!(&field.ty, syn::Type::Path(ty) if ty.qself.is_none() && ty.path.is_ident("bool"))
+        {
+            (quote!(::core::primitive::bool), "bool", false)
+        } else {
             return Err(syn::Error::new_spanned(
                 &field.ty,
-                "Inspect currently supports only i32 fields",
+                "Inspect currently supports only i32 and bool fields",
             ));
-        }
+        };
         let mut writable = false;
         let mut minimum: Option<syn::Expr> = None;
         let mut maximum: Option<syn::Expr> = None;
         let mut unit: Option<syn::LitStr> = None;
         let mut seen = std::collections::BTreeSet::new();
         for attr in attrs {
+            if matches!(attr.meta, syn::Meta::Path(_)) {
+                continue;
+            }
             attr.parse_nested_meta(|meta| {
                 let Some(key) = meta.path.get_ident() else {
                     return Err(meta.error("expected writable, minimum, maximum, or unit"));
@@ -93,6 +102,12 @@ fn expand_inspect(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 }
                 Ok(())
             })?;
+        }
+        if !supports_bounds && (minimum.is_some() || maximum.is_some()) {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "numeric bounds are not supported for bool inspection fields",
+            ));
         }
         let description = field
             .attrs
@@ -130,19 +145,19 @@ fn expand_inspect(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let field_name = field.to_string().trim_start_matches("r#").to_owned();
         let metadata = quote! {
             ::titan::inspection::FieldMetadata {
-                type_name: "i32".into(), description: #description.into(),
+                type_name: #type_name.into(), description: #description.into(),
                 writable: #writable, minimum: #minimum, maximum: #maximum, unit: #unit,
             }
         };
         registrations.push(if writable {
             quote! {
-                inspector.register_field::<Self, ::core::primitive::i32>(#field_name, #metadata,
+                inspector.register_field::<Self, #value_type>(#field_name, #metadata,
                     |component| component.#field, |_, _| ::core::result::Result::Ok(()),
                     |component, value| component.#field = value)?;
             }
         } else {
             quote! {
-                inspector.register_read_only_field::<Self, ::core::primitive::i32>(#field_name, #metadata,
+                inspector.register_read_only_field::<Self, #value_type>(#field_name, #metadata,
                     |component| component.#field)?;
             }
         });
@@ -175,7 +190,11 @@ mod tests {
             ),
             (
                 "struct Bad { #[inspect(unit = \"m\")] x: String }",
-                "only i32",
+                "only i32 and bool",
+            ),
+            (
+                "struct Bad { #[inspect(minimum = 0)] active: bool }",
+                "numeric bounds are not supported for bool",
             ),
             (
                 "struct Bad { #[inspect(typo)] x: i32 }",

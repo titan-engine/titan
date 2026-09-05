@@ -102,9 +102,9 @@ The original direct replay remains an independent exact-image reference.
 
 ## Explicit component fields
 
-The RPG's `Position` uses the opt-in `Inspect` derive to register its two tile
-coordinates. This minimal slice supports named, nongeneric component structs
-and explicitly annotated `i32` fields:
+The RPG's `Position` and arena's pooled-enemy state use the opt-in `Inspect`
+derive. This minimal slice supports named, nongeneric component structs and
+explicitly annotated `i32` and `bool` fields:
 
 ```rust
 use titan::{Component, Inspect, inspection::{InspectionConfig, Inspector}};
@@ -117,6 +117,9 @@ struct Position {
     /// Map tile coordinate
     #[inspect(writable, minimum = 0, maximum = 13, unit = "tile")]
     y: i32,
+    /// Whether movement is enabled
+    #[inspect]
+    enabled: bool,
 }
 
 let mut inspector = Inspector::new(InspectionConfig::controlled("game", "project"));
@@ -124,17 +127,20 @@ inspector.register_inspectable::<Position>()?;
 # Ok::<(), titan::inspection::ProtocolError>(())
 ```
 
-Field names and `i32` type labels are generated; field Rust doc comments become
-descriptions. `minimum`, `maximum`, and `unit` are optional enrichments. Bounds
-accept Rust expressions convertible through `f64::from`, including map constants.
+Field names and `i32` or `bool` type labels are generated; field Rust doc comments
+become descriptions. `unit` is an optional enrichment for either type. `minimum`
+and `maximum` apply only to integer fields and are rejected on booleans at compile
+time. Integer bounds accept Rust expressions convertible through `f64::from`,
+including map constants.
 An annotated field is read-only unless it includes `writable`; unannotated fields
 are not registered and need no serialization support. The derive does not expose
 anything until explicitly registered with an inspector, and registration does
 not enable mutation. `Component` itself still permits opaque types.
 
-Generated registration uses the same typed decoding, numeric bounds, permissions,
-and getters/setters as the manual API below. Use manual registration for other
-field types, computed values, or validators enforcing additional game invariants.
+Generated registration uses the same typed JSON decoding, numeric bounds,
+permissions, and getters/setters as the manual API below. Writable booleans accept
+only JSON `true` or `false`. Use manual registration for other field types,
+computed values, or validators enforcing additional game invariants.
 This slice does not generate type-level documentation, nested reflection, or
 component serialization. Registration is sequential; an error leaves any earlier
 successful field registrations in place, just as repeated manual calls do.
