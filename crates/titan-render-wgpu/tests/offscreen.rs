@@ -270,7 +270,9 @@ fn completed_rpg_replay_matches_software_capture() {
             })
             .await
             .unwrap();
-        let mut app = game::build_game();
+        let player = game::assets::decode_player_png(include_bytes!("../../../assets/player.png"))
+            .expect("packaged RPG player PNG");
+        let mut app = game::build_game_with_player(player);
         game::replay(&mut app, &game::recorded_walk());
         let state: serde_json::Value = serde_json::from_str(&game::status(&app)).unwrap();
         assert_eq!(state["shrine_active"], true);

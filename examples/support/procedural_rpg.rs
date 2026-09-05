@@ -1,3 +1,5 @@
+#[path = "rpg_assets.rs"]
+pub mod assets;
 #[path = "rpg_journal.rs"]
 pub mod journal;
 #[path = "rpg_live.rs"]
@@ -92,8 +94,19 @@ struct Art {
     shrine_active: ImageId,
 }
 
+struct PlayerImage(Image);
+
+pub fn player_image(world: &World) -> &Image {
+    &world.resource::<PlayerImage>().expect("RPG player image").0
+}
+
 pub fn build_game() -> App {
+    build_game_with_player(generated_player())
+}
+
+pub fn build_game_with_player(image: Image) -> App {
     let mut app = App::new();
+    app.world_mut().insert_resource(PlayerImage(image));
     app.world_mut()
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(QuestState::default());
@@ -315,7 +328,7 @@ fn apply_scheduled_input(
 
 fn setup(world: &mut World) {
     let mut assets = ImageAssets::new();
-    let art = generate_art(&mut assets);
+    let art = generate_art(&mut assets, player_image(world));
     let font = BitmapFont::tiny(&mut assets);
     world.insert_resource(assets);
     world.insert_resource(font);
@@ -481,7 +494,7 @@ fn render_frame_view(world: &World, show_journal: bool) -> RenderFrame {
     frame
 }
 
-fn generate_art(assets: &mut ImageAssets) -> Art {
+fn generate_art(assets: &mut ImageAssets, player_image: &Image) -> Art {
     let meadow = assets.insert(
         Image::from_fn(
             (MAP_WIDTH * TILE_SIZE) as u32,
@@ -565,19 +578,7 @@ fn generate_art(assets: &mut ImageAssets) -> Art {
             ('d', Color::rgb(70, 110, 73)),
         ],
     );
-    let player = pixel_art(
-        assets,
-        &[
-            "..dddd..", "..dhhhd.", "..dfffd.", "..ffdf..", ".ddccdd.", ".dchccd.", "dcchcccd",
-            ".dcccdd.", "..dddd..", "..d..d..",
-        ],
-        &[
-            ('d', Color::rgb(62, 48, 47)),
-            ('h', Color::rgb(181, 154, 110)),
-            ('f', Color::rgb(237, 207, 145)),
-            ('c', Color::rgb(201, 101, 72)),
-        ],
-    );
+    let player = assets.insert(player_image.clone());
     let shard = pixel_art(
         assets,
         &[
@@ -657,19 +658,36 @@ fn meadow_path(x: i32, y: i32) -> bool {
         || ((78..=90).contains(&x) && (26..=51).contains(&y))
 }
 
+pub fn generated_player() -> Image {
+    pixel_image(
+        &[
+            "..dddd..", "..dhhhd.", "..dfffd.", "..ffdf..", ".ddccdd.", ".dchccd.", "dcchcccd",
+            ".dcccdd.", "..dddd..", "..d..d..",
+        ],
+        &[
+            ('d', Color::rgb(62, 48, 47)),
+            ('h', Color::rgb(181, 154, 110)),
+            ('f', Color::rgb(237, 207, 145)),
+            ('c', Color::rgb(201, 101, 72)),
+        ],
+    )
+}
+
 fn pixel_art(assets: &mut ImageAssets, rows: &[&str], palette: &[(char, Color)]) -> ImageId {
+    assets.insert(pixel_image(rows, palette))
+}
+
+fn pixel_image(rows: &[&str], palette: &[(char, Color)]) -> Image {
     let width = rows[0].len();
     assert!(rows.iter().all(|row| row.len() == width));
-    assets.insert(
-        Image::from_fn(width as u32, rows.len() as u32, |x, y| {
-            let pixel = rows[y as usize].as_bytes()[x as usize] as char;
-            palette
-                .iter()
-                .find_map(|(key, color)| (*key == pixel).then_some(*color))
-                .unwrap_or(Color::TRANSPARENT)
-        })
-        .unwrap(),
-    )
+    Image::from_fn(width as u32, rows.len() as u32, |x, y| {
+        let pixel = rows[y as usize].as_bytes()[x as usize] as char;
+        palette
+            .iter()
+            .find_map(|(key, color)| (*key == pixel).then_some(*color))
+            .unwrap_or(Color::TRANSPARENT)
+    })
+    .unwrap()
 }
 
 pub fn recorded_walk() -> InputRecording<Action> {

@@ -63,6 +63,8 @@ mod native {
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut limit = None;
+        let mut assets_dir: Option<std::path::PathBuf> = None;
+        let mut generated_assets = false;
         let mut duration = None;
         let mut recording_path = None;
         let mut reference = false;
@@ -73,6 +75,14 @@ mod native {
         let mut instance = format!("rpg-player-{}", std::process::id());
         while let Some(arg) = args.next() {
             match arg.as_str() {
+                "--assets-dir" => {
+                    assets_dir = Some(
+                        args.next()
+                            .ok_or("--assets-dir requires a directory")?
+                            .into(),
+                    )
+                }
+                "--generated-assets" => generated_assets = true,
                 "--frames" => {
                     let count = args
                         .next()
@@ -112,7 +122,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play_rpg [--replay] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; J opens the quest journal; arrows/Tab navigate, Enter selects, Escape closes. P pauses/resumes; R restarts; Escape exits when the journal is closed.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--replay renders the completed reference walk.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
+                        "play_rpg [--assets-dir DIR | --generated-assets] [--replay] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; J opens the quest journal; arrows/Tab navigate, Enter selects, Escape closes. P pauses/resumes; R restarts; Escape exits when the journal is closed.\nPlayback: P pauses/resumes; N steps one recorded tick while paused; R restarts playback; L exits to a fresh live game.\n--replay renders the completed reference walk.\n--recording loads a bounded JSON recording and starts paused.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -133,6 +143,7 @@ mod native {
                     .into(),
             );
         }
+        let image = game::assets::load_player(assets_dir.as_deref(), generated_assets)?;
         let recording = recording_path
             .as_deref()
             .map(|path| read_recording(Path::new(path)))
@@ -158,7 +169,7 @@ mod native {
         } else {
             (None, None)
         };
-        let mut app = game::build_game();
+        let mut app = game::build_game_with_player(image);
         app.update_schedule(Startup);
         if reference {
             game::replay(&mut app, &game::recorded_walk());

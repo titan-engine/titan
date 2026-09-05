@@ -23,18 +23,27 @@ pub struct BrowserRuntime {
 impl BrowserRuntime {
     #[wasm_bindgen(constructor)]
     pub fn new(enable_control: bool) -> Self {
-        let mut app = game::build_game();
+        Self::from_app(game::build_game(), enable_control)
+    }
+
+    pub fn with_player_png(enable_control: bool, bytes: &[u8]) -> Result<Self, JsValue> {
+        Ok(Self::from_app(player_png_app(bytes)?, enable_control))
+    }
+
+    /// Executes one request at a safe point and returns its JSON response envelope.
+    pub fn handle(&mut self, request_json: &str) -> String {
+        self.session.handle(request_json)
+    }
+}
+
+impl BrowserRuntime {
+    fn from_app(mut app: App, enable_control: bool) -> Self {
         app.update_schedule(Startup);
         let config = InspectionConfig::controlled("procedural-rpg-browser", "procedural-rpg");
         let inspector = game::inspector_with_capture(config, capture);
         Self {
             session: BrowserSession::new(app, inspector, enable_control),
         }
-    }
-
-    /// Executes one request at a safe point and returns its JSON response envelope.
-    pub fn handle(&mut self, request_json: &str) -> String {
-        self.session.handle(request_json)
     }
 }
 
@@ -52,6 +61,11 @@ impl BrowserLiveRuntime {
         Self {
             session: live_session(),
         }
+    }
+    pub fn with_player_png(bytes: &[u8]) -> Result<Self, JsValue> {
+        Ok(Self {
+            session: live_session_from_app(player_png_app(bytes)?),
+        })
     }
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle_json(request_json)
@@ -139,6 +153,20 @@ pub fn verify_recording_json(recording_json: &str) -> Result<String, JsValue> {
     result.map_err(|error| JsValue::from_str(&error))
 }
 
+/// Verifies pixels against the exact player asset loaded by this browser page.
+#[wasm_bindgen]
+pub fn verify_recording_json_with_player_png(
+    recording_json: &str,
+    bytes: &[u8],
+) -> Result<String, JsValue> {
+    let recording = parse_recording_json(recording_json)?;
+    let image =
+        game::assets::decode_player_png(bytes).map_err(|error| JsValue::from_str(&error))?;
+    game::live::verify_recording_with_player(recording, image)
+        .map(|value| value.to_string())
+        .map_err(|error| JsValue::from_str(&error))
+}
+
 fn parse_recording_json(json: &str) -> Result<serde_json::Value, JsValue> {
     if json.len() > 2 * 1024 * 1024 {
         return Err(JsValue::from_str("recording exceeds the 2 MiB size bound"));
@@ -146,8 +174,17 @@ fn parse_recording_json(json: &str) -> Result<serde_json::Value, JsValue> {
     serde_json::from_str(json).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+fn player_png_app(bytes: &[u8]) -> Result<App, JsValue> {
+    let image =
+        game::assets::decode_player_png(bytes).map_err(|error| JsValue::from_str(&error))?;
+    Ok(game::build_game_with_player(image))
+}
+
 fn live_session() -> game::live::RpgSession {
-    let mut app = game::build_game();
+    live_session_from_app(game::build_game())
+}
+
+fn live_session_from_app(mut app: App) -> game::live::RpgSession {
     app.update_schedule(Startup);
     let mut config = InspectionConfig::controlled("rpg-live-browser", "procedural-rpg");
     config.run_mode = titan_protocol::RunMode::Browser;

@@ -1,21 +1,25 @@
+import { loadPlayerPng } from "../shared/player-asset.mjs";
 import { bridgeResponse, typedArgument } from "./bridge.mjs";
 
 async function initialize() {
   const $ = (id) => document.getElementById(id);
+  let requestedControl = false;
   let runtime, BrowserRuntime, currentFrame = 0, sequence = 0, selectedEntity = null, operations = new Set(), nextCursor = null;
   const text = (id, value) => { $(id).textContent = value; };
   function showError(error) {
     $("error").hidden = false;
     text("error", error.code ? `${error.code}: ${error.message}\n${JSON.stringify(error.details || {}, null, 2)}` : String(error.message || error));
   }
-  function action(callback) {
+  function action(callback, requiresRuntime = true) {
     return (event) => {
       event?.preventDefault();
+      if (requiresRuntime && !runtime) return;
       $("error").hidden = true;
-      try { callback(); } catch (error) { showError(error); }
+      try { Promise.resolve(callback()).catch(showError); } catch (error) { showError(error); }
     };
   }
   function request(body) {
+    if (!runtime) throw new Error("Runtime unavailable. Retry loading player.png before inspection.");
     const envelope = { schema_version: 1, request_id: `browser-ui-${++sequence}`, request: body };
     const result = JSON.parse(runtime.handle(JSON.stringify(envelope)));
     text("last-response", JSON.stringify(result, null, 2));
@@ -112,8 +116,32 @@ async function initialize() {
       panel.append(title, description, form); $("commands").append(panel);
     }
   }
-  function start(control) {
-    runtime?.free(); runtime = new BrowserRuntime(control); selectedEntity = null;
+  async function start(control) {
+    requestedControl = control;
+    $("enable-controls").disabled = true; $("refresh").disabled = true; $("capture").disabled = true;
+    $("time-panel").hidden = true; $("input-panel").hidden = true;
+    $("scene").hidden = true; $("commands").replaceChildren();
+    runtime?.free(); runtime = undefined;
+    selectedEntity = null; nextCursor = null; operations = new Set(); currentFrame = 0;
+    $("entities").replaceChildren(); $("status-fields").replaceChildren();
+    $("mutation-component").replaceChildren(); $("mutation-form").hidden = true;
+    $("entity-placeholder").hidden = false; $("more-entities").hidden = true;
+    $("reference-route").hidden = true; $("reference-route").disabled = true;
+    $("scene").removeAttribute("src"); $("capture-placeholder").hidden = false;
+    for (const id of ["entity-details", "entity-count", "capabilities", "last-response", "capture-info"]) text(id, "");
+    text("runtime-status", "Waiting for player asset");
+    text("mode", "Loading player.png…");
+    try {
+      const bytes = await loadPlayerPng();
+      runtime = BrowserRuntime.with_player_png(control, bytes);
+    } catch (error) {
+      text("mode", "Runtime unavailable");
+      text("runtime-status", "Player asset failed to load");
+      text("session-note", "Fix assets/player.png, then retry. No game has started.");
+      $("enable-controls").textContent = "Retry"; $("enable-controls").disabled = false;
+      throw error;
+    }
+    selectedEntity = null;
     $("entity-placeholder").hidden = false; text("entity-details", ""); $("mutation-form").hidden = true;
     const capabilities = request({ type: "capabilities" }); operations = new Set(capabilities.operations);
     text("mode", capabilities.operations.some((operation) => ["step", "invoke", "inject_input"].includes(operation)) ? "Controls enabled" : "Read-only");
@@ -126,7 +154,7 @@ async function initialize() {
     $("reference-route").hidden = !(operations.has("step") && operations.has("inject_input"));
     commands(); refresh();
   }
-  $("enable-controls").addEventListener("click", action(() => start(true)));
+  $("enable-controls").addEventListener("click", action(() => start(runtime ? true : requestedControl), false));
   $("refresh").addEventListener("click", action(refresh));
   $("capture").addEventListener("click", action(capture));
   $("more-entities").addEventListener("click", action(() => entities(true)));
@@ -142,9 +170,10 @@ async function initialize() {
     request({ type: "step", frames: 11 }); refresh();
   }));
   try {
-    const wasm = await import("./pkg/titan_browser.js"); await wasm.default(); BrowserRuntime = wasm.BrowserRuntime; start(false);
+    const wasm = await import("./pkg/titan_browser.js"); await wasm.default(); BrowserRuntime = wasm.BrowserRuntime; await start(false).catch(showError);
     window.addEventListener("message", (event) => {
       try {
+        if (!runtime) return;
         const response = bridgeResponse(event, { origin: location.origin, source: window, handle: (json) => runtime.handle(json) });
         if (!response) return;
         window.postMessage(response, location.origin);

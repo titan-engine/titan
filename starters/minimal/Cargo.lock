@@ -1830,6 +1830,7 @@ dependencies = [
 name = "titan"
 version = "0.4.0"
 dependencies = [
+ "png",
  "serde",
  "serde_json",
  "titan-macros",

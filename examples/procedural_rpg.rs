@@ -20,8 +20,10 @@ fn main() {
             std::process::exit(1);
         }
     }
-    let mut app = build_game();
+    render_reference(build_game());
+}
 
+fn render_reference(mut app: titan::App) {
     replay(&mut app, &recorded_walk());
 
     let image = game::render_image(app.world()).expect("render RPG frame");
@@ -57,6 +59,9 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
 
     let mut args = std::env::args().skip(1);
     let mut serve = false;
+    let mut assets_dir: Option<PathBuf> = None;
+    let mut generated_assets = false;
+    let mut export_png: Option<PathBuf> = None;
     let mut project = std::env::current_dir()?;
     let mut instance = format!("procedural-rpg-{}", std::process::id());
     let mut duration = None;
@@ -66,6 +71,21 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--serve" => serve = true,
+            "--assets-dir" => {
+                assets_dir = Some(
+                    args.next()
+                        .ok_or("--assets-dir requires a directory")?
+                        .into(),
+                )
+            }
+            "--generated-assets" => generated_assets = true,
+            "--export-player-png" => {
+                export_png = Some(
+                    args.next()
+                        .ok_or("--export-player-png requires a path")?
+                        .into(),
+                )
+            }
             "--allow-mutation" => {
                 allow_mutation = true;
                 configured = true;
@@ -97,20 +117,30 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "procedural_rpg [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "procedural_rpg [--assets-dir DIR | --generated-assets] [--export-player-png PATH] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, replays the reference walk and writes target/titan/procedural-rpg.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
+    if let Some(path) = export_png {
+        if serve || configured || assets_dir.is_some() || generated_assets {
+            return Err("--export-player-png must be used alone".into());
+        }
+        titan_diagnostics::write_png(&game::generated_player(), std::fs::File::create(&path)?)?;
+        println!("exported procedural player to {}", path.display());
+        return Ok(true);
+    }
+    let image = game::assets::load_player(assets_dir.as_deref(), generated_assets)?;
     if !serve {
         if configured {
             return Err(
                 "--project, --instance, --run-for-ms, --diagnostics, and --allow-mutation require --serve".into(),
             );
         }
-        return Ok(false);
+        render_reference(game::build_game_with_player(image));
+        return Ok(true);
     }
     if instance.is_empty()
         || instance.len() > 128
@@ -127,7 +157,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
     let stop_signal = stopped.clone();
     ctrlc::set_handler(move || stop_signal.store(true, Ordering::Release))?;
 
-    let mut app = build_game();
+    let mut app = game::build_game_with_player(image);
     app.update_schedule(Startup);
     let output = project
         .join("target/titan")

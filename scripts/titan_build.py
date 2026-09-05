@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def cargo_metadata(root):
@@ -29,9 +30,45 @@ def package_by_name(metadata, name):
     return matches[0]
 
 
-def browser(root, metadata, *, package_name, out_name):
-    """Build one cdylib and web/Node bindings with the resolved bindgen version."""
-    root = Path(root)
+def asset_source(root, assets_source):
+    """Resolve optional game resources. An explicitly selected source must exist."""
+    source = Path(assets_source) if assets_source is not None else Path(root) / "assets"
+    if not source.is_absolute():
+        source = Path(root) / source
+    if not source.exists() and assets_source is None:
+        return None
+    if not source.is_dir():
+        raise ValueError(f"asset source is not a directory: {source}")
+    # Resources are self-contained files; do not silently package external links.
+    for entry in source.rglob("*"):
+        if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
+            raise ValueError(f"asset source contains a non-regular entry: {entry}")
+    return source.resolve()
+
+
+def copy_assets(source, destination):
+    """Replace a generated resource directory, avoiding files from earlier builds."""
+    if source is None:
+        return
+    destination = Path(destination)
+    if (source == destination.resolve() or source in destination.resolve().parents
+            or destination.resolve() in source.parents):
+        raise ValueError("asset output must be outside the source directory")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".titan-assets-", dir=destination.parent) as temporary:
+        staged = Path(temporary) / "assets"
+        shutil.copytree(source, staged)
+        if destination.is_symlink() or destination.is_file():
+            raise ValueError(f"asset output is not a directory: {destination}")
+        if destination.exists():
+            shutil.rmtree(destination)
+        staged.rename(destination)
+
+
+def browser(root, metadata, *, package_name, out_name, assets_source=None):
+    """Build bindings and replace web/assets from assets_source (default root/assets)."""
+    root = Path(root).resolve()
+    resources = asset_source(root, assets_source)
     target = Path(metadata["target_directory"])
     package = package_by_name(metadata, package_name)
     libraries = [t for t in package["targets"] if "cdylib" in t["crate_types"]]
@@ -71,11 +108,16 @@ def browser(root, metadata, *, package_name, out_name):
         subprocess.run([str(bindgen), str(wasm), "--target", flavor, "--out-dir", str(output),
                         "--out-name", out_name], cwd=root, check=True)
 
+    copy_assets(resources, root / "web/assets")
 
-def macos_app(root, metadata, argv=None):
+
+def macos_app(root, metadata, argv=None, *, assets_source=None):
+    """Bundle a binary/example and replace Resources/assets when a source exists."""
     root = Path(root).resolve()
     parser = argparse.ArgumentParser(description="Bundle a native Cargo binary as an unsigned local-development macOS app.")
-    parser.add_argument("--bin", default="play", help="Cargo binary target (default: play)")
+    targets = parser.add_mutually_exclusive_group()
+    targets.add_argument("--bin", help="Cargo binary target (default: play)")
+    targets.add_argument("--example", help="Cargo example executable target")
     parser.add_argument("--name", default="Titan Game", help="Application display and directory name")
     parser.add_argument("--bundle-id", default="dev.titan.game", help="Distinct reverse-DNS bundle identifier")
     parser.add_argument("--release", action="store_true", help="Build an optimized binary")
@@ -88,9 +130,13 @@ def macos_app(root, metadata, argv=None):
         parser.error("--bundle-id must be a reverse-DNS identifier using letters, digits, hyphens and dots")
     package = next(package for package in metadata["packages"]
                    if Path(package["manifest_path"]).resolve() == root / "Cargo.toml")
-    if not any(target["name"] == args.bin and "bin" in target["kind"] for target in package["targets"]):
-        parser.error(f"no binary target named {args.bin!r} in {package['name']}")
-    command = ["cargo", "build", "--package", package["name"], "--bin", args.bin, "--message-format=json-render-diagnostics"]
+    target_name = args.example or args.bin or "play"
+    target_kind = "example" if args.example else "bin"
+    if not any(target["name"] == target_name and target_kind in target["kind"]
+               and "bin" in target["crate_types"] for target in package["targets"]):
+        parser.error(f"no executable {target_kind} target named {target_name!r} in {package['name']}")
+    resources = asset_source(root, assets_source)
+    command = ["cargo", "build", "--package", package["name"], f"--{target_kind}", target_name, "--message-format=json-render-diagnostics"]
     if args.release:
         command.append("--release")
     executable = None
@@ -101,7 +147,7 @@ def macos_app(root, metadata, argv=None):
                 print(message["message"].get("rendered", ""), end="", file=sys.stderr)
             if (message.get("reason") == "compiler-artifact"
                     and message.get("package_id") == package["id"]
-                    and message["target"]["name"] == args.bin
+                    and message["target"]["name"] == target_name
                     and message.get("executable")):
                 executable = Path(message["executable"])
         if build.wait():
@@ -115,10 +161,11 @@ def macos_app(root, metadata, argv=None):
     contents = bundle / "Contents"
     macos = contents / "MacOS"
     macos.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(executable, macos / args.bin)
+    shutil.copy2(executable, macos / target_name)
+    copy_assets(resources, contents / "Resources/assets")
     with (contents / "Info.plist").open("wb") as output:
         plistlib.dump({
-            "CFBundleExecutable": args.bin,
+            "CFBundleExecutable": target_name,
             "CFBundleIdentifier": args.bundle_id,
             "CFBundleName": args.name,
             "CFBundleDisplayName": args.name,

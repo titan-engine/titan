@@ -40,7 +40,7 @@ def main():
             instance = f'rpg-replay-{os.getpid()}-{int(gpu)}'
             command = ([str(examples / 'play_rpg'), '--inspect', '--allow-control'] if gpu else
                        [str(examples / 'procedural_rpg'), '--serve', '--project', str(project), '--allow-mutation'])
-            command += ['--instance', instance, '--run-for-ms', '30000']
+            command += ['--assets-dir', str(REPO / 'assets'), '--instance', instance, '--run-for-ms', '30000']
             with tempfile.TemporaryFile(mode='w+') as log:
                 process = subprocess.Popen(command, cwd=project, stdout=log, stderr=log)
                 try:

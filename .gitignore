@@ -1,3 +1,6 @@
 /target
 
 /web/inspector/pkg/
+
+# Built copy of the RPG source assets.
+/web/assets/

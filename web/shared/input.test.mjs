@@ -64,7 +64,8 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       bindJournalInput: options => bindJournalInput({ ...options, window, document }),
       bindCanvasPointer: options => bindCanvasPointer({ ...options, window, document }),
       bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
-      init: async () => {}, BrowserPlayer: { create: async () => player },
+      init: async () => {}, BrowserPlayer: { create: async () => player, create_with_player_png: async () => player },
+      loadPlayerPng: async () => new Uint8Array(),
     });
     vm.runInContext(readFileSync(new URL(page, import.meta.url), 'utf8').replace(/^import.*\n/gm, ''), context);
     const key = (type, value = 'w', code = 'KeyW', target = ids.game) => window.handlers[type]({ key: value, code, target, preventDefault() {} });

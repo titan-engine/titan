@@ -33,13 +33,16 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
     exit_playback() { active = false; position = 0; epoch++; },
   };
   let input;
+  let failAsset = true;
+  let created = 0;
   const window = element();
   const context = vm.createContext({
     document: { querySelector: selector => ids[selector.slice(1)], querySelectorAll: () => buttons },
     window, location: { origin: 'http://localhost' },
     ResizeObserver: class { observe() {} },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    init: async () => {}, BrowserPlayer: { create: async () => player },
+    init: async () => {}, BrowserPlayer: { create_with_player_png: async () => { created++; return player; } },
+    loadPlayerPng: async () => { if (failAsset) throw new Error('Could not load ../assets/player.png: HTTP 404'); return new Uint8Array(); },
     bindJournalInput: () => ({ cancel() {}, cancelHeld() {}, onKey: () => false }),
     bindPlayerInput: options => { input = options; return { cancel() {} }; },
     readRecordingForSession: async file => { if (file.reject) throw new Error('Invalid recording'); return '{}'; },
@@ -47,6 +50,15 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
   vm.runInContext(readFileSync(new URL('./play.js', import.meta.url), 'utf8').replace(/^import.*\n/gm, ''), context);
   const click = id => ids[id].handlers.click();
   await click('start');
+  assert.equal(created, 0, 'failed asset must not construct or run a game');
+  assert.equal(paused, true);
+  assert.match(ids.error.textContent, /player.png: HTTP 404/);
+  assert.equal(ids.start.textContent, 'Retry');
+  assert.equal(ids.start.disabled, false);
+  failAsset = false;
+  await click('start');
+  assert.equal(created, 1);
+  assert.equal(ids.error.hidden, true);
   assert.equal(paused, false);
   assert.equal(input.isRunning(), true);
   click('pause');

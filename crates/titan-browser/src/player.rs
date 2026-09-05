@@ -16,26 +16,15 @@ pub struct BrowserPlayer {
 #[wasm_bindgen]
 impl BrowserPlayer {
     pub async fn create(canvas: HtmlCanvasElement) -> Result<BrowserPlayer, JsValue> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let surface = instance
-            .create_surface(wgpu::SurfaceTarget::Canvas(canvas.clone()))
-            .map_err(js_error)?;
-        let mut renderer =
-            SurfaceRenderer::new(&instance, surface, canvas.width(), canvas.height())
-                .await
-                .map_err(js_error)?;
-        let (width, height) = renderer.resize(canvas.width(), canvas.height());
-        canvas.set_width(width);
-        canvas.set_height(height);
-        let session = crate::live_session();
-        let clock_epoch = session.clock_epoch();
-        Ok(Self {
-            session,
-            renderer,
-            canvas,
-            accumulated_ms: 0.0,
-            clock_epoch,
-        })
+        Self::from_session(canvas, crate::live_session()).await
+    }
+
+    pub async fn create_with_player_png(
+        canvas: HtmlCanvasElement,
+        bytes: Vec<u8>,
+    ) -> Result<BrowserPlayer, JsValue> {
+        let session = crate::live_session_from_app(crate::player_png_app(&bytes)?);
+        Self::from_session(canvas, session).await
     }
 
     pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), JsValue> {
@@ -186,6 +175,33 @@ impl BrowserPlayer {
     /// Inspect and control the exact session presented on this canvas.
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle_json(request_json)
+    }
+}
+
+impl BrowserPlayer {
+    async fn from_session(
+        canvas: HtmlCanvasElement,
+        session: game::live::RpgSession,
+    ) -> Result<Self, JsValue> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let surface = instance
+            .create_surface(wgpu::SurfaceTarget::Canvas(canvas.clone()))
+            .map_err(js_error)?;
+        let mut renderer =
+            SurfaceRenderer::new(&instance, surface, canvas.width(), canvas.height())
+                .await
+                .map_err(js_error)?;
+        let (width, height) = renderer.resize(canvas.width(), canvas.height());
+        canvas.set_width(width);
+        canvas.set_height(height);
+        let clock_epoch = session.clock_epoch();
+        Ok(Self {
+            session,
+            renderer,
+            canvas,
+            accumulated_ms: 0.0,
+            clock_epoch,
+        })
     }
 }
 

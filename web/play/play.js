@@ -1,8 +1,9 @@
-import init, { BrowserPlayer, verify_recording_json } from '../inspector/pkg/titan_browser.js';
+import init, { BrowserPlayer, verify_recording_json_with_player_png } from '../inspector/pkg/titan_browser.js';
 import { bindPlayerInput } from '../shared/input.mjs';
 import { bridgeResponse } from '../inspector/bridge.mjs';
 import { readRecordingForSession } from './replay.mjs';
 import { bindJournalInput } from './journal.mjs';
+import { loadPlayerPng } from '../shared/player-asset.mjs';
 const canvas = document.querySelector('#game');
 const start = document.querySelector('#start');
 const pause = document.querySelector('#pause');
@@ -23,6 +24,7 @@ const recordingResult = document.querySelector('#recording-result');
 const actions = ['up', 'down', 'left', 'right'];
 const keys = new Map([['ArrowUp', 'up'], ['w', 'up'], ['W', 'up'], ['ArrowDown', 'down'], ['s', 'down'], ['S', 'down'], ['ArrowLeft', 'left'], ['a', 'left'], ['A', 'left'], ['ArrowRight', 'right'], ['d', 'right'], ['D', 'right']]);
 let player;
+let playerPng;
 let lastTime;
 let animation;
 let loading = false;
@@ -90,7 +92,10 @@ function local(action) { try { action(); refresh(); } catch (error) { recordingR
 start.addEventListener('click', async () => {
   start.disabled = true; errorPanel.hidden = true;
   try {
-    await init(); player = await BrowserPlayer.create(canvas); player.resume();
+    start.textContent = 'Loading player.png…';
+    await init();
+    playerPng = await loadPlayerPng();
+    player = await BrowserPlayer.create_with_player_png(canvas, playerPng); player.resume();
     resize(); lastTime = undefined; pause.disabled = false; replay.disabled = false;
     exportRecording.disabled = inspect.disabled = false; controls.checked = false;
     start.textContent = 'Playing'; canvas.focus(); animation = requestAnimationFrame(loop);
@@ -120,7 +125,7 @@ loadRecording.addEventListener('change', async () => {
 exportRecording.addEventListener('click', () => local(() => {
   const recording = query('recording');
   const text = JSON.stringify(recording);
-  const verification = JSON.parse(verify_recording_json(text));
+  const verification = JSON.parse(verify_recording_json_with_player_png(text, playerPng));
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'rpg-recording.json'; link.click();
   URL.revokeObjectURL(url);

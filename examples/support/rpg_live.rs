@@ -160,6 +160,9 @@ pub fn state(app: &App) -> Value {
     value["paused"] = app.world().resource::<Control>().unwrap().paused.into();
     value["replay"] = replay_status(app.world());
     value["journal"] = journal::state(app.world());
+    let image = game::player_image(app.world());
+    value["player_image"] = json!({"width":image.width(), "height":image.height(),
+        "checksum":format!("{:016x}", game::image_checksum(image))});
     if let Ok(save) = snapshot::export(app) {
         value["player"] = save["player"].clone();
         value["remaining_shards"] = save["shards"].as_array().unwrap().len().into();
@@ -173,8 +176,11 @@ fn parse(value: Value) -> Result<SnapshotRecording, String> {
     }
     Ok(r)
 }
-fn verify_parsed(recording: &SnapshotRecording) -> Result<Value, String> {
-    let mut app = game::build_game();
+fn verify_parsed(
+    recording: &SnapshotRecording,
+    image: titan::render::Image,
+) -> Result<Value, String> {
+    let mut app = game::build_game_with_player(image);
     app.update_schedule(Startup);
     snapshot::load(
         &mut app,
@@ -191,14 +197,22 @@ fn verify_parsed(recording: &SnapshotRecording) -> Result<Value, String> {
         || comparable(app.world()) != recording.final_state
         || actual_checksum != recording.final_checksum
     {
-        return Err("RPG recording final snapshot, state or pixels mismatch".into());
+        return Err("RPG recording final snapshot, state or pixels mismatch; verify with the same player image".into());
     }
     Ok(
         json!({"verified":true,"ticks":recording.frames.len(),"state":comparable(app.world()),"save":save,"checksum":actual_checksum}),
     )
 }
+/// Verify with the procedural comparison sprite. Hosts with loaded art use
+/// `verify_recording_with_player` to retain their startup image.
 pub fn verify_recording(value: Value) -> Result<Value, String> {
-    verify_parsed(&parse(value)?)
+    verify_parsed(&parse(value)?, game::generated_player())
+}
+pub fn verify_recording_with_player(
+    value: Value,
+    image: titan::render::Image,
+) -> Result<Value, String> {
+    verify_parsed(&parse(value)?, image)
 }
 fn require_paused(app: &App) -> Result<(), ProtocolError> {
     if app.world().resource::<Control>().unwrap().paused {
@@ -222,7 +236,7 @@ fn load_save(app: &mut App, value: Value) -> Result<(), ProtocolError> {
 fn load_replay(app: &mut App, value: Value) -> Result<(), ProtocolError> {
     require_paused(app)?;
     let r = parse(value).map_err(invalid)?;
-    verify_parsed(&r).map_err(invalid)?;
+    verify_parsed(&r, game::player_image(app.world()).clone()).map_err(invalid)?;
     let expected = r.final_snapshot.clone().unwrap();
     snapshot::load(app, r.initial_snapshot.clone().unwrap())?;
     app.world_mut().insert_resource(Playback::new(r, expected));
@@ -246,7 +260,7 @@ fn restart_replay(app: &mut App) -> Result<(), ProtocolError> {
     Ok(())
 }
 fn restart(app: &mut App) -> Result<(), ProtocolError> {
-    let mut fresh = game::build_game();
+    let mut fresh = game::build_game_with_player(game::player_image(app.world()).clone());
     fresh.update_schedule(Startup);
     snapshot::load(app, snapshot::export(&fresh)?)?;
     begin_recording(app.world_mut());
@@ -900,5 +914,40 @@ mod tests {
         session.journal_pointer(Some((5, 5)), true);
         session.journal_pointer(Some((5, 5)), false);
         assert!(session.journal_open());
+    }
+    #[test]
+    fn custom_sprite_survives_restart_snapshot_and_fresh_replay_verification() {
+        let sprite =
+            titan::render::Image::from_fn(8, 10, |_, _| titan::render::Color::rgb(20, 30, 240))
+                .unwrap();
+        let mut app = game::build_game_with_player(sprite.clone());
+        app.update_schedule(Startup);
+        let inspector = game::inspector_with_capture(
+            titan::inspection::InspectionConfig::controlled("assets", "rpg"),
+            |_| Err(invalid("unused")),
+        );
+        let mut session = RpgSession::new(app, inspector, true);
+        session.replay_reference();
+        let artifact = recording(session.app()).unwrap();
+        assert!(
+            verify_recording(artifact.clone()).is_err(),
+            "different image must fail pixel verification"
+        );
+        let result = verify_recording_with_player(artifact.clone(), sprite.clone()).unwrap();
+        assert_eq!(result["state"]["collected_shards"], 3);
+        assert_ne!(result["checksum"], "f7a298f62ad75c1c");
+        session.load_replay(artifact).unwrap();
+        session.resume();
+        for _ in 0..11 {
+            session.tick();
+        }
+        assert_eq!(session.replay_status()["verified"], true);
+        session.stop_replay().unwrap();
+        assert_eq!(game::player_image(session.app().world()), &sprite);
+        session.restart();
+        assert_eq!(game::player_image(session.app().world()), &sprite);
+        let saved = snapshot::export(session.app()).unwrap();
+        load_save(&mut session.app, saved).unwrap();
+        assert_eq!(game::player_image(session.app().world()), &sprite);
     }
 }

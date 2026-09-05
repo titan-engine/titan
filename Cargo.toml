@@ -35,3 +35,18 @@ titan-remote = { path = "crates/titan-remote" }
 pollster = "0.4"
 winit = "0.30"
 titan-render-wgpu = { path = "crates/titan-render-wgpu" }
+
+# These hosts load PNG files at startup; procedural-only library users can
+# disable default features without compiling asset-dependent examples.
+
+[[example]]
+name = "procedural_rpg"
+required-features = ["image-png"]
+
+[[example]]
+name = "play_rpg"
+required-features = ["image-png"]
+
+[[example]]
+name = "replay_rpg"
+required-features = ["image-png"]
