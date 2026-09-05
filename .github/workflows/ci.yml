@@ -100,3 +100,6 @@ jobs:
 
       - name: Build and run relocated bundles from copied games
         run: python3 scripts/test-macos-bundles.py
+
+      - name: Inspect and replay the actual native arena player
+        run: python3 games/arena/scripts/test-live-player.py

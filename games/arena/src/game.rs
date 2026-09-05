@@ -102,7 +102,9 @@ pub fn build_game() -> App {
     app.world_mut().insert_resource(ScheduledInput::default());
     app.add_systems(Startup, setup);
     app.add_systems(FixedUpdate, apply_scheduled_input);
+    app.add_systems(FixedUpdate, crate::live::record_consumed);
     app.add_systems(FixedUpdate, simulate);
+    app.add_systems(FixedUpdate, crate::live::finish_recording);
     app.add_extractor(render_frame);
     app
 }
@@ -126,8 +128,16 @@ pub fn restart(app: &mut App) {
     app.world_mut()
         .insert_resource(InputFrame::<Action>::default());
     app.world_mut().insert_resource(ScheduledInput::default());
+    crate::live::begin_recording(app.world_mut());
     app.refresh_extracted();
 }
+
+pub(crate) fn clear_scheduled_input(app: &mut App) {
+    app.world_mut().insert_resource(ScheduledInput::default());
+    app.world_mut()
+        .insert_resource(InputFrame::<Action>::default());
+}
+
 fn initial_position() -> Position {
     Position {
         x: WIDTH / 2,
@@ -264,6 +274,7 @@ pub fn inspector_with_capture(
         scheduled.frames.insert(frame, values);
         Ok(())
     });
+    crate::live::register_queries(&mut inspector);
     inspector.register_capture_handler(capture);
     inspector
 }
@@ -404,6 +415,7 @@ fn setup(world: &mut World) {
         glyphs,
     });
     world.insert_resource(Run::default());
+    crate::live::begin_recording(world);
     world.spawn_with((initial_position(), Player, Name::new("player")));
     for index in 0..14 {
         world.spawn_with((
@@ -412,6 +424,7 @@ fn setup(world: &mut World) {
             Name::new(format!("enemy-{index}")),
         ));
     }
+    crate::live::finish_recording(world);
 }
 fn simulate(world: &mut World) {
     let mut run = *world.resource::<Run>().unwrap();

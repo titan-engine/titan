@@ -19,7 +19,7 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
         click() { return handlers.click?.(); },
       };
     }
-    const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'replay', 'status', 'result', 'error'].map(id => [id, surface()]));
+    const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'replay', 'status', 'result', 'error', 'inspect', 'capture', 'recording', 'enable-controls', 'step', 'live-mode', 'live-output', 'live-summary', 'live-capture'].map(id => [id, surface()]));
     const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
     const window = surface();
     const document = Object.assign(surface(), {
@@ -29,6 +29,8 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
     });
     const held = new Set();
     const pending = new Set();
+    let paused = true;
+    let epoch = 0;
     const player = {
       set_action(action, pressed) {
         if (pressed) { if (!held.has(action)) pending.add(action); held.add(action); }
@@ -36,7 +38,13 @@ for (const page of ['../play/play.js', '../../starters/minimal/web/play/play.js'
       },
       clear_input() { held.clear(); pending.clear(); },
       cancel_action(action) { held.delete(action); pending.delete(action); },
-      resize() {}, frame() {}, free() {}, restart() {}, replay_reference() {},
+      resize() {}, frame() {}, free() {}, replay_reference() {},
+      restart() { paused = true; epoch++; },
+      pause() { paused = true; epoch++; },
+      resume() { paused = false; epoch++; },
+      paused: () => paused,
+      clock_epoch: () => String(epoch),
+      control_enabled: () => false,
       status: () => JSON.stringify({ frame: 0, run: { health: 3, elapsed: 0, outcome: 'Running', dash_ready: true } }),
     };
     const context = vm.createContext({

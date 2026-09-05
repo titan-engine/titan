@@ -15,26 +15,33 @@ mod native {
     use super::game;
     use std::{
         collections::HashSet,
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
         time::{Duration, Instant},
     };
-    use titan::{
-        App, Startup,
-        render::{ImageAssets, RenderFrame},
-    };
+    use titan::render::{ImageAssets, RenderFrame};
+    use titan_game::live::ArenaSession;
+    use titan_protocol::RunMode;
+    use titan_remote::{RequestQueue, Server, ServerConfig};
     use titan_render_wgpu::{SurfaceRenderer, wgpu};
     use winit::{
         application::ApplicationHandler,
         dpi::LogicalSize,
         event::{ElementState, WindowEvent},
-        event_loop::{ActiveEventLoop, EventLoop},
+        event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowId},
     };
 
     struct Player {
-        app: App,
-        input: game::InteractiveInput,
+        session: ArenaSession,
+        queue: Option<RequestQueue>,
+        stopped: Arc<AtomicBool>,
+        started: Instant,
+        duration: Option<Duration>,
+        clock_epoch: u64,
         held_keys: HashSet<KeyCode>,
         window: Option<Arc<Window>>,
         renderer: Option<SurfaceRenderer>,
@@ -48,6 +55,12 @@ mod native {
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut limit = None;
+        let mut duration = None;
+        let mut inspect = false;
+        let mut enable_control = false;
+        let mut configured_inspection = false;
+        let mut project = std::env::current_dir()?;
+        let mut instance = format!("arena-player-{}", std::process::id());
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--frames" => {
@@ -60,20 +73,88 @@ mod native {
                     }
                     limit = Some(count);
                 }
+                "--inspect" => inspect = true,
+                "--allow-control" => {
+                    enable_control = true;
+                    configured_inspection = true;
+                }
+                "--instance" => {
+                    instance = args.next().ok_or("--instance requires an ID")?;
+                    configured_inspection = true;
+                }
+                "--project" => {
+                    project = args.next().ok_or("--project requires a directory")?.into();
+                    configured_inspection = true;
+                }
+                "--run-for-ms" => {
+                    let millis = args
+                        .next()
+                        .ok_or("--run-for-ms requires milliseconds")?
+                        .parse::<u64>()?;
+                    if millis == 0 {
+                        return Err("--run-for-ms must be positive".into());
+                    }
+                    duration = Some(Duration::from_millis(millis));
+                }
                 "--help" | "-h" => {
                     println!(
-                        "play [--frames N] \nMove with arrow keys or WASD; Space dashes; R restarts; Escape exits.\n--frames exits after N presented GPU frames."
+                        "play [--frames N] [--run-for-ms MS] [--inspect [--project DIR] [--instance ID] [--allow-control]]\nMove with arrow keys or WASD; Space dashes; P pauses/resumes; R restarts; Escape exits.\n--inspect exposes this player through authenticated local inspection; --allow-control permits remote changes.\n--frames exits after N presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
                 _ => return Err(format!("unknown argument: {arg}").into()),
             }
         }
-        let mut app = game::build_game();
-        app.update_schedule(Startup);
+        if configured_inspection && !inspect {
+            return Err("--instance, --project and --allow-control require --inspect".into());
+        }
+        if instance.is_empty()
+            || instance.len() > 128
+            || !instance
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
+            return Err(
+                "instance ID must contain 1–128 ASCII letters, digits, hyphens, or underscores"
+                    .into(),
+            );
+        }
+        let project = project.canonicalize()?;
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop_signal = stopped.clone();
+        ctrlc::set_handler(move || stop_signal.store(true, Ordering::Release))?;
+        let (mut server, queue) = if inspect {
+            let (server, queue) =
+                Server::start(ServerConfig::new(&project, &instance, RunMode::Interactive))?;
+            eprintln!(
+                "inspecting {} at {} ({})",
+                server.registration().instance_id,
+                server.registration().endpoint,
+                if enable_control {
+                    "control enabled"
+                } else {
+                    "read only"
+                }
+            );
+            (Some(server), Some(queue))
+        } else {
+            (None, None)
+        };
+        let mut session = ArenaSession::new(
+            &instance,
+            &project.to_string_lossy(),
+            RunMode::Interactive,
+            enable_control,
+        );
+        session.resume();
+        let clock_epoch = session.clock_epoch();
         let mut player = Player {
-            app,
-            input: game::InteractiveInput::default(),
+            session,
+            queue,
+            stopped,
+            started: Instant::now(),
+            duration,
+            clock_epoch,
             held_keys: HashSet::new(),
             window: None,
             renderer: None,
@@ -84,13 +165,16 @@ mod native {
             error: None,
         };
         EventLoop::new()?.run_app(&mut player)?;
+        if let Some(server) = &mut server {
+            server.shutdown();
+        }
         if let Some(error) = player.error {
             return Err(error.into());
         }
         println!(
             "rendered {} GPU frames; {}",
             player.rendered,
-            game::status(&player.app)
+            game::status(player.session.app())
         );
         Ok(())
     }
@@ -105,7 +189,9 @@ mod native {
                     event_loop
                         .create_window(
                             Window::default_attributes()
-                                .with_title("Titan — Arena Survival")
+                                .with_title(
+                                    "Titan — Arena Survival · P pauses · Space dashes · R restarts",
+                                )
                                 .with_inner_size(LogicalSize::new(800.0, 560.0)),
                         )
                         .map_err(|error| error.to_string())?,
@@ -133,6 +219,29 @@ mod native {
             }
         }
 
+        fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+            // Only this window thread touches the game. Requests run between
+            // complete ticks, including while paused or the window is minimized.
+            if let Some(queue) = &self.queue {
+                queue.drain(|request| self.session.handle(request));
+            }
+            self.sync_clock();
+            if self.stopped.load(Ordering::Acquire)
+                || self
+                    .duration
+                    .is_some_and(|limit| self.started.elapsed() >= limit)
+            {
+                event_loop.exit();
+                return;
+            }
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(16),
+            ));
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
+
         fn window_event(
             &mut self,
             event_loop: &ActiveEventLoop,
@@ -148,7 +257,7 @@ mod native {
                 }
                 WindowEvent::Focused(false) => {
                     self.held_keys.clear();
-                    self.input = game::InteractiveInput::default();
+                    self.session.clear_input();
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
                     let PhysicalKey::Code(key) = event.physical_key else {
@@ -158,39 +267,59 @@ mod native {
                         event_loop.exit();
                         return;
                     }
-                    if key == KeyCode::KeyR && event.state == ElementState::Pressed {
-                        game::restart(&mut self.app);
-                        self.held_keys.clear();
-                        self.input = game::InteractiveInput::default();
+                    if event.state == ElementState::Pressed && !event.repeat {
+                        if key == KeyCode::KeyP {
+                            if self.session.paused() {
+                                self.session.resume();
+                            } else {
+                                self.session.pause();
+                            }
+                            self.sync_clock();
+                            return;
+                        }
+                        if key == KeyCode::KeyR {
+                            self.session.restart();
+                            self.sync_clock();
+                            return;
+                        }
+                    }
+                    // A key still physically down across pause/focus loss must
+                    // not be resurrected by the operating system's repeat event.
+                    if self.session.paused() || event.repeat {
+                        return;
                     }
                     if let Some((action, pressed)) = update_key(
                         &mut self.held_keys,
                         key,
                         event.state == ElementState::Pressed,
                     ) {
-                        self.input
+                        self.session
                             .set_action(action, pressed)
                             .expect("known game action");
                     }
                 }
                 WindowEvent::RedrawRequested => {
                     let now = Instant::now();
-                    self.accumulated += now
-                        .duration_since(self.previous)
-                        .min(Duration::from_millis(250));
+                    if !self.session.paused() {
+                        self.accumulated += now
+                            .duration_since(self.previous)
+                            .min(Duration::from_millis(250));
+                    }
                     self.previous = now;
                     let tick = Duration::from_nanos(16_666_667);
                     while self.accumulated >= tick {
-                        self.input.tick(&mut self.app);
+                        self.session.tick();
                         self.accumulated -= tick;
                     }
                     match (|| {
                         let frame = self
-                            .app
+                            .session
+                            .app()
                             .extracted::<RenderFrame>()
                             .ok_or("game render extraction unavailable")?;
                         let assets = self
-                            .app
+                            .session
+                            .app()
                             .world()
                             .resource::<ImageAssets>()
                             .ok_or("game image assets unavailable")?;
@@ -206,11 +335,28 @@ mod native {
                     }
                     if self.limit.is_some_and(|limit| self.rendered >= limit) {
                         event_loop.exit();
-                    } else {
-                        self.window.as_ref().unwrap().request_redraw();
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    impl Player {
+        fn sync_clock(&mut self) {
+            let epoch = self.session.clock_epoch();
+            if epoch != self.clock_epoch {
+                self.clock_epoch = epoch;
+                self.held_keys.clear();
+                self.accumulated = Duration::ZERO;
+                self.previous = Instant::now();
+                if let Some(window) = &self.window {
+                    window.set_title(if self.session.paused() {
+                        "Titan — Arena Survival · Paused · P resumes · R restarts"
+                    } else {
+                        "Titan — Arena Survival · P pauses · Space dashes · R restarts"
+                    });
+                }
             }
         }
     }

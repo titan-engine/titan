@@ -103,4 +103,5 @@ node games/arena/scripts/test-browser.mjs
 node --test games/arena/web/inspector/bridge.test.mjs
 node --test games/arena/web/play/input.test.mjs
 python3 scripts/test-macos-bundles.py # macOS
+python3 games/arena/scripts/test-live-player.py # desktop GPU/window required
 ```

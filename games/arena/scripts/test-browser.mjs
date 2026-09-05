@@ -5,14 +5,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--no-deps'], { cwd: root, encoding: 'utf8' }));
-const { BrowserRuntime } = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_game.js'));
+const { BrowserRuntime, BrowserLiveRuntime, verify_recording_json } = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_game.js'));
 let sequence = 0;
 const envelope = request => ({ schema_version: 1, request_id: `test-${++sequence}`, request });
 const raw = (runtime, request) => JSON.parse(runtime.handle(JSON.stringify(envelope(request))));
 function ok(runtime, request) { const response = raw(runtime, request); assert.equal(response.status, 'success', JSON.stringify(response)); return response.response; }
 function fail(runtime, request, code) { const response = raw(runtime, request); assert.equal(response.status, 'failure'); assert.equal(response.error.code, code); return response; }
 const readonly = new BrowserRuntime(false);
-assert.deepEqual(ok(readonly, { type: 'capabilities' }).operations, ['inspect', 'capture']);
+assert.deepEqual(ok(readonly, { type: 'capabilities' }).operations, ['inspect', 'query', 'capture']);
 assert.deepEqual(ok(readonly, { type: 'commands' }).commands, []);
 for (const request of [
   { type: 'step', frames: 1 },
@@ -94,3 +94,31 @@ ok(arena,{type:'step',frames:310});
 fail(arena,{type:'invoke',name:'verify_survival',arguments:{}},'invalid_value');
 arena.free();
 console.log('Arena actual-WASM policy, deterministic survival/loss, input, dash/cooldown/held/rearm, capture, fields and restart checks passed.');
+
+// Actual WASM session tests; the GPU BrowserPlayer has its own /test/ fixture.
+const live = new BrowserLiveRuntime();
+assert.equal(ok(live, {type:'status'}).current_frame, 0);
+live.tick();
+assert.equal(ok(live, {type:'status'}).current_frame, 0, 'starts paused');
+live.resume();
+live.set_action('right', true);
+live.set_action('dash', true);
+live.set_action('dash', false);
+live.tick();
+live.pause();
+const visible = ok(live, {type:'query', name:'arena_state'}).value;
+assert.deepEqual(visible.position, {x:84, y:65});
+assert.equal(visible.run.dash_cooldown, 120);
+fail(live, {type:'step', frames:1}, 'mutation_disabled');
+const recording = ok(live, {type:'query', name:'recording'}).value;
+const verified = JSON.parse(verify_recording_json(JSON.stringify(recording)));
+assert.equal(verified.ticks, 1);
+assert.throws(() => verify_recording_json(' '.repeat(2 * 1024 * 1024 + 1)), /2 MiB/);
+live.set_control_enabled(true);
+assert.deepEqual(ok(live, {type:'query', name:'arena_state'}).value.position, visible.position, 'opt-in keeps live scene');
+ok(live, {type:'step', frames:1});
+assert.equal(ok(live, {type:'status'}).current_frame, 2);
+live.set_control_enabled(false);
+fail(live, {type:'step', frames:1}, 'mutation_disabled');
+live.free();
+console.log('live headless WASM session: read-only inspection, opt-in, same-instance step and exact recording replay passed');

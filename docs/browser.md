@@ -100,3 +100,16 @@ RGBA checksum. CI runs these alongside the native separate-process acceptance.
 
 The inspection page provides controlled stepping and exact software captures.
 The [interactive player](rendering.md) uses the GPU backend and keyboard input.
+
+## Inspecting the actual arena player
+
+Arena's `/play/` page exposes inspection of the session rendered on its canvas.
+The adjacent panel reads game state, captures a software image of that state and
+exports consumed input. Inspection starts read-only. Enabling controls changes
+permissions on the existing session; it does not create a replacement game.
+The page uses the existing same-window, exact-origin message bridge.
+
+`BrowserPlayer.handle` borrows its live `ArenaSession`, while local and remote
+pause/restart transitions share input cancellation and clock reset boundaries.
+The separate `/inspector/` page remains an isolated paused instance. Other demos
+continue using that model; live integration is currently demonstrated by arena.

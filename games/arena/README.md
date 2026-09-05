@@ -8,7 +8,8 @@ direction when standing still; initially right). The dash lasts six fixed ticks
 direction. It has no invulnerability. A two-second cooldown starts on activation;
 release and press Space again once ready. The HUD shows readiness and cooldown.
 Three contacts lose; contacts have a one-second cooldown. Press R
-or the browser Restart button to reset. Browser restart pauses: press Resume.
+or the browser Restart button to reset. Native P pauses/resumes; the window title
+shows when paused. Browser restart pauses: press Resume.
 
 From this directory (stable Rust, Python 3, Node.js):
 
@@ -24,12 +25,65 @@ python3 -m http.server 8082 --bind 127.0.0.1 --directory web
 Open [Play](http://127.0.0.1:8082/play/) or
 [Inspector](http://127.0.0.1:8082/inspector/). Browser GPU requires WebGPU or
 WebGL2 with floating-point color attachments. Native windows support macOS/Linux.
-The browser inspector starts read-only; enable controls for mutations.
+The Play page's **Inspect this game** panel reads the session on its canvas.
+The separate Inspector page creates an isolated paused instance. Both start with
+read-only inspection; enable inspection controls for remote mutations.
 
 Dependencies are relative to this checked-in directory. For copies outside the
 repository, use the path-rewrite instructions in `../../starters/minimal/README.md`
 with `games/arena` as the source directory. The standalone workspace/library name
 is deliberately retained as `titan-game`/`titan_game` for the copied adapters.
+
+## Inspect the game you are playing
+
+From the repository root, start the native player with inspection enabled:
+
+```sh
+cargo build -p titan-cli
+cargo run --manifest-path games/arena/Cargo.toml --bin play -- --inspect --project games/arena --instance arena-live --allow-control
+```
+
+Omit `--allow-control` for read-only inspection. `--inspect` uses the existing
+local authenticated discovery transport; it exposes the actual GPU player's
+session. `--instance`, `--project` and `--allow-control` require `--inspect`.
+For a bounded session, add `--run-for-ms 120000` (or `--frames N` to count
+presented frames). P pauses/resumes locally; R restarts and preserves the current
+paused/running state.
+
+After a suspicious contact, pause that instance and read its state from another
+terminal at the repository root:
+
+```sh
+target/debug/titan --format json --project games/arena --instance arena-live invoke pause
+target/debug/titan --format json --project games/arena --instance arena-live query arena_state
+target/debug/titan --format json --project games/arena --instance arena-live entities
+target/debug/titan --format json --project games/arena --instance arena-live capture
+target/debug/titan --format json --project games/arena --instance arena-live query recording > /tmp/arena-recording.json
+cargo run --manifest-path games/arena/Cargo.toml --bin replay -- /tmp/arena-recording.json
+target/debug/titan --format json --project games/arena --instance arena-live invoke resume
+```
+
+Pause completes at a fixed-tick boundary. Subsequent inspection stays at that
+observed frame until a step, resume or local action changes the session. Stepping
+and injected input require a paused session and enabled inspection controls.
+Pause/resume transitions and restart discard queued input and elapsed catch-up
+time. Native live capture returns a PNG data URL in the response's `artifact`;
+the isolated native runner below writes a capture file.
+
+In the browser, click **Play**, then **Pause** after the event. Use **Inspect
+state**, **Capture**, and **Verify & export recording** below the same canvas.
+The export button runs a fresh headless replay and downloads `arena-recording.json`.
+Read-only mode permits these three operations. **Enable inspection controls**
+also permits the same-page message bridge to pause, resume, step and change the
+session; **Step one tick** requires pause. The isolated Inspector page remains
+available for separate controlled experiments.
+
+Recordings contain the consumed fixed-tick actions and their edges from the
+latest restart, capped at 3,600 ticks (60 seconds). Replay checks the game seed,
+action schema, final game state and exact software image checksum. Truncation
+or a development field edit makes exact replay unavailable until restart; the
+export reports that limitation. The replay binary accepts either the exported
+recording or a saved CLI recording-query response, with a 2 MiB file limit.
 
 ## Controlled inspection
 
@@ -83,12 +137,15 @@ node scripts/test-browser.mjs
 node --test web/inspector/bridge.test.mjs
 node --test web/play/*.test.mjs
 cargo test --test gpu -- --ignored
+python3 scripts/test-live-player.py
 ```
 
 Native control tests build the root CLI automatically. With a custom
 `CARGO_TARGET_DIR`, scripts derive binary locations from Cargo metadata.
-They write regenerated captures to `target/arena-evidence`. The last command
-needs a GPU; all other semantic tests work headlessly.
+They write regenerated captures and live recordings to `target/arena-evidence`.
+The GPU test needs a GPU; `test-live-player.py` also needs a desktop window. The
+live test pauses an actual player after contact and verifies its exported run in
+a fresh headless process. Other semantic tests work headlessly.
 
 Pinned seed: 41700 (`0xA2E4`). Initial spawn is (124,105), idle loss occurs at
 game tick 310. The winning route is up30, right60, then repeat down60, left120,

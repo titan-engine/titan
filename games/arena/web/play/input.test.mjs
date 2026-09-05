@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import { bindPlayerInput } from '../shared/input.mjs';
+import { bridgeResponse } from '../inspector/bridge.mjs';
 
 // Exercise the shipped handlers with a buffered-input double. Actual WASM
 // game semantics are covered separately by scripts/test-browser.mjs.
@@ -18,7 +19,7 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       click() { return handlers.click?.(); },
     };
   }
-  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error'].map(key => [key, surface()]));
+  const ids = Object.fromEntries(['game', 'start', 'pause', 'restart', 'status', 'result', 'error', 'enable-controls', 'step', 'live-mode', 'live-output', 'inspect', 'capture', 'recording', 'live-capture', 'live-summary'].map(key => [key, surface()]));
   const buttons = ['up', 'down', 'left', 'right', 'dash'].map(action => Object.assign(surface(), { dataset: { action } }));
   const window = surface();
   const document = Object.assign(surface(), {
@@ -29,6 +30,12 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   const held = {};
   let restartCount = 0;
   let pending = false;
+  let paused = true;
+  let epoch = 0;
+  let enabled = false;
+  let handleCount = 0;
+  const messages = [];
+  window.postMessage = response => messages.push(response);
   const player = {
     clear_input() {
       pending = false;
@@ -42,12 +49,27 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
       if (action === 'dash' && pressed && !held[action]) pending = true;
       held[action] = pressed;
     },
+    handle(json) {
+      handleCount++;
+      const envelope = JSON.parse(json);
+      if (envelope.request.type === 'invoke' && enabled) {
+        paused = envelope.request.name === 'pause';
+        epoch++;
+      }
+      return JSON.stringify({ request_id: envelope.request_id, status: 'success', response: { type: 'status' } });
+    },
     resize() {}, frame() {}, free() {},
+    paused: () => paused,
+    clock_epoch: () => String(epoch),
+    control_enabled: () => enabled,
+    set_control_enabled(value) { enabled = value; epoch++; },
+    pause() { paused = true; epoch++; },
+    resume() { paused = false; epoch++; },
     status: () => JSON.stringify({ run: { health: 3, elapsed: 0, outcome: 'Running', dash_ready: true, dash_cooldown: 0 } }),
-    restart() { restartCount++; },
+    restart() { restartCount++; paused = true; epoch++; },
   };
   const context = {
-    window, document, URLSearchParams, location: { search: '' },
+    window, document, URLSearchParams, location: { search: '', origin: 'http://localhost' }, bridgeResponse,
     requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     ResizeObserver: class { observe() {} },
     bindPlayerInput: options => bindPlayerInput({ ...options, window, document }),
@@ -112,4 +134,24 @@ test('dash input preserves taps and cancels interrupted gestures', async () => {
   assert.equal(restartCount, 1);
   assert.equal(ids.pause.textContent, 'Resume');
   assert.match(ids.status.textContent, /Dash ready/);
+
+  ids['enable-controls'].handlers.change({ target: { checked: true } });
+  assert.equal(enabled, true);
+  assert.equal(restartCount, 1, 'control opt-in preserves the instance');
+  assert.equal(ids.step.disabled, false);
+  ids.pause.click();
+  key('keydown');
+  const envelope = { schema_version: 1, request_id: 'live-pause', request: { type: 'invoke', name: 'pause' } };
+  const event = { source: window, origin: 'http://localhost', data: { namespace: 'titan.inspector', type: 'request', envelope } };
+  window.handlers.message({ ...event, origin: 'https://other.example' });
+  window.handlers.message({ ...event, source: {} });
+  assert.equal(handleCount, 0, 'bridge rejects foreign origins and windows');
+  window.handlers.message(event);
+  assert.equal(handleCount, 1);
+  assert.equal(messages[0].envelope.request_id, 'live-pause');
+  assert.equal(ids.pause.textContent, 'Resume', 'remote pause updates local controls');
+  assert.equal(pending, false, 'remote epoch change cancels pending input');
+  assert.equal(ids.step.disabled, false);
+  ids['enable-controls'].handlers.change({ target: { checked: false } });
+  assert.equal(ids.step.disabled, true, 'revoking controls disables step');
 });

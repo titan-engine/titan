@@ -11,10 +11,11 @@ button {font:inherit; padding:8px 12px; margin-right:8px} pre {white-space:pre-w
 <p>Bounded integration fixture. Every run starts from the game’s restart operation.</p>
 <button id="initial">Initial scene</button><button id="active">Pursuit at tick 240</button><button id="win">Replay survival</button><button id="loss">Idle loss</button>
 <button id="dash">Dash active</button><button id="cooldown">Dash cooldown</button><button id="ready">Dash ready after held input</button>
+<button id="live">Live inspection and recording</button>
 <canvas id="canvas" width="640" height="448" aria-label="Arena GPU replay result"></canvas>
 <pre id="result" role="status">Choose a scenario.</pre>
 <script type="module">
-import init, {BrowserPlayer} from '../inspector/pkg/titan_game.js';
+import init, {BrowserPlayer, verify_recording_json} from '../inspector/pkg/titan_game.js';
 const canvas = document.querySelector('canvas');
 const result = document.querySelector('#result');
 const buttons = [...document.querySelectorAll('button')];
@@ -34,11 +35,13 @@ async function run(ticks, moving, expected, dash = false) {
     const previous = JSON.parse(player.status()).frame;
     player.restart();
     if (JSON.parse(player.status()).frame !== previous) throw new Error('Restart reset host clock');
+    player.resume();
     for (let tick=0; tick<ticks; tick++) {
       for (const action of actions) player.set_action(action, dash ? action === 'dash' : moving && action === route(tick));
       player.frame(1000/60);
     }
     for (const action of actions) player.set_action(action, false);
+    player.pause();
     player.frame(0);
     const state = JSON.parse(player.status());
     if (state.frame !== previous + ticks) throw new Error('Fixed frame count mismatch');
@@ -58,6 +61,44 @@ document.querySelector('#loss').onclick = () => run(1200, false, {outcome:'Lost'
 document.querySelector('#dash').onclick = () => run(1, false, {dash_remaining:5,dash_cooldown:120,dash_ready:false}, true);
 document.querySelector('#cooldown').onclick = () => run(6, false, {dash_remaining:0,dash_cooldown:115,dash_ready:false}, true);
 document.querySelector('#ready').onclick = () => run(121, false, {dash_remaining:0,dash_cooldown:0,dash_ready:true}, true);
-window.addEventListener('pagehide', () => player?.free());
+document.querySelector('#live').onclick = async () => {
+  buttons.forEach(button => button.disabled = true);
+  try {
+    await init();
+    player ??= await BrowserPlayer.create(canvas);
+    player.set_control_enabled(false);
+    player.restart(); player.resume();
+    player.set_action('right', true); player.set_action('dash', true);
+    player.frame(1000 / 60); player.pause(); player.frame(0);
+    const visible = JSON.parse(player.status());
+    let requestId = 0;
+    const call = request => JSON.parse(player.handle(JSON.stringify({ schema_version: 1, request_id: `fixture-${++requestId}`, request })));
+    const state = call({type:'query', name:'arena_state'});
+    if (state.status !== 'success' || state.observed_frame !== visible.frame) throw new Error('Inspection is not at the presented frame');
+    const denied = call({type:'step', frames:1});
+    if (denied.status !== 'failure' || JSON.parse(player.status()).frame !== visible.frame) throw new Error('Read-only step was not rejected');
+    const epoch = player.clock_epoch();
+    const beforeOptIn = player.status();
+    player.set_control_enabled(true);
+    if (player.status() !== beforeOptIn) throw new Error('Control opt-in replaced or changed the session');
+    const stepped = call({type:'step', frames:1});
+    if (stepped.status !== 'success' || JSON.parse(player.status()).frame !== visible.frame + 1) throw new Error('Live step failed');
+    const resumed = call({type:'invoke', name:'resume'});
+    if (resumed.status !== 'success' || player.paused() || player.clock_epoch() === epoch) throw new Error('Resume did not reset host timing');
+    const resumeEpoch = player.clock_epoch();
+    const paused = call({type:'invoke', name:'pause'});
+    if (paused.status !== 'success' || !player.paused() || player.clock_epoch() === resumeEpoch) throw new Error('Pause did not reset host timing');
+    player.frame(0);
+    const capture = call({type:'capture'});
+    if (!capture.response?.artifact?.startsWith('data:image/png;base64,')) throw new Error('Live capture unavailable');
+    const recording = call({type:'query', name:'recording'});
+    if (recording.status !== 'success') throw new Error('Recording unavailable');
+    const verified = JSON.parse(verify_recording_json(JSON.stringify(recording.response.value)));
+    player.set_control_enabled(false);
+    result.textContent = 'PASS\n' + JSON.stringify({visible, state, stepped, capture: {...capture, response: {...capture.response, artifact:'PNG data URI'}}, recording, verified}, null, 2);
+  } catch (error) { result.textContent = 'FAIL: ' + (error.stack ?? error); }
+  finally { buttons.forEach(button => button.disabled = false); }
+};
+window.addEventListener('pagehide' , () => player?.free());
 </script>
 </html>
