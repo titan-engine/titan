@@ -174,6 +174,12 @@ document.querySelector('#seeking').onclick = async () => {
 document.querySelector('#import-responsiveness').onclick = async () => {
   buttons.forEach(button => button.disabled = true);
   try {
+    const parameters = new URLSearchParams(location.search);
+    const revision = parameters.get('revision');
+    const dirty = parameters.get('working_tree_dirty');
+    if (!/^[0-9a-f]{40}$/.test(revision ?? '') || !['true', 'false'].includes(dirty)) {
+      throw new Error('Replay import evidence requires revision and working_tree_dirty URL parameters');
+    }
     await init();
     player ??= await BrowserPlayer.create(canvas);
     player.set_control_enabled(true);
@@ -231,6 +237,8 @@ document.querySelector('#import-responsiveness').onclick = async () => {
     const report = {
       schema_version: 1,
       measured_at_utc: new Date().toISOString(),
+      revision,
+      working_tree_dirty: dirty === 'true',
       user_agent: navigator.userAgent,
       hardware_concurrency: navigator.hardwareConcurrency,
       profile: 'release WASM in a real browser GPU player',

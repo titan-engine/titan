@@ -16,10 +16,14 @@ python3 docs/replay-import-responsiveness/native.py > native-output.json
 python3 -m http.server 8080
 ```
 
-Open `http://localhost:8080/games/arena/web/test/`, select **Replay import
-responsiveness**, then use **Download import evidence**. The native probe uses
-the real GPU player. Each probe uses seven samples and asserts that a recording
-rejected only by the final snapshot/pixel check leaves the current session unchanged.
+Verify `git status --short` is empty, then open
+`http://localhost:8080/games/arena/web/test/?revision=<full-git-revision>&working_tree_dirty=false`,
+select **Replay import responsiveness**, and use **Download import evidence**.
+The fixture requires both provenance parameters and writes them into its report;
+use `working_tree_dirty=true` instead if measuring local changes. The native
+probe discovers the same Git values itself and uses the real GPU player. Each
+probe uses seven samples and asserts that a recording rejected only by the final
+snapshot/pixel check leaves the current session unchanged.
 
 The 3,600-tick fixture is an idle-input recording produced through the actual
 arena session. Its compact JSON is well below the byte limit, so the exact 2 MiB
