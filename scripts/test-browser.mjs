@@ -87,6 +87,10 @@ assert.ok(position);
 assert.equal(beforeField.response.component_fields[position].x.writable, true);
 assert.equal(beforeField.response.component_fields[position].x.minimum, 0);
 assert.equal(beforeField.response.component_fields[position].x.maximum, 19);
+assert.deepEqual(beforeField.response.component_fields[position], {
+  x: { type_name: 'i32', description: 'Map tile coordinate', writable: true, minimum: 0, maximum: 19, unit: 'tile' },
+  y: { type_name: 'i32', description: 'Map tile coordinate', writable: true, minimum: 0, maximum: 13, unit: 'tile' },
+});
 const beforeWriteCapture = call(runtime, { type: 'capture' }).response.checksum;
 const written = call(runtime, { type: 'set_field', entity: player, component: position, field: 'x', value: 1 });
 assert.equal(written.observed_frame, 11);

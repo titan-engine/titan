@@ -33,9 +33,13 @@ const TILE_SIZE: i32 = 8;
 const MAP_WIDTH: i32 = 20;
 const MAP_HEIGHT: i32 = 14;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, titan::Inspect, Clone, Copy)]
 struct Position {
+    /// Map tile coordinate
+    #[inspect(writable, minimum = 0, maximum = MAP_WIDTH - 1, unit = "tile")]
     x: i32,
+    /// Map tile coordinate
+    #[inspect(writable, minimum = 0, maximum = MAP_HEIGHT - 1, unit = "tile")]
     y: i32,
 }
 
@@ -184,30 +188,9 @@ pub fn inspector_with_capture(
 ) -> Inspector {
     let mut inspector = Inspector::new(config);
     register_ui_inspection(&mut inspector).expect("unique UI fields");
-    for (field, maximum) in [("x", MAP_WIDTH - 1), ("y", MAP_HEIGHT - 1)] {
-        inspector
-            .register_field::<Position, i32>(
-                field,
-                FieldMetadata {
-                    type_name: "i32".into(),
-                    description: "Map tile coordinate".into(),
-                    writable: true,
-                    minimum: Some(0.0),
-                    maximum: Some(f64::from(maximum)),
-                    unit: Some("tile".into()),
-                },
-                move |position| if field == "x" { position.x } else { position.y },
-                |_, _| Ok(()),
-                move |position, value| {
-                    if field == "x" {
-                        position.x = value;
-                    } else {
-                        position.y = value;
-                    }
-                },
-            )
-            .expect("unique position field");
-    }
+    inspector
+        .register_inspectable::<Position>()
+        .expect("unique position fields");
 
     inspector
         .register_command(
@@ -812,7 +795,23 @@ mod tests {
             panic!("expected entity")
         };
         assert_eq!(details.components[&component]["x"], 3);
-        assert!(details.component_fields[&component]["x"].writable);
+        let expected = [("x", 19.0), ("y", 13.0)]
+            .into_iter()
+            .map(|(name, maximum)| {
+                (
+                    name.into(),
+                    titan_protocol::FieldMetadata {
+                        type_name: "i32".into(),
+                        description: "Map tile coordinate".into(),
+                        writable: true,
+                        minimum: Some(0.0),
+                        maximum: Some(maximum),
+                        unit: Some("tile".into()),
+                    },
+                )
+            })
+            .collect();
+        assert_eq!(details.component_fields[&component], expected);
     }
 
     #[test]

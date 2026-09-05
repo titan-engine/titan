@@ -11,6 +11,7 @@ description = "Component derive macros for the Titan game engine."
 proc-macro = true
 
 [dependencies]
+proc-macro2 = "1"
 quote = "1"
 syn = "2"
 
