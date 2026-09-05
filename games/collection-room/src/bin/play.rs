@@ -21,7 +21,7 @@ mod native {
         inspection::Dispatch,
         render::{
             ImageAssets, RenderFrame,
-            three_d::{BaseColor, Frame3dError, RenderFrame3d},
+            three_d::{Frame3dError, RenderFrame3d},
         },
     };
     use titan_collection_room::{game, player::PlayerSession};
@@ -38,6 +38,7 @@ mod native {
     };
     struct Player {
         session: PlayerSession,
+        captures: titan_collection_room::capture::CaptureQueue,
         queue: Option<RequestQueue>,
         stopped: Arc<AtomicBool>,
         started: Instant,
@@ -46,6 +47,7 @@ mod native {
         rendered: u64,
         window: Option<Arc<Window>>,
         renderer: Option<SurfaceRenderer3d>,
+        capture_device: Option<(wgpu::Device, wgpu::Queue)>,
         previous: Instant,
         accumulated: Duration,
         epoch: u64,
@@ -93,7 +95,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Capture remains unavailable.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -128,6 +130,7 @@ mod native {
         } else if !start_paused {
             session.resume();
         }
+        let captures = titan_collection_room::capture::CaptureQueue::install(&mut session);
         let stopped = Arc::new(AtomicBool::new(false));
         let signal = stopped.clone();
         ctrlc::set_handler(move || signal.store(true, Ordering::Release))?;
@@ -151,6 +154,7 @@ mod native {
         let epoch = session.clock_epoch();
         let mut player = Player {
             session,
+            captures,
             queue,
             stopped,
             started: Instant::now(),
@@ -159,6 +163,7 @@ mod native {
             rendered: 0,
             window: None,
             renderer: None,
+            capture_device: None,
             previous: Instant::now(),
             accumulated: Duration::ZERO,
             epoch,
@@ -227,7 +232,12 @@ mod native {
             self.renderer
                 .as_mut()
                 .ok_or("GPU renderer unavailable")?
-                .render(scene, BaseColor::rgb(17, 28, 41), overlay, assets)
+                .render(
+                    scene,
+                    titan_collection_room::player::CAPTURE_CLEAR,
+                    overlay,
+                    assets,
+                )
         }
         fn reset_clock(&mut self) {
             self.accumulated = Duration::ZERO;
@@ -300,6 +310,7 @@ mod native {
                     "native GPU adapter: {:?}",
                     self.renderer.as_ref().unwrap().adapter_info()
                 );
+                self.capture_device = Some(self.renderer.as_ref().unwrap().capture_device());
                 self.window = Some(window);
                 if self.verify_surface_lifecycle && !self.lifecycle_verified {
                     let before = game::status(self.session.app());
@@ -345,7 +356,11 @@ mod native {
             if let Some(queue) = &self.queue {
                 queue.drain_with_reply(|request, reply| {
                     let started = Instant::now();
-                    match self.session.dispatch(request) {
+                    let dispatch = self.session.dispatch(request);
+                    if let Some((device, queue)) = &self.capture_device {
+                        self.captures.start(device.clone(), queue.clone());
+                    }
+                    match dispatch {
                         Dispatch::Ready(response) => reply.send(response),
                         Dispatch::Pending(mut pending) => {
                             reply.complete_when(started, move |elapsed| pending.poll(elapsed))

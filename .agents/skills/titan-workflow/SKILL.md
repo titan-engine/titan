@@ -97,3 +97,28 @@ After an engine change, use the quality gates listed in the implementation plan.
 Ordinary `cargo test` remains useful; the Titan CLI adds structured results and
 bounded execution. Stop owned runtime processes after verification and let their
 normal shutdown remove discovery registrations.
+
+
+## Collection-room 3D loop
+
+Read `games/collection-room/README.md` for the native/browser players, fixed
+44-tick route (right 8, up 20, right 16), replay and capture commands. Native
+inspection requires `--inspect`; tool-driven changes also require
+`--allow-control`. Browser inspection targets the actual played instance through
+`window.collectionRoom.dispatch`, an awaited schema-2 Promise. Its control
+checkbox defaults off; captures remain available read-only.
+
+Pause, await edits/steps, then capture. Keep the full response JSON alongside the
+PNG: its identity records the accepted host tick, revision and reset generation.
+A capture freezes fresh scene and ECS overlay data without ticking; paused
+teleport/capture must change the image at the same tick. Restart invalidates
+pending old-session captures. The fixed 960 × 540 capture is independent of
+surface resizing. Headless hosts intentionally have no 3D capture capability.
+
+Run `python3 games/collection-room/scripts/test-player.py` for native GPU/control
+acceptance, build with its `scripts/build-browser.py`, then serve its `web/` and
+open `/play/test.html?backend=webgpu` and `?backend=webgl2` in an actual browser.
+Inspect the captured images, including the deliberate occluded and visible player
+poses. Use the game README's declared GPU tolerances; semantic state remains exact.
+Keep bounded sanitized local evidence and stop owned servers/players. A passing
+Node/WASM test is semantic evidence, not a browser GPU verification.

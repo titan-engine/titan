@@ -113,14 +113,14 @@ unchanged 2D APIs. `titan_render_wgpu::GpuRenderer3d` consumes these frames into
 bounded offscreen color and depth targets. `OwnedGpuCapture` submits fresh owned
 frames for asynchronous readback through the common inspection capture contract.
 Collection-room players and UI composition use shared surface/device lifecycle.
-Game capture integration remains agreed design, **not yet an implemented
-collection-room capability**. Execution scope lives in the linked issues of
+Collection-room native/browser captures use the same scene and overlay composition
+from a fresh owned snapshot. Execution scope lives in the linked issues of
 [#42](https://github.com/titan-engine/titan/issues/42).
 
 The [standalone collection room](../games/collection-room/README.md) now supplies
 headless fixed-tick game rules, inspection/replay and extracted 3D frames using
 this boundary. It also provides native and browser GPU players with a shared ECS overlay.
-Image capture is not registered yet.
+GPU hosts register bounded asynchronous capture; CPU-only hosts do not.
 
 ### Coordinates and data
 
@@ -238,8 +238,8 @@ convention to 3D.
 `SurfaceRenderer3d` shares device acquisition, bounded surface resize, suspension
 and failure policy with the 2D `SurfaceRenderer`. It composes the existing
 entity-based text UI after the scene with depth disabled. `GpuSceneRenderer3d`
-provides the same composition into caller-owned offscreen targets for later
-capture integration. The 2D overlay retains its byte-space rendering convention;
+provides the same composition into caller-owned offscreen targets used by
+`OwnedGpuCapture::composed`. The 2D overlay retains its byte-space rendering convention;
 the compositor decodes its straight-alpha color to linear light, blends over
 the decoded 3D scene, and encodes exactly once for the output format. This does not select new widgets, typography or general UI layout.
 Surface/device setup should be shared with 2D where useful. Public APIs may be
@@ -321,3 +321,9 @@ presentation until a nonzero resize. Outdated surfaces are reconfigured and
 retried on a later frame, timeouts/occlusion skip presentation, and unrecoverable
 surface/device errors stop the host with a diagnostic. No software 3D fallback
 is selected. Native OS suspension drops and recreates the surface on resume.
+
+The collection-room GPU players also freeze fresh owned scene/overlay/assets for
+960 × 540 offscreen captures using this same compositor. Captures report accepted
+frame/revision/session identity and complete independently of redraw or ticks;
+see [capture usage and acceptance](../games/collection-room/README.md#capture-a-known-state).
+Headless simulation and extraction require no GPU and report capture unsupported.

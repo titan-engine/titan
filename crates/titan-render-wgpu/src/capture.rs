@@ -2,7 +2,7 @@
 use crate::{Gpu3dError, GpuRenderer3d};
 use std::{fmt, sync::mpsc, time::Duration};
 use titan::render::{
-    Image,
+    Image, ImageAssets, RenderFrame,
     three_d::{BaseColor, RenderFrame3d},
 };
 
@@ -15,6 +15,7 @@ pub enum GpuCaptureError {
     Dimensions,
     Render(Gpu3dError),
     Readback,
+    Composition,
     Timeout,
     Finished,
 }
@@ -23,6 +24,7 @@ impl fmt::Display for GpuCaptureError {
         match self {
             Self::Dimensions => f.write_str("capture dimensions exceed readback budget"),
             Self::Render(e) => write!(f, "capture render: {e}"),
+            Self::Composition => f.write_str("GPU scene/UI capture composition failed"),
             Self::Readback => f.write_str("GPU capture readback failed"),
             Self::Timeout => f.write_str("GPU capture exceeded 5 seconds"),
             Self::Finished => f.write_str("GPU capture already finished or canceled"),
@@ -78,6 +80,91 @@ impl OwnedGpuCapture {
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: renderer.color_texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let (sender, receiver) = mpsc::channel();
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = sender.send(result);
+            });
+        Ok(Self {
+            device,
+            queue,
+            buffer: Some(buffer),
+            receiver,
+            width,
+            height,
+            row,
+        })
+    }
+    /// Compose the same scene and ECS overlay used by surface presentation.
+    pub fn composed(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        frame: RenderFrame3d,
+        overlay: RenderFrame,
+        assets: ImageAssets,
+        size: (u32, u32),
+        clear: BaseColor,
+    ) -> Result<Self, GpuCaptureError> {
+        let (width, height) = size;
+        let (row, bytes) = layout(width, height, &device.limits())?;
+        let mut renderer = crate::GpuSceneRenderer3d::new(
+            device.clone(),
+            queue.clone(),
+            width,
+            height,
+            wgpu::TextureFormat::Rgba8Unorm,
+        )
+        .map_err(|_| GpuCaptureError::Composition)?;
+        renderer
+            .prepare(&frame, clear, &overlay, &assets)
+            .map_err(|_| GpuCaptureError::Composition)?;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Titan composed capture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Titan composed readback"),
+            size: bytes,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        renderer
+            .render(&mut encoder, &texture.create_view(&Default::default()))
+            .map_err(|_| GpuCaptureError::Composition)?;
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,

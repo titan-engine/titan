@@ -27,7 +27,7 @@ byId('play').onclick = async () => {
     let timer;
     try { player = await Promise.race([BrowserPlayer.create(canvas, backend), new Promise((_, reject) => { timer = setTimeout(() => reject(Error("GPU initialization exceeded 60 seconds")), 60000); })]); } finally { clearTimeout(timer); }
     player.set_control_enabled(byId('control').checked);
-    for (const id of ['pause','step','restart','replay','export','import']) byId(id).disabled = false;
+    for (const id of ['pause','step','restart','replay','export','import','capture']) byId(id).disabled = false;
     resize(); player.resume(); canvas.focus();
     // Deliberate same-page inspection boundary. Runtime enforces explicit control opt-in.
     window.collectionRoom = { dispatch: json => player.dispatch(json), status: () => JSON.parse(player.status()) };
@@ -42,3 +42,25 @@ byId('replay').onclick = () => run(() => { keys.cancel(); player.replay_route();
 byId('control').onchange = () => player?.set_control_enabled(byId('control').checked);
 byId('export').onclick = () => run(() => { const url = URL.createObjectURL(new Blob([player.recording()], {type:'application/json'})); const a = document.createElement('a'); a.href=url; a.download='collection-room.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 0); });
 byId('import').onchange = async event => { const file = event.target.files[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { byId('error').textContent='Recording exceeds 2 MiB.'; return; } try { player.load_recording(await file.text()); previous=undefined; show(); } catch(error) { byId('error').textContent=`Recording rejected: ${error}`; } event.target.value=''; };
+
+let captureSequence = 0, captureDownload;
+byId('capture').onclick = async () => {
+  byId('capture').disabled = true;
+  try {
+    const response = JSON.parse(await player.dispatch(JSON.stringify({
+      schema_version: 2, request_id: `capture-ui-${++captureSequence}`, request: {type: 'capture'},
+    })));
+    if (response.status !== 'success') throw Error(response.error.message);
+    const capture = response.response;
+    byId('capture-image').src = capture.artifact;
+    const identity = capture.identity;
+    byId('capture-identity').textContent = `Captured tick ${identity.observed_frame}, revision ${identity.state_revision}, session ${identity.session_generation}.`;
+    if (captureDownload) URL.revokeObjectURL(captureDownload);
+    captureDownload = URL.createObjectURL(new Blob([JSON.stringify(response, null, 2)], {type: 'application/json'}));
+    byId('capture-download').href = captureDownload;
+    byId('capture-download').download = 'collection-room-capture.json';
+    byId('capture-result').hidden = false;
+    byId('error').textContent = '';
+  } catch (error) { byId('error').textContent = `Capture failed: ${error}`; }
+  finally { byId('capture').disabled = false; }
+};

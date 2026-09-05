@@ -243,6 +243,10 @@ impl SurfaceRenderer3d {
         )?;
         Ok(Self { state, renderer })
     }
+    /// Cloned handles for owned asynchronous offscreen jobs on this adapter.
+    pub fn capture_device(&self) -> (wgpu::Device, wgpu::Queue) {
+        (self.state.device.clone(), self.state.queue.clone())
+    }
     /// Clamp each axis to 2048 and device limits to bound scene/UI allocations.
     /// A zero dimension suspends presentation, preserving existing targets.
     pub fn resize(&mut self, width: u32, height: u32) -> (u32, u32) {
