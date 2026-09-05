@@ -7,6 +7,25 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
+## Arena mid-run save/load: selected
+
+Implement on `codex/arena-save-load`, with frequent local commits. The user has
+explicitly asked not to push this new work yet. The approved `v0.3.0` tag belongs
+to the preceding UI revision after its own CI passes.
+
+Use an arena-owned, bounded, versioned save representation containing the full
+gameplay state, including RNG and dash/contact cooldowns. Validate before
+installing into a fresh world or paused live game. Reconstruct UI, clear transient
+input and preserve the live host's frame and inspection identity. Loading must
+explicitly invalidate recordings whose origin is a restart. Do not add a general
+ECS serializer or promise save-format compatibility for this first exercise.
+
+Prove a mid-dash and contact-cooldown round trip by feeding identical subsequent
+inputs to original/restored games and comparing complete state and exact pixels.
+Exercise malformed saves without changing the live game, UI reconstruction,
+stale input cancellation, native CLI and actual browser/WASM save/load paths.
+See [the persistence boundary](save-load.md) for the intended state separation.
+
 ## Design coverage and pending scope
 
 The [vision](vision.md) and [design answer coverage](design-requirements.md)
