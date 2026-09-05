@@ -20,9 +20,9 @@ The [vision](vision.md) explains the durable product direction. The
 this reference does not authorize implementing it immediately. This is not a
 chronological decision diary; Git records changes to the design and implementation.
 
-Implementation evidence remains separate. In particular, an ECS-based UI system
-is a design requirement, not an implemented UI claim: the existing arena HUD is
-built from direct sprite draws. Likewise, the bounded headless input replay
+Implementation evidence remains separate. The [first ECS UI slice](ui.md) now
+replaces the arena's direct-drawn HUD and adds an RPG quest display; it does not
+claim to implement general layout or typography. The bounded headless input replay
 verified in [live-player evidence](live-player.md) does not establish interactive
 playback as a shipped feature. Interactive replay remains intended future work.
 
@@ -91,7 +91,7 @@ playback as a shipped feature. Interactive replay remains intended future work.
 | R1.49 | Open | The initial playable slice's specific subsystem list was not selected. The question's audio, physics, animation, UI and other examples were not all automatically approved for that slice. |
 | R1.50 | Firm | Support asset-free prototyping through code-generated placeholder primitives, textures and simple sounds. |
 | R1.51 | Open | Reusable gameplay primitives such as health, movement, cameras, triggers, timers and state machines may belong in the high-level framework; their inclusion and scope remain undecided. |
-| R1.52 | Firm | UI should use the same entity/component model as the game world. Existing sprite HUDs do not fulfill this engine-UI requirement. |
+| R1.52 | Firm | UI should use the same entity/component model as the game world. The first text/button implementation is documented in the UI guide; broader UI capabilities remain future work. |
 | R1.53 | Firm | Multiplayer in competitive, cooperative and local forms is intended. The user is not especially fearful of long-term scope because agents accelerate development; this is not an instruction to build every form immediately. |
 | R1.54 | Firm | Procedural generation is important. |
 | R1.55 | Firm | Titan should not prescribe where assets originate; provide procedural-generation APIs and CSG with Boolean operations. |

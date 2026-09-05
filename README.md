@@ -9,7 +9,7 @@ graphical editor.
 Titan is not production-ready. Pin a Git revision when depending on it; packages
 are not distributed through crates.io.
 
-<img src="docs/art-iteration/after/startup-preview.png" alt="Titan's procedural sunlit-meadow RPG, with a player, three cyan shards, and a mossy shrine" width="640" height="448">
+<img src="docs/ui/rpg-after.png" alt="Titan's procedural sunlit-meadow RPG with the completed quest displayed by an ECS UI entity" width="640" height="448">
 
 *The example RPG uses generated pixel art and the same game code for native,
 browser, and headless runs. [Before/after evidence](docs/art-iteration/README.md).*
@@ -38,7 +38,7 @@ cargo run --locked --example procedural_rpg
 
 This writes `target/titan/procedural-rpg.ppm`. The reference run completes after
 11 ticks with three collected shards, an active shrine, and RGBA checksum
-`190a92085def5677`.
+`f7a298f62ad75c1c`.
 
 For the browser demo, also install Python 3:
 
@@ -100,6 +100,8 @@ recent input, and captures. Stop the runtime with Ctrl-C.
   GPU sprite rendering.
 - Structured inspection, game commands, validated component fields, captures,
   and native diagnostic bundles.
+- Entity-based text and pointer buttons, shared by the arena HUD and RPG quest
+  display, with inspectable content and positions.
 - A procedural RPG with native and actual-WASM control-loop tests, semantic
   assertions, and verified software/GPU captures.
 
@@ -144,6 +146,7 @@ GPU.
 - [In-process inspection](docs/inspection.md)
 - [Browser inspection](docs/browser.md)
 - [Interactive rendering](docs/rendering.md)
+- [Entity-based game UI](docs/ui.md)
 - [Repository-local agent workflow](.agents/skills/titan-workflow/SKILL.md)
 
 ## License

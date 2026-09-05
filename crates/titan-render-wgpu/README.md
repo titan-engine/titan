@@ -64,7 +64,7 @@ transparent backgrounds, both sRGB and unorm output, presentation resize, and
 asset collection replacement against the software reference. A second hardware
 test replays the full RPG reference route, verifies shrine completion, and
 compares the extracted 160 × 112 GPU image with the exact software capture
-(checksum `190a92085def5677`) in both output color formats. Primary opaque
+(checksum `f7a298f62ad75c1c`) in both output color formats. Primary opaque
 pixels and integer scaling must match exactly; other channel differences default
 to at most 2/255. Set `TITAN_GPU_TOLERANCE=0` to request exact comparison or choose
 another explicit u8 tolerance for a particular adapter. The engine's software

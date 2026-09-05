@@ -7,9 +7,15 @@ direction when standing still; initially right). The dash lasts six fixed ticks
 (0.1 seconds), moves four pixels per tick on each active axis and locks its
 direction. It has no invulnerability. A two-second cooldown starts on activation;
 release and press Space again once ready. The HUD shows readiness and cooldown.
-Three contacts lose; contacts have a one-second cooldown. Press R
-or the browser Restart button to reset. Native P pauses/resumes; the window title
-shows when paused. Browser restart pauses: press Resume.
+Three contacts lose; contacts have a one-second cooldown. Press R or click the
+in-game restart label to reset. Native P pauses/resumes; the window title shows
+when paused. The browser's surrounding Restart button pauses; the in-game label
+preserves the current pause state.
+
+The HUD uses named ECS entities (`ui/status`, `ui/restart`, `ui/dash`) with shared
+text and button components. Inspect state lists these alongside the player and
+all pooled enemies, including their active/inactive state. See the
+[UI guide](../../docs/ui.md) for authoring, pointer behavior and verification.
 
 From this directory (stable Rust, Python 3, Node.js):
 

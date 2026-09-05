@@ -179,9 +179,10 @@ are not claims about current implementation.
 
 ### Game UI
 
-Game UI should use the same entity/component model as the game world. This is
-an agreed architecture direction; Titan does not yet have a general UI system.
-Current browser controls and game-drawn HUDs do not fulfill that capability.
+Game UI uses the same entity/component model as the game world. The first
+[UI slice](ui.md) provides fixed-pixel text and primary-pointer buttons, exercised
+by the arena HUD and RPG quest display. General layout and typography remain
+future work. Browser host controls and inspector panels are separate tooling.
 Whether reusable gameplay primitives belong in the high-level framework remains
 open and does not change the entity-based UI commitment.
 

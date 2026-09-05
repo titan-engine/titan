@@ -15,26 +15,25 @@ completion. The coverage record accounts for both original planning answer
 rounds, including tentative preferences and [unresolved questions](open-questions.md).
 An unscheduled capability is not a discarded requirement.
 
-The completed documentation audit restored that intent before the entity-listing
-work. The arena's browser inspection summary currently requests only the player;
-enemies are entities, but are excluded by that request. Its HUD currently draws
-text directly from game state. It does not yet fulfill the agreed direction that
-in-game UI use the same entity/component model as the world. Browser host controls
-and diagnostic panels are separate tooling; that requirement does not by itself
-require converting them into game entities.
+The completed documentation audit restored that intent before the UI exercise.
+Arena inspection now lists all entities, including pooled enemy activity and named
+UI entities. Its HUD and the RPG quest label use shared ECS text components;
+restart is an ECS button. Browser host controls and diagnostic panels remain
+separate tooling.
 
 Agreed capabilities that still need future implementation or broader coverage
-include entity-based in-game UI; early save/load and serialization design;
+include broader UI layout and typography; save/load implementation following the
+[documented boundary](save-load.md);
 automatic parallel scheduling with configurable determinism/throughput policy;
 interactive playback of input recordings; the full generated/file-backed asset
 model and eventual native asset format; and the longer-term rendering and
 multiplayer directions in the vision. Existing headless replay, snapshots and
 procedural demo assets do not establish completion of those broader requirements.
-These are retained commitments; the selected increment below exercises UI first.
+These are retained commitments; the completed increment below exercises UI first.
 
-## Entity-based UI: selected
+## Entity-based UI: complete locally
 
-The user approved this sequence, with frequent coherent commits:
+The approved sequence is implemented and verified in local commits:
 
 1. Show all arena entities and expose pooled enemies' active state.
 2. Convert the existing arena HUD to named UI entities with shared text and
@@ -48,12 +47,16 @@ The user approved this sequence, with frequent coherent commits:
 5. Document the save/load boundary between persistent game state and transient
    UI/host state, without implementing a general persistence system in this slice.
 
-Agents must be able to discover UI entities, inspect text and position, observe
-game-driven updates and exercise the restart button. Keep the first API grounded
-in these two games rather than adding a speculative layout framework.
-Record validation and material limitations in the UI guide. Recommend a version
-or tag when this forms a useful verified release boundary; publication and tag
-creation remain separate from that recommendation.
+Agents can discover UI entities, inspect text and position, observe game-driven
+updates and exercise the restart button. [UI verification](ui.md) records native
+and browser pointer use, shared rendering, regressions and limitations. The
+[save/load boundary](save-load.md) is documented. No further implementation
+objective is selected; difficulty settings remain a future possibility.
+
+This is a candidate for a `v0.3.0` source milestone after remote CI passes on the
+chosen revision. Earlier `v0.2.0` tagged a source milestone while Cargo package
+versions stayed `0.1.0`; package version alignment is a separate choice. No tag,
+Cargo version change, push or publication was performed for this slice.
 
 ## Input and live-player inspection: complete
 
@@ -61,7 +64,8 @@ The authorized input consolidation and actual-player inspection work is complete
 in local commits. [Verification](live-player.md) records 23 passing checks,
 independent reviews, real native/browser diagnosis and retained recordings.
 The browser loss recording also replayed in a new native headless process with
-identical state and pixels. Existing RPG/arena reference checksums are unchanged.
+identical state and pixels. That increment preserved the then-current RPG/arena
+reference checksums; the later UI exercise intentionally changes the RPG label.
 
 Public APIs now cover buffered buttons, shared browser input cancellation,
 registered read-only queries and borrowed request policy. Arena owns its live
@@ -70,7 +74,7 @@ starter remains externally copyable. No broader application framework was needed
 
 The user accepted dash playability; its cooldown remains unchanged. Difficulty
 settings are a possible future feature, not selected work. The next engine
-objective is the UI exercise above. Remote CI remains a gate if these local commits are pushed.
+objective was the completed UI exercise above. Remote CI remains a gate if these local commits are pushed.
 No crate publication, visibility changes or new tags are authorized. Engine crate
 versions remain 0.1.0.
 
@@ -88,7 +92,7 @@ Host consolidation is complete.
 
 ## Constraints and quality gates
 
-Preserve the accepted RPG behavior and software checksum `190a92085def5677` for
+Preserve the accepted RPG behavior and software checksum `f7a298f62ad75c1c` for
 changes unrelated to its visuals. Preserve arena initial `e096abf94fd12c24`
 and winning replay `b5cf61da6f50efd7`, including existing no-dash survival
 semantics. Keep discovery authentication, browser control opt-in, field
