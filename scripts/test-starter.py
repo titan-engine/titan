@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
+import acceptance_process as processes
 import tempfile
 import time
 
@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--browser", action="store_true", help="also build and test copied WASM")
     options = parser.parse_args()
-    subprocess.run(["cargo", "build", "-p", "titan-cli"], cwd=REPO, check=True)
+    processes.run(["cargo", "build", "-p", "titan-cli"], cwd=REPO, check=True, phase="build")
     with tempfile.TemporaryDirectory(prefix="titan-starter-") as directory:
         project = Path(directory) / "my-game"
         shutil.copytree(REPO / "starters/minimal", project,
@@ -35,23 +35,23 @@ def main():
                         ["cargo", "test", "--all-targets"],
                         ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
                         ["cargo", "build", "--bins"]):
-            subprocess.run(command, cwd=project, env=env, check=True, timeout=600)
+            processes.run(command, cwd=project, env=env, check=True, phase="build")
         if options.browser:
             for command in (["cargo", "check", "--lib", "--target", "wasm32-unknown-unknown"],
                             ["python3", "scripts/build-browser.py"],
                             ["node", "scripts/test-browser.mjs"],
                             ["node", "--test", "web/inspector/bridge.test.mjs"]):
-                subprocess.run(command, cwd=project, env=env, check=True, timeout=600)
+                processes.run(command, cwd=project, env=env, check=True, phase="runtime" if command[0] == "node" else "build")
         executable = TARGET / "starter-smoke/debug/titan-game"
         with tempfile.TemporaryFile(mode="w+") as log:
-            process = subprocess.Popen([str(executable), "--serve", "--allow-mutation",
+            process = processes.Popen([str(executable), "--serve", "--allow-mutation",
                 "--instance", "starter-smoke", "--run-for-ms", "30000"], cwd=project,
-                stdout=log, stderr=log)
+                project=project, instance="starter-smoke", stdout=log, stderr=log)
             try:
                 def cli(*args, success=True):
-                    result = subprocess.run([str(TARGET / "debug/titan"), "--format", "json",
+                    result = processes.run([str(TARGET / "debug/titan"), "--format", "json",
                         "--project", str(project), "--instance", "starter-smoke", *args],
-                        text=True, capture_output=True, timeout=10)
+                        text=True, capture_output=True)
                     value = json.loads(result.stdout)
                     assert (result.returncode == 0) == success, value
                     assert value["status"] == ("success" if success else "failure"), value
@@ -90,17 +90,10 @@ def main():
                 assert bundle["world_state"]
                 assert (bundle_path.parent / "api.txt").exists()
                 assert (bundle_path.parent / bundle["capture"]["artifact"]).exists()
-                process.terminate()
-                assert process.wait(timeout=10) == 0
+                assert processes.graceful_shutdown(process) == 0
                 assert cli("instances")["instances"] == []
             finally:
-                if process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
+                processes.terminate(process)
     print("Copied starter passed: build, discovery, input, step, capture, restart, fields, diagnostics, shutdown.")
 
 

@@ -21,9 +21,15 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
+defaults:
+  run:
+    shell: python3 scripts/ci-deadline.py {0}
+
 jobs:
   native:
     name: Native checks
+    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+    timeout-minutes: 55
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -59,6 +65,12 @@ jobs:
           key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: |
             rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
+
+      - name: Verify acceptance process timeout and cleanup
+        run: |
+          python3 scripts/test-acceptance-process.py
+          python3 scripts/test-ci-deadline.py
+          node --test scripts/acceptance_process.test.mjs
 
       - name: Check portable build tooling policy
         run: python3 scripts/test-build-tools.py
@@ -131,6 +143,8 @@ jobs:
 
   wasm:
     name: WebAssembly core check
+    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+    timeout-minutes: 55
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -207,6 +221,8 @@ jobs:
 
   macos-bundles:
     name: macOS development app bundles
+    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+    timeout-minutes: 55
     runs-on: macos-latest
     steps:
       - name: Check out repository

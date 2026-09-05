@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+import acceptance_process as processes
 import time
 
 GAME = Path(__file__).resolve().parents[1]
@@ -11,23 +14,23 @@ REPO = GAME.parents[1]
 
 
 def target(manifest):
-    return Path(json.loads(subprocess.check_output([
+    return Path(json.loads(processes.check_output([
         'cargo', 'metadata', '--no-deps', '--format-version', '1',
         '--manifest-path', str(manifest),
-    ]))['target_directory'])
+    ], phase='build'))['target_directory'])
 
 
-subprocess.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'), '--bin', 'play', '--bin', 'replay'], check=True)
-subprocess.run(['cargo', 'build', '--manifest-path', str(REPO / 'Cargo.toml'), '-p', 'titan-cli'], check=True)
+processes.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'), '--bin', 'play', '--bin', 'replay'], check=True, phase="build")
+processes.run(['cargo', 'build', '--manifest-path', str(REPO / 'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build")
 BINARY = target(GAME / 'Cargo.toml') / 'debug/play'
 CLI = target(REPO / 'Cargo.toml') / 'debug/titan'
 
 
 def call(instance, *args, error=None):
-    result = subprocess.run([
+    result = processes.run([
         str(CLI), '--format', 'json', '--project', str(GAME), '--instance', instance,
         *map(str, args),
-    ], capture_output=True, text=True, timeout=10)
+    ], capture_output=True, text=True)
     data = json.loads(result.stdout)
     if error:
         assert data['status'] == 'failure', data
@@ -40,10 +43,10 @@ def call(instance, *args, error=None):
 
 def scenario(control):
     instance = f'live-player-{os.getpid()}-{int(control)}'
-    process = subprocess.Popen([
+    process = processes.Popen([
         str(BINARY), '--inspect', '--instance', instance, '--run-for-ms', '30000',
         *(['--allow-control'] if control else []),
-    ], cwd=GAME, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    ], project=GAME, instance=instance, cwd=GAME, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         deadline = time.monotonic() + 10
         while True:
@@ -122,7 +125,7 @@ def scenario(control):
         snapshot_recording = call(instance, 'query', 'recording')['response']['value']
         snapshot_path = evidence / 'native-visible-snapshot-recording.json'
         snapshot_path.write_text(json.dumps(snapshot_recording))
-        verification = json.loads(subprocess.check_output([str(BINARY.with_name('replay')), str(snapshot_path)], text=True))
+        verification = json.loads(processes.check_output([str(BINARY.with_name('replay')), str(snapshot_path)], text=True))
         assert verification['save'] == call(instance, 'query', 'save')['response']['value']
         assert verification['checksum'] == call(instance, 'capture')['response']['checksum']
         replay_arguments = evidence / 'native-visible-replay-arguments.json'
@@ -173,7 +176,7 @@ def scenario(control):
         # Forward/backward seek through the real window host; updates also run paused.
         legacy_path = GAME / 'tests/fixtures/recording-v1.json'
         legacy_recording = json.loads(legacy_path.read_text())
-        legacy_verification = json.loads(subprocess.check_output([str(BINARY.with_name('replay')), str(legacy_path)], text=True))
+        legacy_verification = json.loads(processes.check_output([str(BINARY.with_name('replay')), str(legacy_path)], text=True))
         replay_arguments.write_text(json.dumps({'recording': legacy_recording}))
         call(instance, 'invoke', 'load_replay', '--arguments-file', replay_arguments)
         def seek(position):
@@ -231,18 +234,20 @@ def scenario(control):
         evidence.mkdir(parents=True, exist_ok=True)
         recording_path = evidence / 'native-live-recording.json'
         recording_path.write_text(json.dumps(recording))
-        replay = subprocess.run([str(BINARY.with_name('replay')), str(recording_path)],
-                                capture_output=True, text=True, timeout=10)
+        replay = processes.run([str(BINARY.with_name('replay')), str(recording_path)],
+                                capture_output=True, text=True)
         assert replay.returncode == 0, (replay.stdout, replay.stderr)
         verification = json.loads(replay.stdout)
         assert verification['checksum'] == recording['response']['value']['final_checksum'], verification
     finally:
-        if process.poll() is None:
-            process.terminate()
-        stdout, stderr = process.communicate(timeout=10)
-        assert process.returncode == 0, (process.returncode, stdout, stderr)
-        assert 'rendered ' in stdout and ' GPU frames;' in stdout, stdout
-        assert not any(item['instance_id'] == instance for item in call(instance, 'instances')['instances'])
+        try:
+            processes.graceful_shutdown(process)
+            assert not any(item['instance_id'] == instance for item in call(instance, 'instances')['instances'])
+            stdout, stderr = process.communicate()
+            assert process.returncode == 0, (process.returncode, stdout, stderr)
+            assert 'rendered ' in stdout and ' GPU frames;' in stdout, stdout
+        finally:
+            processes.terminate(process)
 
 
 scenario(False)

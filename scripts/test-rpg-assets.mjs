@@ -1,14 +1,14 @@
 // Real WASM + native replay: changing a PNG requires no rebuild.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, run } from './acceptance_process.mjs';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 const repo = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--no-deps', '--format-version', '1'], { cwd: repo, encoding: 'utf8' }));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], { phase: 'build', cwd: repo, encoding: 'utf8' }));
 const require = createRequire(import.meta.url);
 const { BrowserRuntime, BrowserLiveRuntime, verify_recording_json_with_pngs } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 const original = readFileSync(join(repo, 'assets/player.png'));
@@ -62,7 +62,7 @@ reference(loaded); reference(procedural);
 assert.equal(capture(loaded), 'f7a298f62ad75c1c');
 assert.deepEqual(query(loaded, 'save'), query(procedural, 'save'));
 
-execFileSync('cargo', ['build', '--example', 'replay_rpg'], { cwd: repo, stdio: 'inherit' });
+await execFile('cargo', ['build', '--example', 'replay_rpg'], { phase: 'build', cwd: repo, stdio: 'inherit' });
 const temporary = mkdtempSync(join(tmpdir(), 'titan-rpg-png-'));
 try {
   const checksums = new Set([capture(procedural)]);
@@ -99,13 +99,13 @@ try {
     writeFileSync(join(temporary, 'tree.png'), treeBytes);
     const path = join(temporary, 'recording.json'); writeFileSync(path, recording);
     const executable = resolve(metadata.target_directory, 'debug/examples/replay_rpg');
-    const native = JSON.parse(execFileSync(executable, [path, '--assets-dir', temporary], { cwd: temporary, encoding: 'utf8' }));
+    const native = JSON.parse(await execFile(executable, [path, '--assets-dir', temporary], { cwd: temporary, encoding: 'utf8' }));
     assert.equal(native.verified, true); assert.equal(native.checksum, changedReference);
-    const wrong = spawnSync(executable, [path, '--assets-dir', join(repo, 'assets')], { cwd: temporary, encoding: 'utf8' });
+    const wrong = await run(executable, [path, '--assets-dir', join(repo, 'assets')], { cwd: temporary, encoding: 'utf8' });
     assert.notEqual(wrong.status, 0); assert.match(wrong.stderr, /mismatch|asset/i);
     for (const [name, bytes] of [['player.png', playerBytes], ['tree.png', treeBytes]]) {
       rmSync(join(temporary, name));
-      const missing = spawnSync(executable, [path, '--assets-dir', temporary], { cwd: temporary, encoding: 'utf8' });
+      const missing = await run(executable, [path, '--assets-dir', temporary], { cwd: temporary, encoding: 'utf8' });
       assert.notEqual(missing.status, 0); assert.ok(missing.stderr.includes(name));
       writeFileSync(join(temporary, name), bytes);
     }

@@ -170,6 +170,30 @@ class EvidenceTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 evidence.checkpoint("capture")
 
+    def test_complete_authorization_values_are_redacted_before_truncation(self):
+        evidence = FailureEvidence("authorization")
+        credential = "dXNlcjpwYXNz"
+        for value in [
+            f"Authorization: Basic {credential}",
+            f"authorization=Basic {credential}",
+            f'Authorization: "Basic {credential}"',
+            f"Authorization: Digest username=user, response={credential}",
+            f"Authorization: Bearer {credential}",
+        ]:
+            with self.subTest(value=value):
+                sanitized = evidence._sanitize(value + "\nnext-line")
+                self.assertNotIn(credential, sanitized)
+                self.assertIn("[REDACTED]", sanitized)
+                self.assertIn("next-line", sanitized)
+        large = "Authorization: Basic " + credential * TEXT_LIMIT + "\nlast-output"
+        evidence.record_command(["tool"], subprocess.CompletedProcess([], 1, large, ""))
+        evidence._put_text("runtime.log", large)
+        output = self.fail_evidence(evidence)
+        for name in ["commands.log", "runtime.log"]:
+            text = (output / name).read_text()
+            self.assertNotIn(credential, text)
+            self.assertIn("last-output", text)
+
     def test_recent_command_tail_is_bounded_and_secrets_redacted_before_truncation(self):
         evidence = FailureEvidence("tail")
         for _ in range(20):

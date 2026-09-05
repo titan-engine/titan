@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-import subprocess
+import acceptance_process as processes
 import tempfile
 import time
 
@@ -19,9 +19,9 @@ def main():
              '--example', 'procedural_rpg', '--example', 'replay_rpg']
     if options.gpu:
         build += ['--example', 'play_rpg']
-    subprocess.run(build, cwd=REPO, check=True)
-    metadata = json.loads(subprocess.check_output(
-        ['cargo', 'metadata', '--no-deps', '--format-version', '1'], cwd=REPO, text=True))
+    processes.run(build, cwd=REPO, check=True, phase="build")
+    metadata = json.loads(processes.check_output(
+        ['cargo', 'metadata', '--no-deps', '--format-version', '1'], cwd=REPO, text=True, phase='build'))
     target = Path(metadata['target_directory'])
     cli = target / 'debug/titan'
     examples = target / 'debug/examples'
@@ -29,8 +29,8 @@ def main():
     evidence.mkdir(parents=True, exist_ok=True)
 
     def verify(path):
-        result = subprocess.run([str(examples / 'replay_rpg'), str(path)],
-                                capture_output=True, text=True, timeout=10)
+        result = processes.run([str(examples / 'replay_rpg'), str(path)],
+                                capture_output=True, text=True)
         assert result.returncode == 0, (result.stdout, result.stderr)
         return json.loads(result.stdout)
 
@@ -42,12 +42,12 @@ def main():
                        [str(examples / 'procedural_rpg'), '--serve', '--project', str(project), '--allow-mutation'])
             command += ['--assets-dir', str(REPO / 'assets'), '--instance', instance, '--run-for-ms', '30000']
             with tempfile.TemporaryFile(mode='w+') as log:
-                process = subprocess.Popen(command, cwd=project, stdout=log, stderr=log)
+                process = processes.Popen(command, project=project, instance=instance, cwd=project, stdout=log, stderr=log)
                 try:
                     def call(*args, success=True):
-                        result = subprocess.run([str(cli), '--format', 'json', '--project', str(project),
+                        result = processes.run([str(cli), '--format', 'json', '--project', str(project),
                                                  '--instance', instance, *map(str, args)],
-                                                capture_output=True, text=True, timeout=10)
+                                                capture_output=True, text=True)
                         response = json.loads(result.stdout)
                         assert response['status'] == ('success' if success else 'failure'), response
                         return response
@@ -215,21 +215,22 @@ def main():
                     assert query('save') == initial and checksum() == initial_checksum
                     assert len(gameplay_entities()) == 6 and ui_text() == 'SHARDS 0/3'
                 finally:
-                    if process.poll() is None:
-                        process.terminate()
-                    process.wait(timeout=10)
-                    log.seek(0)
-                    output = log.read()
-                    assert process.returncode == 0, output
-                    if gpu:
-                        assert 'GPU frames' in output, output
-                assert not call('instances')['instances']
+                    try:
+                        processes.graceful_shutdown(process)
+                        log.seek(0)
+                        output = log.read()
+                        assert process.returncode == 0, output
+                        if gpu:
+                            assert 'GPU frames' in output, output
+                        assert not call('instances')['instances']
+                    finally:
+                        processes.terminate(process)
 
     scenario(False)
     if options.gpu:
         scenario(True)
     legacy_arena = REPO / 'games/arena/tests/fixtures/recording-v1.json'
-    rejected = subprocess.run([str(examples / 'replay_rpg'), str(legacy_arena)], capture_output=True, text=True, timeout=10)
+    rejected = processes.run([str(examples / 'replay_rpg'), str(legacy_arena)], capture_output=True, text=True)
     assert rejected.returncode != 0, 'RPG must reject arena recordings'
     print('RPG snapshot/replay acceptance passed' + (' including native GPU playback' if options.gpu else ' (headless)'))
 

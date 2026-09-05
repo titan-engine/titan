@@ -26,6 +26,8 @@ TOTAL_LIMIT = 6 * 1024 * 1024
 ALLOWLIST = frozenset({"context.json", "commands.log", "runtime.log", "bundle.json",
                        "api.txt", "capture.png", "latest-capture.ppm"})
 SECRET_KEY = re.compile(r"token|password|secret|authorization|credential|cookie", re.I)
+# Authorization schemes can contain spaces; redact the whole header/assignment.
+AUTHORIZATION = re.compile(r'''(?im)(\bauthorization["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*)''')
 BEARER = re.compile(r"(?i)\bbearer\s+[^\s\"',;}]+")
 ASSIGNMENT = re.compile(
     r'''(?ix)(\b["']?[\w-]*(?:token|password|secret|authorization|credential|cookie)[\w-]*["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;}]+)''')
@@ -40,6 +42,7 @@ def sanitize(value):
     if isinstance(value, list):
         return [sanitize(item) for item in value]
     if isinstance(value, str):
+        value = AUTHORIZATION.sub(r"\1[REDACTED]", value)
         return OPTION.sub(r"\1[REDACTED]", ASSIGNMENT.sub(r"\1[REDACTED]", BEARER.sub("Bearer [REDACTED]", value)))
     return value
 

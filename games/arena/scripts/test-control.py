@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import time
 
@@ -12,31 +11,32 @@ GAME = Path(__file__).resolve().parents[1]
 REPO = GAME.parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from acceptance_evidence import FailureEvidence
+import acceptance_process as processes
 
 
 def main(failures, log):
     started=time.monotonic()
-    subprocess.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True, stdout=log, stderr=log)
+    processes.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True, phase="build", stdout=log, stderr=log)
     build_seconds=time.monotonic()-started
-    subprocess.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True, stdout=log, stderr=log)
+    processes.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build", stdout=log, stderr=log)
     def output(command, **kwargs):
         failures.record_command(command, None)
-        result = subprocess.run(command, capture_output=True, **kwargs)
+        result = processes.run(command, capture_output=True, **kwargs)
         failures.record_command(command, result)
         result.check_returncode()
         return result.stdout
 
     def target(manifest):
-        return Path(json.loads(output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)]))['target_directory'])
+        return Path(json.loads(output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)], phase='build'))['target_directory'])
     CLI=target(REPO/'Cargo.toml')/'debug/titan'
     BINARY=target(GAME/'Cargo.toml')/'debug/titan-game'
     evidence=GAME/'target/arena-evidence'; evidence.mkdir(parents=True,exist_ok=True)
     instance=f'arena-test-{os.getpid()}'
-    p=subprocess.Popen([str(BINARY),'--serve','--instance',instance,'--allow-mutation','--run-for-ms','120000'],cwd=GAME,stdout=log,stderr=log)
+    p=processes.Popen([str(BINARY),'--serve','--instance',instance,'--allow-mutation','--run-for-ms','120000'],project=GAME,instance=instance,cwd=GAME,stdout=log,stderr=log)
     failures.record_process(p)
     def call(*args, error=None):
         failures.record_command(args, None)
-        r=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,*map(str,args)],capture_output=True,text=True,timeout=10)
+        r=processes.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,*map(str,args)],capture_output=True,text=True)
         failures.record_command(args, r)
         data=json.loads(r.stdout)
         failures.observe(data)
@@ -116,7 +116,7 @@ def main(failures, log):
         load_arguments.write_text(json.dumps({'save':saved}))
         malformed_arguments=evidence/'malformed-load-arguments.json'
         malformed_arguments.write_text('{')
-        malformed=subprocess.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'invoke','load_save','--arguments-file',str(malformed_arguments)],capture_output=True,text=True,timeout=10)
+        malformed=processes.run([str(CLI),'--format','json','--project',str(GAME),'--instance',instance,'invoke','load_save','--arguments-file',str(malformed_arguments)],capture_output=True,text=True)
         failures.record_command(malformed.args, malformed)
         assert malformed.returncode != 0,malformed
         unchanged=call('status')
@@ -147,15 +147,18 @@ def main(failures, log):
         assert data['world_state']['positions']['run']['outcome']=='Lost'
         shutil.copy(call('capture')['response']['artifact'],evidence/'lost.ppm')
     finally:
-        p.terminate();p.wait(timeout=5)
-    assert not call('instances')['instances']
-    p=subprocess.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],cwd=GAME,stdout=log,stderr=log)
+        try:
+            processes.graceful_shutdown(p)
+            assert not call('instances')['instances']
+        finally:
+            processes.terminate(p)
+    p=processes.Popen([str(BINARY),'--serve','--instance',instance,'--run-for-ms','10000'],project=GAME,instance=instance,cwd=GAME,stdout=log,stderr=log)
     failures.record_process(p)
     try:
         wait_ready(p)
         call('set-field',idx,gen,component,'x','--value',20,error='mutation_disabled')
     finally:
-        p.terminate();p.wait(timeout=5)
+        processes.terminate(p)
     print('Arena native discovery, fields, input, dash/cooldown/held/rearm, survival, loss, restart, save/load, snapshot/v1 replay, capture and bounded diagnostics passed.')
 
 

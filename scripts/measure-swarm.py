@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import acceptance_process as processes
 import sys
 import tempfile
 import time
@@ -28,7 +29,7 @@ def measure(command, timeout):
     # unlike RUSAGE_CHILDREN, which accumulates unrelated builds and earlier runs.
     with tempfile.TemporaryFile(mode='w+') as output:
         started = time.monotonic()
-        process = subprocess.Popen(command, cwd=REPO, stdout=output)
+        process = subprocess.Popen(command, cwd=REPO, stdout=output, start_new_session=True)
         try:
             while True:
                 pid, status, usage = os.wait4(process.pid, os.WNOHANG)
@@ -39,9 +40,7 @@ def measure(command, timeout):
                     raise TimeoutError(f'swarm exceeded {timeout}s: {command}')
                 time.sleep(0.01)
         finally:
-            if process.returncode is None:
-                process.kill()
-                process.wait()
+            processes.terminate(process)
         elapsed = time.monotonic() - started
         if process.returncode:
             raise RuntimeError(f'swarm exited {process.returncode}: {command}')
@@ -68,7 +67,7 @@ def main():
     build = ['cargo', 'build', '-p', 'titan', '--example', 'swarm', '--message-format=json']
     if not args.debug:
         build.append('--release')
-    result = subprocess.run(build, cwd=REPO, check=True, stdout=subprocess.PIPE, text=True)
+    result = processes.run(build, phase="build", cwd=REPO, check=True, stdout=subprocess.PIPE, text=True)
     artifacts = [json.loads(line) for line in result.stdout.splitlines()]
     executable = next(item['executable'] for item in artifacts
                       if item.get('reason') == 'compiler-artifact'
@@ -76,12 +75,12 @@ def main():
     report = {
         'schema_version': 1,
         'measured_at_utc': datetime.now(timezone.utc).isoformat(),
-        'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
-        'working_tree_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=REPO)),
+        'revision': processes.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(),
+        'working_tree_dirty': bool(processes.check_output(['git', 'status', '--porcelain'], cwd=REPO)),
         'platform': platform.platform(),
         'machine': platform.machine(),
         'logical_cpus': os.cpu_count(),
-        'rustc': subprocess.check_output(['rustc', '-vV'], text=True).strip(),
+        'rustc': processes.check_output(['rustc', '-vV'], text=True).strip(),
         'profile': 'dev' if args.debug else 'release',
         'rustflags': os.environ.get('RUSTFLAGS', ''),
         'memory_scope': 'whole child process high-water RSS, including setup, simulation and correctness checks; excludes Cargo and this runner',

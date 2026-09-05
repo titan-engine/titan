@@ -5,6 +5,7 @@ macos_app(root, metadata, argv=None). Obtain metadata with cargo_metadata(root).
 Game entrypoints own targets, output names, and application identity. These
 helpers do not import any game code. See docs/host-tooling.md.
 """
+import acceptance_process as processes
 import argparse
 import json
 from pathlib import Path
@@ -17,9 +18,9 @@ import tempfile
 
 
 def cargo_metadata(root):
-    return json.loads(subprocess.check_output(
+    return json.loads(processes.check_output(
         ["cargo", "metadata", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"],
-        cwd=root, text=True,
+        cwd=root, text=True, phase="build",
     ))
 
 
@@ -86,27 +87,33 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None):
     if shared_input.resolve() != output_input.resolve():
         output_input.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(shared_input, output_input)
+    # Standalone browser acceptance resolves this helper before Cargo metadata.
+    process_source = Path(engine["manifest_path"]).parent / "scripts/acceptance_process.mjs"
+    process_output = root / "scripts/acceptance_process.mjs"
+    if process_source.resolve() != process_output.resolve():
+        process_output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(process_source, process_output)
     candidates.append(Path(engine["manifest_path"]).parent / "target/titan/tools/bin/wasm-bindgen")
     if installed := shutil.which("wasm-bindgen"):
         candidates.append(Path(installed))
     bindgen = None
     for candidate in candidates:
         if candidate.is_file():
-            result = subprocess.run([str(candidate), "--version"], capture_output=True, text=True)
+            result = processes.run([str(candidate), "--version"], capture_output=True, text=True, phase="build")
             if result.returncode == 0 and result.stdout.strip() == f"wasm-bindgen {version}":
                 bindgen = candidate
                 break
     if bindgen is None:
-        subprocess.run(["cargo", "install", "wasm-bindgen-cli", "--version", version,
-                        "--locked", "--root", str(tool_root), "--force"], cwd=root, check=True)
+        processes.run(["cargo", "install", "wasm-bindgen-cli", "--version", version,
+                        "--locked", "--root", str(tool_root), "--force"], cwd=root, check=True, phase="build")
         bindgen = tool_root / "bin/wasm-bindgen"
-    subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"], cwd=root, check=True)
-    subprocess.run(["cargo", "build", "--package", package_name, "--lib", "--target",
-                    "wasm32-unknown-unknown", "--release"], cwd=root, check=True)
+    processes.run(["rustup", "target", "add", "wasm32-unknown-unknown"], cwd=root, check=True, phase="build")
+    processes.run(["cargo", "build", "--package", package_name, "--lib", "--target",
+                    "wasm32-unknown-unknown", "--release"], cwd=root, check=True, phase="build")
     wasm = target / "wasm32-unknown-unknown/release" / (libraries[0]["name"].replace("-", "_") + ".wasm")
     for flavor, output in [("web", root / "web/inspector/pkg"), ("nodejs", target / "titan/browser-node")]:
-        subprocess.run([str(bindgen), str(wasm), "--target", flavor, "--out-dir", str(output),
-                        "--out-name", out_name], cwd=root, check=True)
+        processes.run([str(bindgen), str(wasm), "--target", flavor, "--out-dir", str(output),
+                        "--out-name", out_name], cwd=root, check=True, phase="build")
 
     copy_assets(resources, root / "web/assets")
 
@@ -140,18 +147,18 @@ def macos_app(root, metadata, argv=None, *, assets_source=None):
     if args.release:
         command.append("--release")
     executable = None
-    with subprocess.Popen(command, cwd=root, text=True, stdout=subprocess.PIPE) as build:
-        for line in build.stdout:
-            message = json.loads(line)
-            if message.get("reason") == "compiler-message":
-                print(message["message"].get("rendered", ""), end="", file=sys.stderr)
-            if (message.get("reason") == "compiler-artifact"
-                    and message.get("package_id") == package["id"]
-                    and message["target"]["name"] == target_name
-                    and message.get("executable")):
-                executable = Path(message["executable"])
-        if build.wait():
-            raise SystemExit("Cargo build failed; no app bundle was written")
+    build = processes.run(command, cwd=root, text=True, stdout=subprocess.PIPE, phase="build")
+    for line in build.stdout.splitlines():
+        message = json.loads(line)
+        if message.get("reason") == "compiler-message":
+            print(message["message"].get("rendered", ""), end="", file=sys.stderr)
+        if (message.get("reason") == "compiler-artifact"
+                and message.get("package_id") == package["id"]
+                and message["target"]["name"] == target_name
+                and message.get("executable")):
+            executable = Path(message["executable"])
+    if build.returncode:
+        raise SystemExit("Cargo build failed; no app bundle was written")
     if executable is None:
         raise SystemExit("Cargo did not report the requested binary executable")
     # Cargo metadata honors CARGO_TARGET_DIR, and build JSON also handles a
