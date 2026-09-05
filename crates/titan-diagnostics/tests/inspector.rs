@@ -160,3 +160,37 @@ fn entity_snapshot_is_bounded_and_reports_truncation() {
     assert!(!name.fields["text"].writable);
     assert_eq!(name.fields["text"].description, "Entity label");
 }
+
+#[test]
+fn recording_a_session_rejection_does_not_execute_the_request_again() {
+    let root = Temp::new();
+    let (mut app, mut inspector) = setup();
+    let request = RequestEnvelope::new("past-replay-end", Request::Step { frames: 1 });
+    inspector.set_step_budget(titan::inspection::StepBudget {
+        max_frames: 0,
+        ..Default::default()
+    });
+    let rejected = inspector.handle(&mut app, &request);
+    assert!(matches!(
+        rejected.outcome,
+        titan_protocol::ResponseOutcome::Failure { .. }
+    ));
+    // The bare inspector would now accept the request, but diagnostics must
+    // retain the session's earlier rejection rather than execute it again.
+    inspector.set_step_budget(Default::default());
+    let mut diagnostics = DiagnosticInspector::new(&root.0);
+    let result =
+        diagnostics.record_response(&inspector, &app, &request, rejected.clone(), 17, |_, _| {
+            None
+        });
+    assert_eq!(
+        app.world().resource::<titan::FixedTime>().unwrap().tick(),
+        0
+    );
+    assert_eq!(result.response.state_revision, rejected.state_revision);
+    let bundle: DiagnosticBundle =
+        serde_json::from_slice(&std::fs::read(result.written.unwrap().manifest).unwrap()).unwrap();
+    assert_eq!(bundle.response, Some(rejected));
+    assert_eq!(bundle.timings_us["request"], 17);
+    assert_eq!(bundle.history.requests.len(), 1);
+}

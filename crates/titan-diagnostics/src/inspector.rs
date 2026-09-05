@@ -42,7 +42,25 @@ impl DiagnosticInspector {
     ) -> DiagnosticResult {
         let started = Instant::now();
         let response = inspector.handle(app, request);
-        let elapsed_us = micros(started);
+        self.record_response(inspector, app, request, response, micros(started), collect)
+    }
+
+    /// Retains diagnostics for a request already executed by a session policy.
+    ///
+    /// Use this when the session must enforce input isolation or playback limits
+    /// before delegating to its inspector. This method never executes the request
+    /// again. Pass the session's current inspector and app after handling, and
+    /// the elapsed request time in microseconds. Capture failures remain separate
+    /// from the response, just as with [`Self::handle`].
+    pub fn record_response(
+        &mut self,
+        inspector: &Inspector,
+        app: &App,
+        request: &RequestEnvelope,
+        response: ResponseEnvelope,
+        elapsed_us: u64,
+        collect: impl FnOnce(&App, &mut DiagnosticBundle) -> Option<Image>,
+    ) -> DiagnosticResult {
         let mut result = DiagnosticResult {
             response,
             written: None,
