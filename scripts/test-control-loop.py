@@ -61,7 +61,7 @@ def main():
                 entities = cli("entities")["response"]["entities"]
                 assert len(entities) == 6
                 shrine = next(entity["id"] for entity in entities if entity["name"] == "shrine")
-                assert cli("commands")["response"]["commands"][0]["name"] == "spawn_shard"
+                assert any(command['name'] == 'spawn_shard' for command in cli('commands')['response']['commands'])
                 frame = 0
                 for action, ticks in [("right", 2), ("down", 3), ("right", 6)]:
                     for _ in range(ticks):

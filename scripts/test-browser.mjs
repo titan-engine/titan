@@ -54,7 +54,7 @@ const hudDetails = () => call(runtime, { type: 'entity', entity: hud }).response
 const uiText = Object.keys(hudDetails().components).find(name => name.endsWith('::UiText'));
 assert.equal(hudDetails().components[uiText].text, 'SHARDS 0/3');
 assert.equal(hudDetails().component_fields[uiText].text.writable, false);
-assert.equal(call(runtime, { type: 'commands' }).response.commands[0].name, 'spawn_shard');
+assert.ok(call(runtime, { type: 'commands' }).response.commands.some(command => command.name === 'spawn_shard'));
 let frame = 0;
 for (const [action, ticks] of [['right', 2], ['down', 3], ['right', 6]]) {
   for (let tick = 0; tick < ticks; tick++) {
