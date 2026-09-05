@@ -45,7 +45,10 @@ function failure(error) {
   start.disabled = false; start.textContent = 'Retry';
 }
 function updateStatus() {
-  if (epoch !== player.clock_epoch()) { input.cancel(); lastTime = undefined; epoch = player.clock_epoch(); }
+  if (epoch !== player.clock_epoch()) {
+    input.cancel(); lastTime = undefined; epoch = player.clock_epoch();
+    output.textContent = ''; recordingResult.textContent = '';
+  }
   const state = JSON.parse(player.status());
   const playback = JSON.parse(player.playback_status());
   status.textContent = `Frame ${state.frame} · ${state.collected_shards} / 3 shards`;

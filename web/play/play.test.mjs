@@ -70,7 +70,11 @@ test('RPG page uses authoritative pause and exposes local playback without inspe
   assert.equal(position, 0);
   assert.equal(paused, true);
   assert.equal(ids.step.disabled, false);
+  ids['live-output'].textContent = 'stale inspected replay state';
+  ids['recording-result'].textContent = 'Recording verified and loaded';
   click('exit-playback');
+  assert.equal(ids['live-output'].textContent, '');
+  assert.equal(ids['recording-result'].textContent, '');
   assert.equal(active, false);
   assert.equal(paused, true);
   assert.equal(ids.replay.disabled, false);
