@@ -54,6 +54,7 @@ for current instructions; measurements and environments describe specific runs.
 - [Arena development exercise](arena-exercise.md), [verification](arena-verification.md),
   and [snapshot verification](arena-save-load.md).
 - [Host setup audit](host-setup-audit.md) and [workflow verification](host-workflow-verification.md).
+- [ECS-only subsystem boundary audit](subsystem-audit/README.md).
 - [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
 
 - [Inspection failure repair evidence](inspection-repair/README.md).
