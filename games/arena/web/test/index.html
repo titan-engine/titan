@@ -13,6 +13,8 @@ button {font:inherit; padding:8px 12px; margin-right:8px} pre {white-space:pre-w
 <button id="dash">Dash active</button><button id="cooldown">Dash cooldown</button><button id="ready">Dash ready after held input</button>
 <button id="live">Live inspection and recording</button>
 <button id="seeking">Seeking and speed</button>
+<button id="import-responsiveness">Replay import responsiveness</button>
+<a id="import-output" hidden download="browser-output.json">Download import evidence</a>
 <canvas id="canvas" width="640" height="448" aria-label="Arena GPU replay result"></canvas>
 <pre id="result" role="status">Choose a scenario.</pre>
 <script type="module">
@@ -166,6 +168,91 @@ document.querySelector('#seeking').onclick = async () => {
     check(call({type:'capture'}).checksum === verified.checksum, 'Final pixels changed');
     player.frame(0);
     result.textContent = 'PASS\n' + JSON.stringify({replay:state(), seekUpdates, checksum:verified.checksum, speedChecks:[0.25,4]}, null, 2);
+  } catch (error) { result.textContent = 'FAIL: ' + (error.stack ?? error); }
+  finally { buttons.forEach(button => button.disabled = false); }
+};
+document.querySelector('#import-responsiveness').onclick = async () => {
+  buttons.forEach(button => button.disabled = true);
+  try {
+    await init();
+    player ??= await BrowserPlayer.create(canvas);
+    player.set_control_enabled(true);
+    let requestId = 0;
+    const call = request => {
+      const response = JSON.parse(player.handle(JSON.stringify({schema_version:1, request_id:`import-${++requestId}`, request})));
+      if (response.status !== 'success') throw new Error(JSON.stringify(response));
+      return response.response;
+    };
+    const makeRecording = ticks => {
+      player.restart();
+      call({type:'step', frames:ticks});
+      const recording = call({type:'query', name:'recording'}).value;
+      if (recording.recorded_ticks !== ticks || recording.truncated) throw new Error('Recording boundary mismatch');
+      return recording;
+    };
+    const short = makeRecording(8);
+    const maximum = makeRecording(3600);
+    const encoder = new TextEncoder();
+    const compact = JSON.stringify(maximum);
+    const padding = 2 * 1024 * 1024 - encoder.encode(compact).byteLength;
+    if (padding < 0) throw new Error('Maximum-tick recording exceeds import byte limit');
+    const exactLimit = ' '.repeat(padding) + compact;
+    if (encoder.encode(exactLimit).byteLength !== 2 * 1024 * 1024) throw new Error('Byte-limit fixture mismatch');
+    const mismatch = JSON.stringify({...maximum, final_checksum:'0000000000000000'});
+    const snapshot = () => JSON.stringify({
+      status: player.status(),
+      save: call({type:'query', name:'save'}).value,
+      replay: player.playback_status(),
+      checksum: call({type:'capture'}).checksum,
+    });
+    async function measure(label, recording, rejected = false) {
+      const samples = [];
+      for (let repeat = 0; repeat < 7; repeat++) {
+        const before = rejected ? snapshot() : null;
+        const started = performance.now();
+        const timer = new Promise(resolve => setTimeout(() => resolve(performance.now() - started), 0));
+        const frame = new Promise(resolve => requestAnimationFrame(() => resolve(performance.now() - started)));
+        let outcome = 'success';
+        let message = null;
+        try { player.load_recording(recording); }
+        catch (error) { outcome = 'failure'; message = String(error); }
+        const callMs = performance.now() - started;
+        const [timerDelayMs, animationFrameDelayMs] = await Promise.all([timer, frame]);
+        const unchanged = rejected ? snapshot() === before : null;
+        if ((outcome === 'failure') !== rejected || (rejected && !unchanged)) {
+          throw new Error(`${label} result or nonmutation mismatch`);
+        }
+        samples.push({call_ms:callMs, timer_delay_ms:timerDelayMs,
+          animation_frame_delay_ms:animationFrameDelayMs, outcome, message,
+          rejected_session_unchanged:unchanged});
+      }
+      return {label, samples};
+    }
+    const report = {
+      schema_version: 1,
+      measured_at_utc: new Date().toISOString(),
+      user_agent: navigator.userAgent,
+      hardware_concurrency: navigator.hardwareConcurrency,
+      profile: 'release WASM in a real browser GPU player',
+      recording_bytes: {
+        short: encoder.encode(JSON.stringify(short)).byteLength,
+        max_ticks: encoder.encode(compact).byteLength,
+        max_bytes: encoder.encode(exactLimit).byteLength,
+      },
+      measurement_scope: 'Synchronous load_recording call plus zero-delay timer and next animation-frame delivery from immediately before the call',
+      cases: [
+        await measure('short_valid', JSON.stringify(short)),
+        await measure('max_ticks_valid', compact),
+        await measure('max_bytes_valid', exactLimit),
+        await measure('max_ticks_final_mismatch', mismatch, true),
+      ],
+    };
+    const output = document.querySelector('#import-output');
+    URL.revokeObjectURL(output.href);
+    output.href = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2) + '\n'], {type:'application/json'}));
+    output.hidden = false;
+    player.frame(0);
+    result.textContent = 'PASS\n' + JSON.stringify(report, null, 2);
   } catch (error) { result.textContent = 'FAIL: ' + (error.stack ?? error); }
   finally { buttons.forEach(button => button.disabled = false); }
 };
