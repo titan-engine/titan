@@ -61,5 +61,48 @@ Linearization follows the sRGB transfer function in
 Perceptual thresholds are engineering tolerances, not a universal judgment of
 visual equivalence; exact software captures remain the deterministic reference.
 
+## Offline comparison reports
+
+On native targets, `write_comparison_report(root, expected, actual, options)`
+creates a unique owner-only directory below `root`. It writes lossless copies as
+`expected.png` and `actual.png`, a spatial `difference.png`, and `report.json`.
+The JSON records the supplied `ComparisonOptions`, the existing `ImageComparison`
+metrics without changing their calculation, artifact names, dimensions, and the
+difference encoding. A failed write removes its newly created directory; an
+existing report is never overwritten.
+
+The opaque RGBA difference image uses independent channels so exact differences
+remain locatable even when they are not visible after compositing:
+
+- Red is the largest linear-RGB appearance error after compositing both pixels
+  over black and white, scaled with `ceil(error * 255)`. Any visible difference
+  therefore has nonzero red; brighter red means a larger visible error.
+- Green is the absolute alpha-byte error. Alpha-only changes appear green plus
+  any red contributed by their visible effect.
+- Blue is the largest raw RGB-byte error only when the composited visible error
+  is zero. Thus RGB changes hidden by zero alpha remain blue instead of vanishing.
+- Alpha is always 255. Identical pixels are opaque black. Channels can combine;
+  for example, a fully visible alpha change can appear yellow.
+
+Images must have equal dimensions, matching `compare_images`. Invalid thresholds
+and dimension mismatches are returned before output is created. Empty equal images
+remain valid for `compare_images`, but reports reject them because PNG cannot
+encode zero dimensions. Each input's decoded RGBA bytes and each encoded report
+artifact are limited to 64 MiB. Filesystem, JSON, PNG, empty-image, and size errors
+have distinct `ComparisonReportError` variants.
+
+Images already in memory can be passed directly. For images on disk, read their
+bytes and decode each with `Image::from_png` and bounded `ImageDecodeLimits`, then
+pass the decoded images to the report helper. A deliberately changed fixture can
+be generated and inspected with:
+
+```sh
+cargo run -p titan-diagnostics --example comparison_report -- target/visual-diffs
+```
+
+The command prints the created report directory. Inspect its three PNG files and
+use `report.json` for automation. Report generation is offline and does not alter
+capture transport, baselines, thresholds, or reference checksums.
+
 Run `cargo test -p titan-diagnostics`. Portable data/history/comparison APIs also
 compile for `wasm32-unknown-unknown`; filesystem helpers are native-only.

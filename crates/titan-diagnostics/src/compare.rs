@@ -159,7 +159,7 @@ pub fn compare_images(
         ssim,
     })
 }
-fn composite(pixel: &[u8], background: f64) -> [f64; 3] {
+pub(crate) fn composite(pixel: &[u8], background: f64) -> [f64; 3] {
     let alpha = f64::from(pixel[3]) / 255.;
     [pixel[0], pixel[1], pixel[2]].map(|byte| {
         let encoded = f64::from(byte) / 255.;
