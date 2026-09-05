@@ -121,18 +121,35 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         && duration.is_none_or(|duration| started.elapsed() < duration)
     {
         // This thread alone owns the game, and fixed time advances only on Step.
-        queue.drain(|request| {
-            let result = diagnostics.handle(&mut inspector, &mut app, request, |app, bundle| {
-                bundle.world_state["game"] = game::status(app);
-                None
-            });
+        queue.drain_with_reply(|request, reply| {
+            let request_started = Instant::now();
+            let response = match inspector.dispatch(&mut app, request) {
+                titan::inspection::Dispatch::Ready(response) => response,
+                titan::inspection::Dispatch::Pending(mut capture) => {
+                    reply.complete_when(request_started, move |elapsed| capture.poll(elapsed));
+                    return;
+                }
+            };
+            let elapsed_us =
+                u64::try_from(request_started.elapsed().as_micros()).unwrap_or(u64::MAX);
+            let result = diagnostics.record_response(
+                &inspector,
+                &app,
+                request,
+                response,
+                elapsed_us,
+                |app, bundle| {
+                    bundle.world_state["game"] = game::status(app);
+                    None
+                },
+            );
             for error in result.errors {
                 eprintln!("{error}");
             }
             if let Some(written) = result.written {
                 eprintln!("diagnostic bundle: {}", written.manifest.display());
             }
-            result.response
+            reply.send(result.response);
         });
         std::thread::sleep(Duration::from_millis(1));
     }
