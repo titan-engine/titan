@@ -6,8 +6,10 @@ It is a design contract, not a runnable game or evidence of implemented physics.
 
 The slice is two compact rooms played by switching between a high-jumping
 character and a strong character who moves a heavy block. Both must reach each
-exit. Rules, dimensioned layouts, solution routes and verification cases are in
-the design; Rust game source will be the runtime authority when implemented.
+exit. The second room adds block-assisted jumping to the first room's door
+exchange; physically valid shorter routes are accepted. Rules, dimensioned
+layouts, solution routes and verification cases are in the design, with exact
+tuning and input ergonomics marked for rough-prototype validation; Rust game source will be the runtime authority when implemented.
 
 Execution and future work live in [the adventure project](https://github.com/orgs/titan-engine/projects/2),
 including the [skeleton](https://github.com/titan-engine/titan/issues/81),
