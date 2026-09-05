@@ -28,6 +28,8 @@ Start with what you want to do. Titan is early in development; the
   commitments, preferences, and unresolved choices.
 - [Open design questions](open-questions.md) — decisions that need evidence.
 - [Current implementation overview](handoff.md).
+- [Two-character adventure design](../games/adventure/README.md) — selected first
+  slice; design only, not yet runnable.
 - [First sound exercise proposal](audio-exercise.md) — pickup cue, playback lifetime
   and device-free verification; audio is not implemented.
 - [Parallel ECS executor](executor.md), [swarm measurements](swarm.md),
