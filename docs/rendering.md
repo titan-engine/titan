@@ -28,7 +28,9 @@ python3 -m http.server 8000 --bind 127.0.0.1 --directory web
 
 Open `http://127.0.0.1:8000/play/`, then click Play. The player provides keyboard
 and pointer controls, Pause/Resume, and a reference replay button that pauses
-at the completed shrine. The inspection page remains available at `/inspector/`.
+at the completed shrine. It also supports [imported recording playback](rpg-replay.md)
+with pause, step, restart and completion verification on the same canvas. The
+isolated inspection page remains available at `/inspector/`.
 Browser GPU support uses WebGPU or the WebGL2 backend; WebGL2 requires
 floating-point color attachments. Unsupported graphics configurations report
 an initialization error rather than silently using software rendering.

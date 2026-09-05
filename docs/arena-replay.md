@@ -103,6 +103,7 @@ fresh live game. The screenshot retains the completed playback controls.
 
 ![Browser playback complete](arena-replay/browser-complete.png)
 
-This exercise required no engine API changes. Snapshot origins and playback
-policy remain in the arena session; the hosts supply local controls. CI is being
-watched by the user, and these new commits have not been pushed.
+The first arena exercise was game-owned and passed CI at `fb9b1d5`. The arena
+now adopts [shared engine recording/playback primitives](replay.md) alongside
+the RPG. Snapshot origins and playback policy remain in each game session; the
+hosts supply local controls. Existing arena recording files remain compatible.

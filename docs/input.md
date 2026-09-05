@@ -8,7 +8,9 @@ aliases must be combined first. `take_presses` coalesces taps until consumed.
 
 RPG keeps its six-tick movement cadence; arena buffers dash edges and retains
 its direction/cooldown rules; starter retains continuous movement. No game
-advancement or key bindings moved into the engine.
+advancement or key bindings moved into the engine. The separate
+[shared replay module](replay.md) now records consumed digital frames and manages
+bounded playback progression for the RPG and arena.
 
 The shared `web/shared/input.mjs` controller owns browser keyboard/pointer
 sources and focus lifecycle. Ordinary release preserves a short tap. Blur,

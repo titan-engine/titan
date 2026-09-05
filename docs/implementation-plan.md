@@ -7,22 +7,22 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Shared replay through the RPG: selected
+## Shared replay through the RPG: complete
 
-The user approved pushing the arena replay increment first, then adding RPG
-snapshot-backed replay and extracting shared recording/playback machinery as both
-games adopt it. Verify CI on both pushed revisions; keep coherent local commits
-through implementation and push the completed increment. The first pushed
-revision is `fb9b1d5`; its CI run is
-[33950710706](https://github.com/titan-engine/titan/actions/runs/33950710706).
+Both games now use Titan's bounded snapshot recording, consumed digital input
+codec and playback cursor. Snapshot contents/validation, simulation and session
+policy stay game-owned. The RPG restores despawned shards and inactive shrine
+state from a mid-quest snapshot, then reaches the same complete quest and pixels
+through native headless, native GPU and actual browser playback. The arena's
+v1/v2 recordings and reference results remain valid after migration.
 
-The RPG acceptance scenario crosses shard collection and shrine activation,
-including a mid-quest snapshot origin. Keep gameplay snapshot contents and
-validation game-owned. Extract reusable bounded recording, consumed input edge
-encoding and playback progression into Titan, then migrate the arena. Preserve
-arena historical recording compatibility and both games' reference pixels.
-Validate both games headlessly and in native/browser playback, including pause,
-step, restart, input isolation, bounded imports and end-of-recording verification.
+Workspace/arena Rust gates, actual native/WASM control loops, browser file controls,
+external starter and macOS bundle checks pass. See [shared replay](replay.md),
+[RPG controls and evidence](rpg-replay.md) and [local checks](replay/local-checks.json).
+The user requested an initial push, implementation, then a second push with CI
+verified for both revisions. Initial arena replay revision `fb9b1d5` passed all
+three jobs in [CI run 33950710706](https://github.com/titan-engine/titan/actions/runs/33950710706).
+CI now includes the RPG replay and browser control acceptance checks.
 Scrubbing, speed controls and difficulty settings remain deferred.
 
 ## Arena interactive replay: complete
@@ -36,8 +36,8 @@ auto-pauses at its end and checks complete final state and pixels.
 Native GPU, actual WASM, browser file controls and focused Rust/JavaScript checks
 pass, including mid-dash/contact origins and historical v1 recordings. See
 [interactive replay and evidence](arena-replay.md). Scrubbing and speed controls
-remain deferred. The work is pushed on `main` at `fb9b1d5`; CI verification is
-part of the current shared replay increment.
+remain deferred. The work is pushed on `main` at `fb9b1d5` with all three CI
+jobs green; [results](replay/arena-ci.json) retain the exact tested revision.
 
 ## Arena mid-run save/load: complete
 

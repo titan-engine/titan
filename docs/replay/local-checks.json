@@ -1,0 +1,141 @@
+{
+  "checks": [
+    {
+      "command": "python3 scripts/test-build-tools.py",
+      "result": "pass:5 tests"
+    },
+    {
+      "command": "python3 scripts/test-starter.py --browser",
+      "result": "pass:external copy native/control/actual-WASM/bridge checks"
+    },
+    {
+      "command": "python3 scripts/test-macos-bundles.py",
+      "result": "pass:relocated starter and arena application bundles"
+    },
+    {
+      "command": "cargo test -p titan-diagnostics --test inspector",
+      "result": "pass:4 tests including session rejection not re-executed"
+    },
+    {
+      "command": "cargo test --manifest-path games/arena/Cargo.toml --all-targets",
+      "result": "pass",
+      "seconds": 1.74
+    },
+    {
+      "command": "cargo fmt --manifest-path games/arena/Cargo.toml -- --check",
+      "result": "pass",
+      "seconds": 0.09
+    },
+    {
+      "command": "cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings",
+      "result": "pass",
+      "seconds": 0.18
+    },
+    {
+      "command": "cargo check -p titan --lib --target wasm32-unknown-unknown",
+      "result": "pass",
+      "seconds": 0.29
+    },
+    {
+      "command": "cargo test --workspace --all-targets",
+      "result": "pass",
+      "seconds": 8.95
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "result": "pass",
+      "seconds": 1.64
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "result": "pass",
+      "seconds": 0.18
+    },
+    {
+      "command": "python3 scripts/test-rpg-replay.py --gpu",
+      "result": "pass: headless and actual native GPU; repeated against final Rust source"
+    },
+    {
+      "command": "python3 scripts/test-control-loop.py",
+      "result": "pass: existing RPG CLI/control/diagnostic behavior"
+    },
+    {
+      "command": "node scripts/test-browser.mjs",
+      "result": "pass: existing real-WASM RPG behavior"
+    },
+    {
+      "command": "node scripts/test-rpg-replay.mjs",
+      "result": "pass: real-WASM replay plus native verification of its exported recording"
+    },
+    {
+      "command": "python3 games/arena/scripts/test-control.py",
+      "result": "pass: native arena v1/v2 snapshot recording regression"
+    },
+    {
+      "command": "python3 games/arena/scripts/test-live-player.py",
+      "result": "pass: actual native arena GPU live playback regression"
+    },
+    {
+      "command": "python3 games/arena/scripts/build-browser.py && node games/arena/scripts/test-browser.mjs",
+      "result": "pass: freshly rebuilt real-WASM arena v1/v2 playback after shared extraction"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    },
+    {
+      "command": "node --test web/play/*.test.mjs web/shared/input.test.mjs web/inspector/bridge.test.mjs",
+      "result": "pass:10 tests, including visible import errors and stale-inspection reset"
+    },
+    {
+      "command": "cargo run --example play_rpg -- --recording docs/replay/rpg-recording.json --frames 2",
+      "result": "pass:2 GPU frames rendered; paused snapshot with1collected shard, hostframe0"
+    },
+    {
+      "command": "cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown",
+      "result": "pass"
+    },
+    {
+      "command": "node --test web/play/*.test.mjs web/shared/input.test.mjs web/inspector/bridge.test.mjs games/arena/web/inspector/bridge.test.mjs games/arena/web/play/*.test.mjs",
+      "result": "pass:26 tests on final source"
+    }
+  ],
+  "rpg_scenario": {
+    "initial": "3 shards; player2,2;inactive shrine",
+    "origin": "after2rightticks:player4,2;1collected;2remaining",
+    "continuation": "down3,right6;9recorded consumedticks",
+    "final_checksum": "f7a298f62ad75c1c",
+    "comparisons": "Full canonical snapshot and checksum match source, interactive playback, and native headless verification of WASM recording."
+  },
+  "review": [
+    {
+      "area": "RPG snapshot validation/load",
+      "finding": "Incoming value and target topology are checked before gameplay mutation. Bounded counting writer validates64KiB; recreation preserves player/shrine handles, recreates bounded remaining shards and refreshes HUD.",
+      "status": "pass"
+    },
+    {
+      "area": "RPG isolated Inspector",
+      "finding": "Replay commands are registered only by RpgSession; standalone Inspector cannot enter playback and bypass cursor or input policy.",
+      "status": "pass"
+    },
+    {
+      "area": "RPG input/clock/completion",
+      "finding": "Scheduled override precedes consumed recording; playback supersedes sampler and preserves exact six-tick cadence. Local pause/resume revise inspector state; completion bumps epoch. Reset/load preserve FixedTime and clear physical/scheduled inputs.",
+      "status": "pass"
+    },
+    {
+      "area": "RPG paused presentation",
+      "finding": "Original successful SetField/spawn_shard path omitted cached RenderFrame refresh. Owner fixed in5ee7418 and added paused-spawn regression.",
+      "status": "fixed and verified"
+    }
+  ],
+  "browser_ui": {
+    "rpg": "Real file chooser loads native-generated9tick midquest recording without control opt-in. Step, restart, resume to9/9 MATCH, shrineactive. Exit preserveshostframe and clears staleinspection, returnsfresh0/3 quest.",
+    "arena": "Fresh WASM build imports retained8tick snapshot recording; actualcanvas reaches8/8 state and image match with inspectionreadonly.",
+    "screenshots": [
+      "rpg-browser-canvas.png",
+      "rpg-browser-controls.png",
+      "arena-browser-controls.png"
+    ]
+  }
+}

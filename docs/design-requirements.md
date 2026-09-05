@@ -22,8 +22,8 @@ chronological decision diary; Git records changes to the design and implementati
 
 Implementation evidence remains separate. The [first ECS UI slice](ui.md) now
 replaces the arena's direct-drawn HUD and adds an RPG quest display; it does not
-claim to implement general layout or typography. The arena also exercises
-[snapshot-backed interactive replay](arena-replay.md) in native and browser
+claim to implement general layout or typography. The RPG and arena exercise
+[shared snapshot-backed interactive replay](replay.md) in native and browser
 players, alongside headless verification. Scrubbing and speed controls remain
 future work.
 

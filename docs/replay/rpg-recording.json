@@ -1,0 +1,132 @@
+{
+  "action_schema": "rpg-buttons-v1:up,down,left,right",
+  "final_checksum": "f7a298f62ad75c1c",
+  "final_snapshot": {
+    "collected_shards": 3,
+    "format_version": 1,
+    "game_seed": 362007511374,
+    "player": {
+      "x": 10,
+      "y": 5
+    },
+    "shards": [],
+    "shrine": {
+      "x": 10,
+      "y": 5
+    },
+    "shrine_active": true
+  },
+  "final_state": {
+    "collected_shards": 3,
+    "shrine_active": true
+  },
+  "fixed_step_nanos": 16666667,
+  "format_version": 2,
+  "frames": [
+    {
+      "active": [
+        "down"
+      ],
+      "pressed": [
+        "down"
+      ],
+      "released": []
+    },
+    {
+      "active": [
+        "down"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "down"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [
+        "right"
+      ],
+      "released": [
+        "down"
+      ]
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [],
+      "released": []
+    },
+    {
+      "active": [
+        "right"
+      ],
+      "pressed": [],
+      "released": []
+    }
+  ],
+  "game_seed": 362007511374,
+  "initial_snapshot": {
+    "collected_shards": 1,
+    "format_version": 1,
+    "game_seed": 362007511374,
+    "player": {
+      "x": 4,
+      "y": 2
+    },
+    "shards": [
+      {
+        "name": "shard-2",
+        "position": {
+          "x": 4,
+          "y": 5
+        }
+      },
+      {
+        "name": "shard-3",
+        "position": {
+          "x": 8,
+          "y": 5
+        }
+      }
+    ],
+    "shrine": {
+      "x": 10,
+      "y": 5
+    },
+    "shrine_active": false
+  },
+  "invalid_reason": null,
+  "max_ticks": 3600,
+  "recorded_ticks": 9,
+  "start_host_frame": 11,
+  "truncated": false
+}
