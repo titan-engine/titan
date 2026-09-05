@@ -7,7 +7,25 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Arena interactive replay: complete locally
+## Shared replay through the RPG: selected
+
+The user approved pushing the arena replay increment first, then adding RPG
+snapshot-backed replay and extracting shared recording/playback machinery as both
+games adopt it. Verify CI on both pushed revisions; keep coherent local commits
+through implementation and push the completed increment. The first pushed
+revision is `fb9b1d5`; its CI run is
+[33950710706](https://github.com/titan-engine/titan/actions/runs/33950710706).
+
+The RPG acceptance scenario crosses shard collection and shrine activation,
+including a mid-quest snapshot origin. Keep gameplay snapshot contents and
+validation game-owned. Extract reusable bounded recording, consumed input edge
+encoding and playback progression into Titan, then migrate the arena. Preserve
+arena historical recording compatibility and both games' reference pixels.
+Validate both games headlessly and in native/browser playback, including pause,
+step, restart, input isolation, bounded imports and end-of-recording verification.
+Scrubbing, speed controls and difficulty settings remain deferred.
+
+## Arena interactive replay: complete
 
 Snapshot-backed recordings now play in the native and browser arena players,
 with pause, single-step, restart playback, inspection, input isolation and a
@@ -18,8 +36,8 @@ auto-pauses at its end and checks complete final state and pixels.
 Native GPU, actual WASM, browser file controls and focused Rust/JavaScript checks
 pass, including mid-dash/contact origins and historical v1 recordings. See
 [interactive replay and evidence](arena-replay.md). Scrubbing and speed controls
-remain deferred. The work is in coherent local commits on `main`; the user is
-monitoring CI and no push was requested for this increment.
+remain deferred. The work is pushed on `main` at `fb9b1d5`; CI verification is
+part of the current shared replay increment.
 
 ## Arena mid-run save/load: complete
 
