@@ -333,7 +333,10 @@ mod native {
                             return;
                         }
                     }
-                    if key == KeyCode::Escape && event.state == ElementState::Pressed {
+                    if key == KeyCode::Escape
+                        && event.state == ElementState::Pressed
+                        && !event.repeat
+                    {
                         event_loop.exit();
                         return;
                     }
@@ -555,6 +558,50 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn idempotent_pause_cancels_native_pointer_before_motion_and_release() {
+            let mut app = game::build_game();
+            app.update_schedule(Startup);
+            let inspector = game::inspector_with_capture(
+                InspectionConfig::controlled("native-test", "rpg"),
+                |app| titan_diagnostics::png_capture(&game::render_image(app.world())?),
+            );
+            let session = RpgSession::new(app, inspector, true);
+            let mut player = Player {
+                clock_epoch: session.clock_epoch(),
+                session,
+                queue: None,
+                stopped: Arc::new(AtomicBool::new(false)),
+                started: Instant::now(),
+                duration: None,
+                held_keys: HashSet::new(),
+                pointer: Some((5.0, 5.0)),
+                pointer_down: true,
+                shift: false,
+                window: None,
+                renderer: None,
+                previous: Instant::now(),
+                accumulated: Duration::from_millis(12),
+                rendered: 0,
+                limit: None,
+                error: None,
+                last_title: String::new(),
+            };
+            assert!(player.session.paused());
+            player.session.journal_pointer(Some((5, 5)), true);
+            player.session.pause();
+            player.sync_clock();
+            assert!(!player.pointer_down);
+            assert_eq!(player.accumulated, Duration::ZERO);
+            // A motion sample uses the host's synchronized held state. It must
+            // not recreate the canceled press before the physical release.
+            player
+                .session
+                .journal_pointer(Some((5, 5)), player.pointer_down);
+            player.session.journal_pointer(Some((5, 5)), false);
+            assert!(!player.session.journal_open());
+        }
 
         #[test]
         fn recording_reader_rejects_non_files_and_oversized_files() {

@@ -481,10 +481,10 @@ fn set_paused(app: &mut App, paused: bool) {
         return;
     }
     journal::cancel(app.world_mut());
-    if app.world().resource::<Control>().unwrap().paused != paused {
-        app.world_mut().resource_mut::<Control>().unwrap().paused = paused;
-        reset_input(app);
-    }
+    app.world_mut().resource_mut::<Control>().unwrap().paused = paused;
+    // Even an idempotent pause/resume cancels gestures. Hosts must discard
+    // their still-held physical source before the next pointer-move sample.
+    reset_input(app);
 }
 
 pub struct RpgSession {
@@ -585,17 +585,15 @@ impl RpgSession {
         self.input.cancel_action(name)
     }
     pub fn pause(&mut self) {
-        if !self.paused() {
-            self.inspector.note_external_change();
-        }
         set_paused(&mut self.app, true);
+        self.inspector.note_external_change();
         self.clear_input();
         self.inspector.set_controlled(true);
     }
     pub fn resume(&mut self) {
-        let before = self.paused();
+        let epoch = self.clock_epoch();
         set_paused(&mut self.app, false);
-        if before != self.paused() {
+        if epoch != self.clock_epoch() {
             self.inspector.note_external_change();
         }
         self.clear_input();
