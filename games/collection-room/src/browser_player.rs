@@ -140,6 +140,8 @@ impl BrowserPlayer {
     pub fn status(&self) -> String {
         let mut status = game::status(self.session.app());
         status["playback"] = self.session.replay_status();
+        status["adapter"] =
+            serde_json::Value::String(format!("{:?}", self.renderer.adapter_info()));
         status["surface"] =
             serde_json::json!({"suspended":self.renderer.suspended(),"size":self.renderer.size()});
         status.to_string()
