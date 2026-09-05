@@ -30,8 +30,9 @@ Start with what you want to do. Titan is early in development; the
 - [Current implementation overview](handoff.md).
 - [First sound exercise proposal](audio-exercise.md) — pickup cue, playback lifetime
   and device-free verification; audio is not implemented.
-- [Parallel ECS executor](executor.md), [swarm measurements](swarm.md), and
-  [sparse component retention](sparse-churn.md).
+- [Parallel ECS executor](executor.md), [swarm measurements](swarm.md),
+  [sparse component retention](sparse-churn.md), and
+  [mixed-schedule overhead measurements](executor-overhead.md).
 - [Milestone notes](releases/v0.4.0.md) — the v0.4.0 snapshot; later work is
   described by the current guides and merged PRs.
 
@@ -55,6 +56,7 @@ for current instructions; measurements and environments describe specific runs.
 - [Arena development exercise](arena-exercise.md), [verification](arena-verification.md),
   and [snapshot verification](arena-save-load.md).
 - [Host setup audit](host-setup-audit.md) and [workflow verification](host-workflow-verification.md).
+- [ECS-only subsystem boundary audit](subsystem-audit/README.md).
 - [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
 
 - [Inspection failure repair evidence](inspection-repair/README.md).
