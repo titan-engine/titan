@@ -20,7 +20,7 @@ The release commit `cebefc3` passed all three jobs in
 At release completion, remote `main` and the pushed annotated `v0.4.0` tag
 resolved to that revision.
 See [release notes](releases/v0.4.0.md) and [next-task context](handoff.md).
-The next approved exercise is the RPG quest journal below.
+The subsequent journal and file-backed sprite exercises are documented below.
 
 ## RPG quest journal: complete
 
@@ -42,12 +42,28 @@ GitHub Actions records CI for each pushed revision; verify the exact revision
 when continuing. No release
 or package version bump is part of this exercise.
 
-File-backed assets remain the next candidate, not selected work. Embedded PNG
-bytes would mainly exercise decoding into `Image`; loose-file delivery also
-requires native/browser packaging, readiness and failure policy. Consult the
-[asset vision](vision.md#rendering-and-assets) and requirements R2.57–62 before
-selecting that work. Parallel scheduling needs a representative workload and
-measurements; replay scrubbing/speed controls remain deferred.
+## File-backed RPG player sprite: complete locally
+
+The approved exercise loads the exact existing player sprite from a loose PNG in
+native, browser and headless hosts. A default-enabled optional engine decoder
+converts bounded static PNG data into the same `Image` used by procedural art.
+Hosts own startup readiness, path/fetch failures and explicit retry. Shared build
+tooling delivers browser resources and relocatable macOS bundle resources.
+Replacing the file and restarting/reloading changes pixels without recompilation.
+
+Restart, snapshots and playback retain the startup image; fresh verifiers load
+matching art and reject a different final checksum. Native/browser/headless
+acceptance covers replacements and failures. The committed PNG reproduces the
+reference exactly, including GPU/software open and closed journal comparison.
+See [asset boundaries, commands and evidence](assets.md).
+
+The next feature is not selected. Hot reload, asset dependency/identity management,
+generation caching, other formats and the eventual native format remain pending.
+Consult the [asset vision](vision.md#rendering-and-assets) and requirements
+R2.57–62 before extending this slice. Parallel scheduling needs a representative
+workload and measurements; replay scrubbing/speed controls remain deferred.
+Keep frequent local commits, complete review and local gates, then push a batch
+and verify that exact revision in CI. No tag or package bump is part of this work.
 
 ## Shared replay through the RPG: complete
 
@@ -112,8 +128,8 @@ the [documented boundary](save-load.md); automatic parallel scheduling with
 configurable determinism/throughput policy; replay scrubbing and speed controls;
 the full generated/file-backed asset model and eventual native asset format;
 and the longer-term rendering and multiplayer directions in the vision. The arena
-exercises snapshots and interactive/headless replay; procedural demo assets do
-not establish completion of the broader asset requirements. These remain
+exercises snapshots and interactive/headless replay; the single PNG loading
+exercise does not establish completion of the broader asset requirements. These remain
 retained commitments.
 
 ## Entity-based UI: complete locally
@@ -186,8 +202,8 @@ validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
 The next objective does not yet schedule editor, 3D, networking, scene format,
-asset pipeline, parallel executor, or broad reflection redesign work. This is a
-scheduling boundary, not a revision of the agreed vision. Use the fixed
+broader asset pipeline, parallel executor, or broad reflection redesign work.
+This is a scheduling boundary, not a revision of the agreed vision. Use the fixed
 arena view unless the game demonstrates a camera requirement. Keep current
 platform limitations documented rather than expanding platform scope.
 
@@ -207,8 +223,14 @@ and actual-WASM control loops:
 python3 scripts/test-control-loop.py
 python3 scripts/build-browser.py
 node scripts/test-browser.mjs
-node --test web/inspector/bridge.test.mjs
-node --test web/shared/input.test.mjs
+node --test web/inspector/*.test.mjs
+node --test web/shared/*.test.mjs
+node --test web/play/*.test.mjs
+python3 scripts/test-rpg-replay.py # add --gpu on desktop
+node scripts/test-rpg-replay.mjs
+python3 scripts/test-rpg-assets.py # add --gpu on macOS
+node scripts/test-rpg-assets.mjs
+cargo check -p titan --lib --no-default-features
 ```
 
 Preserve CI coverage for the starter and both games. Run

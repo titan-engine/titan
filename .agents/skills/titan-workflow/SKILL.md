@@ -43,6 +43,12 @@ Build the native control tools with:
 cargo build -p titan-cli -p titan --bin titan --example procedural_rpg
 ```
 
+The RPG hosts load `assets/player.png` at startup. Use `--assets-dir DIR` for
+another directory or `--generated-assets` for the procedural comparison. In-game
+restart retains loaded art. See `docs/assets.md` for browser copies, bundle lookup,
+startup diagnostics and image-aware replay verification. Native bundle inspection
+uses `python3 scripts/build-rpg-app.py` and its printed absolute path.
+
 Launch a bounded paused game in a separate process:
 
 ```sh

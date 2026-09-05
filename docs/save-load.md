@@ -1,5 +1,10 @@
 # Save/load boundary
 
+The RPG's [file-backed player image](assets.md) is retained from startup across
+snapshot loading and restart. Snapshots do not serialize its bytes; a fresh host
+loads its configured image before restoring game state. Replay additionally
+checks final pixels, so it requires matching art.
+
 Early save/load and serialization design is an agreed requirement
 ([R1.47](design-requirements.md)); making every inspectable type serializable is
 still undecided ([R2.25](design-requirements.md)). This document establishes the

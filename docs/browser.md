@@ -1,5 +1,10 @@
 # Browser inspection
 
+RPG pages fetch `../assets/player.png` before constructing their runtime/player.
+The browser build copies root `assets/` into `web/assets`; replace the served file
+and reload to change art without rebuilding WASM. Startup failures expose Retry
+and no playable world. See [asset behavior](assets.md) for limits and replay rules.
+
 The browser adapter runs the same procedural RPG as the native example, using
 `examples/support/procedural_rpg.rs`. It executes the same protocol envelopes
 through a synchronous WASM call. No simulation tick runs between requests.

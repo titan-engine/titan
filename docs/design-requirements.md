@@ -27,7 +27,10 @@ journal](journal.md) exercises explicit column placement, bounded bitmap text an
 scoped keyboard focus. The RPG and arena exercise
 [shared snapshot-backed interactive replay](replay.md) in native and browser
 players, alongside headless verification. Scrubbing and speed controls remain
-future work.
+future work. The [file-backed sprite exercise](assets.md) verifies shared
+procedural/decoded image consumption, loose-file delivery and bounded startup
+failures. It covers one image path within R2.57–62; broader asset requirements
+remain pending.
 
 ## Round one: product and initial scope
 

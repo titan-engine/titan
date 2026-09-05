@@ -1,5 +1,9 @@
 # Interactive rendering
 
+The RPG player now loads a loose PNG at startup into the same engine `Image` as
+procedural art. See [asset limits and iteration](assets.md) for native paths,
+browser copies, bundle resources and the explicit procedural comparison.
+
 Titan renders the same procedural RPG through an exact software renderer and a
 GPU sprite pipeline. The native and browser players use the same game builder,
 assets, fixed-tick simulation, and input sampling helper.

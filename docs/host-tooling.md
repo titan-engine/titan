@@ -11,10 +11,18 @@ own browser pages, binding names, application names and bundle IDs.
   package's single cdylib for release WASM, resolves the matching wasm-bindgen
   CLI, and writes web bindings to `root/web/inspector/pkg` and Node bindings to
   Cargo's `target_directory/titan/browser-node`.
-- `macos_app(root, metadata, argv=None)` parses the documented `--bin`, `--name`,
+- `macos_app(root, metadata, argv=None)` parses the documented `--bin` or `--example`, `--name`,
   `--bundle-id` and `--release` flags and packages Cargo's reported binary path.
   It prints the absolute unsigned development `.app` path. Signing,
   notarization and distribution remain outside this helper.
+
+Both helpers accept `assets_source=Path(...)`. If omitted, an existing
+`root/assets` is used; projects without one need no resources. An explicit missing
+source fails. Regular files are staged into `web/assets` or
+`Contents/Resources/assets`; successful builds replace that generated directory.
+Symlinks and source/output overlap are rejected. Root RPG wrappers explicitly
+require `assets/`; `scripts/build-rpg-app.py` selects the `play_rpg` example.
+See [RPG asset iteration](assets.md) for resource lookup and replacement rules.
 
 Each copied game's `scripts/titan_tools.py` locates the helper using the resolved
 `titan` package's manifest path. Configure normal Cargo dependency paths after

@@ -1,5 +1,10 @@
 # RPG snapshots and interactive replay
 
+File-backed hosts retain the startup player image through playback and resets.
+Fresh native verification accepts `--assets-dir DIR` and must use the same image;
+different art fails final pixel verification. Recordings do not embed PNG bytes.
+See [asset loading](assets.md) for default paths and the procedural comparison.
+
 The RPG and arena both use [Titan's shared replay primitives](replay.md).
 The RPG keeps its own snapshot schema and validation for player/shrine position,
 remaining collectible shards, quest progress and shrine activation.
