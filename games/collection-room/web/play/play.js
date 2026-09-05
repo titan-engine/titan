@@ -24,7 +24,8 @@ byId('play').onclick = async () => {
   byId('play').disabled = true;
   try {
     await init();
-    player = await BrowserPlayer.create(canvas, backend);
+    let timer;
+    try { player = await Promise.race([BrowserPlayer.create(canvas, backend), new Promise((_, reject) => { timer = setTimeout(() => reject(Error("GPU initialization exceeded 60 seconds")), 60000); })]); } finally { clearTimeout(timer); }
     player.set_control_enabled(byId('control').checked);
     for (const id of ['pause','step','restart','replay','export','import']) byId(id).disabled = false;
     resize(); player.resume(); canvas.focus();

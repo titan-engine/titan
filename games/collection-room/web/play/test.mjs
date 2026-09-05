@@ -4,8 +4,8 @@ const backend=new URL(location.href).searchParams.get('backend')??'webgpu';
 const checks=[];
 const check=(value,message)=>{if(!value)throw Error(message);checks.push(message);};
 const canvas=document.querySelector('canvas');
-let player;
-const deadline=setTimeout(()=>{result.textContent=JSON.stringify({status:'failed',backend,error:'60-second browser deadline expired; reload to discard session',checks});},60000);
+let player, timedOut=false;
+const deadline=setTimeout(()=>{timedOut=true;result.textContent=JSON.stringify({status:'failed',backend,error:'60-second browser deadline expired; reload to discard session',checks});},60000);
 try {
  await init(); player=await BrowserPlayer.create(canvas,backend);
  const state=()=>JSON.parse(player.status());
@@ -39,6 +39,7 @@ try {
  player.restart();check(state().session_tick===0&&state().collected===0&&!state().playback.active,'restart clears progress and playback');
  player.replay_route();player.resume();for(let i=0;i<44;i++)player.frame(1000/60+0.000001);
  let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
+ if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
  result.textContent=JSON.stringify({status:'passed',backend,checks,live,replay,final:state()},null,2);
 } catch(error){result.textContent=JSON.stringify({status:'failed',backend,error:String(error),checks},null,2);}
 finally{clearTimeout(deadline);}
