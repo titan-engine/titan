@@ -4,7 +4,8 @@
 //! data, and calls [`append_ui`] from its frame extractor. Add [`UiButton`] to
 //! make a node consume primary-pointer gestures. Games own button actions and
 //! update schedules; hosts own pointer IDs and surface-coordinate mapping.
-//! There is no implicit layout, wrapping, parenting, focus traversal or clipping.
+//! Column layout, bounded wrapping and explicit-scope focus are opt-in. Games
+//! own modal input routing; there is no implicit parenting or clipping.
 
 use std::collections::BTreeMap;
 
@@ -57,6 +58,8 @@ impl UiNode {
 pub struct UiText {
     pub text: String,
     pub color: Color,
+    /// Wrap words and limit lines to the node bounds using font spacing cells.
+    pub wrap: bool,
 }
 
 impl UiText {
@@ -64,12 +67,127 @@ impl UiText {
         Self {
             text: text.into(),
             color: Color::WHITE,
+            wrap: false,
         }
+    }
+
+    /// Opts into word wrapping and whole-line truncation at the node bounds.
+    pub const fn with_wrap(mut self) -> Self {
+        self.wrap = true;
+        self
     }
 
     pub const fn with_color(mut self, color: Color) -> Self {
         self.color = color;
         self
+    }
+}
+
+/// Explicit fixed-pixel vertical layout. Each allocated node advances the cursor;
+/// games decide which nodes participate (including whether hidden nodes take space).
+#[derive(Clone, Copy, Debug)]
+pub struct UiColumn {
+    x: i32,
+    y: i64,
+    width: u32,
+    gap: u32,
+}
+
+impl UiColumn {
+    pub const fn new(x: i32, y: i32, width: u32, gap: u32) -> Self {
+        Self {
+            x,
+            y: y as i64,
+            width,
+            gap,
+        }
+    }
+
+    /// Allocates a node, saturating coordinates if the column exceeds i32 space.
+    pub fn next_node(&mut self, height: u32) -> UiNode {
+        let node = UiNode::new(
+            self.x,
+            self.y.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+            self.width,
+            height,
+        );
+        self.y = self
+            .y
+            .saturating_add(i64::from(height) + i64::from(self.gap));
+        node
+    }
+}
+
+/// Extents in font spacing cells, including the final cell's trailing spacing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UiTextMeasurement {
+    pub width: u32,
+    pub height: u32,
+    pub lines: u32,
+    pub truncated: bool,
+}
+
+/// Focus within an explicit game-owned ordered list of buttons. Navigation wraps;
+/// hidden, disabled, zero-size and removed targets are skipped. Call on key edges.
+#[derive(Default, Debug)]
+pub struct UiFocus {
+    focused: Option<Entity>,
+}
+
+impl UiFocus {
+    pub fn focused(&self) -> Option<Entity> {
+        self.focused
+    }
+
+    pub fn clear(&mut self) {
+        self.focused = None;
+    }
+
+    fn eligible(world: &World, scope: &[Entity], entity: Entity) -> bool {
+        scope.contains(&entity)
+            && world
+                .get::<UiNode>(entity)
+                .is_some_and(|node| node.visible && node.width > 0 && node.height > 0)
+            && world
+                .get::<UiButton>(entity)
+                .is_some_and(|button| button.enabled)
+    }
+
+    /// Sets focus for a pointer selection or initial modal focus.
+    pub fn set(&mut self, world: &World, scope: &[Entity], entity: Entity) -> bool {
+        self.focused = Self::eligible(world, scope, entity).then_some(entity);
+        self.focused.is_some()
+    }
+
+    pub fn navigate(&mut self, world: &World, scope: &[Entity], backwards: bool) -> Option<Entity> {
+        let eligible: Vec<_> = scope
+            .iter()
+            .copied()
+            .filter(|entity| Self::eligible(world, scope, *entity))
+            .collect();
+        self.focused = if eligible.is_empty() {
+            None
+        } else {
+            let current = self
+                .focused
+                .and_then(|entity| eligible.iter().position(|candidate| *candidate == entity));
+            let index = match (current, backwards) {
+                (Some(index), true) => (index + eligible.len() - 1) % eligible.len(),
+                (Some(index), false) => (index + 1) % eligible.len(),
+                (None, true) => eligible.len() - 1,
+                (None, false) => 0,
+            };
+            Some(eligible[index])
+        };
+        self.focused
+    }
+
+    /// Validates again at activation, clearing stale focus instead of acting.
+    pub fn activate(&mut self, world: &World, scope: &[Entity]) -> Option<Entity> {
+        self.focused = self
+            .focused
+            .filter(|entity| Self::eligible(world, scope, *entity));
+        self.focused
     }
 }
 
@@ -165,6 +283,70 @@ impl BitmapFont {
         Self::new(glyphs, 4, 7)
     }
 
+    /// Measures the same bounded layout used by `UiText::with_wrap`.
+    /// Whitespace separates words; explicit newlines preserve empty lines. Long
+    /// words split across cells. Widths smaller than one advance show no text.
+    /// Custom glyph images should fit within their font spacing cells.
+    pub fn measure_wrapped(&self, text: &str, width: u32, height: u32) -> UiTextMeasurement {
+        self.wrapped(text, width, height).1
+    }
+
+    fn wrapped(&self, text: &str, width: u32, height: u32) -> (Vec<String>, UiTextMeasurement) {
+        let columns = (width / self.advance) as usize;
+        let max_lines = (height / self.line_height) as usize;
+        if text.is_empty() {
+            return (Vec::new(), UiTextMeasurement::default());
+        }
+        if columns == 0 || max_lines == 0 {
+            return (
+                Vec::new(),
+                UiTextMeasurement {
+                    truncated: true,
+                    ..Default::default()
+                },
+            );
+        }
+        let mut lines = Vec::new();
+        for paragraph in text.split('\n') {
+            let mut line = String::new();
+            let mut count: usize = 0;
+            for word in paragraph.split_whitespace() {
+                let word_len = word.chars().count();
+                if count > 0 && count.saturating_add(1).saturating_add(word_len) > columns {
+                    lines.push(std::mem::take(&mut line));
+                    count = 0;
+                }
+                if count > 0 {
+                    line.push(' ');
+                    count += 1;
+                }
+                for character in word.chars() {
+                    if count == columns {
+                        lines.push(std::mem::take(&mut line));
+                        count = 0;
+                    }
+                    line.push(character);
+                    count += 1;
+                }
+            }
+            lines.push(line);
+        }
+        let truncated = lines.len() > max_lines;
+        lines.truncate(max_lines);
+        let measurement = UiTextMeasurement {
+            width: lines
+                .iter()
+                .map(|line| line.chars().count() as u32)
+                .max()
+                .unwrap_or(0)
+                .saturating_mul(self.advance),
+            height: (lines.len() as u32).saturating_mul(self.line_height),
+            lines: lines.len() as u32,
+            truncated,
+        };
+        (lines, measurement)
+    }
+
     pub fn glyph(&self, character: char) -> Option<ImageId> {
         self.glyphs.get(&character).copied()
     }
@@ -172,20 +354,41 @@ impl BitmapFont {
 
 /// Appends renderer-neutral glyph sprites without creating or mutating entities.
 /// Missing fonts yield no text. Missing image assets remain renderer errors.
-/// Newlines advance one font line; there is no wrapping or bounds clipping.
+/// Newlines advance one font line. Opt-in wrapping uses whole font spacing cells;
+/// default text retains unbounded rendering. No per-pixel clipping is applied.
 pub fn append_ui(world: &World, frame: &mut RenderFrame) {
+    append_ui_filtered(world, frame, |_| true);
+}
+
+/// Appends only selected entities, for game-owned alternate views such as a
+/// canonical replay capture. This does not change live visibility or UI state.
+pub fn append_ui_filtered(
+    world: &World,
+    frame: &mut RenderFrame,
+    include: impl Fn(Entity) -> bool,
+) {
     let Some(font) = world.resource::<BitmapFont>() else {
         return;
     };
     let mut nodes: Vec<_> = world
         .iter2::<UiNode, UiText>()
-        .filter(|(_, node, _)| node.visible)
+        .filter(|(entity, node, _)| node.visible && include(*entity))
         .collect();
     nodes.sort_by_key(|(entity, node, _)| (node.layer, node.order, *entity));
     for (_, node, text) in nodes {
         let mut x = i64::from(node.x);
         let mut y = i64::from(node.y);
-        for character in text.text.chars() {
+        let wrapped;
+        let content = if text.wrap {
+            wrapped = font
+                .wrapped(&text.text, node.width, node.height)
+                .0
+                .join("\n");
+            wrapped.as_str()
+        } else {
+            &text.text
+        };
+        for character in content.chars() {
             if character == '\n' {
                 x = i64::from(node.x);
                 y = y.saturating_add(i64::from(font.line_height));
@@ -379,6 +582,14 @@ pub fn register_ui_inspection(inspector: &mut Inspector) -> Result<&mut Inspecto
         field("String", "Displayed text"),
         |text| text.text.clone(),
     )?;
+    inspector.register_read_only_field::<UiText, bool>(
+        "wrap",
+        field(
+            "bool",
+            "Word wrap and truncate to whole font cells in node bounds",
+        ),
+        |text| text.wrap,
+    )?;
     inspector.register_read_only_field::<UiText, [u8; 4]>(
         "color",
         field("[u8; 4]", "Straight-alpha RGBA text tint"),
@@ -411,6 +622,79 @@ mod tests {
 
     fn button(world: &mut World, node: UiNode) -> Entity {
         world.spawn_with((node, UiButton::default()))
+    }
+
+    #[test]
+    fn column_resolves_rectangles_and_saturates_large_positions() {
+        let mut column = UiColumn::new(8, 10, 40, 3);
+        assert_eq!(column.next_node(7), UiNode::new(8, 10, 40, 7));
+        assert_eq!(column.next_node(14), UiNode::new(8, 20, 40, 14));
+        let mut huge = UiColumn::new(-1, i32::MAX, u32::MAX, u32::MAX);
+        huge.next_node(u32::MAX);
+        assert_eq!(huge.next_node(1).y, i32::MAX);
+    }
+
+    #[test]
+    fn wrapping_measures_exact_rendered_lines_and_truncates_overflow() {
+        let mut assets = ImageAssets::new();
+        let font = BitmapFont::tiny(&mut assets);
+        assert_eq!(font.wrapped("AB CD", 12, 14).0, ["AB", "CD"]);
+        assert_eq!(font.wrapped("ABCDE", 12, 14).0, ["ABC", "DE"]);
+        assert_eq!(font.wrapped("A\n\nB", 12, 21).0, ["A", "", "B"]);
+        assert_eq!(
+            font.measure_wrapped("AB CD", 12, 7),
+            UiTextMeasurement {
+                width: 8,
+                height: 7,
+                lines: 1,
+                truncated: true
+            }
+        );
+        assert!(font.measure_wrapped("A", 3, 7).truncated);
+        assert!(font.measure_wrapped("A", 4, 6).truncated);
+        assert_eq!(font.measure_wrapped("", 0, 0), UiTextMeasurement::default());
+        let mut world = World::new();
+        world.insert_resource(font);
+        let target = world.spawn_with((
+            UiNode::new(2, 3, 12, 14),
+            UiText::new("AB CD EF").with_wrap(),
+        ));
+        let mut frame = RenderFrame::new(20, 20, Color::BLACK);
+        append_ui(&world, &mut frame);
+        assert_eq!(frame.sprites().len(), 4);
+        assert_eq!((frame.sprites()[2].x, frame.sprites()[2].y), (2, 10));
+        let mut excluded = RenderFrame::new(20, 20, Color::BLACK);
+        append_ui_filtered(&world, &mut excluded, |entity| entity != target);
+        assert!(excluded.sprites().is_empty());
+        assert!(world.get::<UiNode>(target).unwrap().visible);
+    }
+
+    #[test]
+    fn focus_obeys_explicit_order_and_skips_invalid_targets() {
+        let mut world = World::new();
+        let a = button(&mut world, UiNode::new(0, 0, 10, 7));
+        let b = button(&mut world, UiNode::new(0, 10, 10, 7));
+        let c = button(&mut world, UiNode::new(0, 20, 10, 7));
+        let outside = button(&mut world, UiNode::new(0, 30, 10, 7));
+        let scope = [c, a, b];
+        let mut focus = UiFocus::default();
+        assert_eq!(focus.navigate(&world, &scope, false), Some(c));
+        assert_eq!(focus.navigate(&world, &scope, true), Some(b));
+        world.get_mut::<UiButton>(b).unwrap().enabled = false;
+        assert_eq!(focus.activate(&world, &scope), None);
+        assert_eq!(focus.navigate(&world, &scope, true), Some(a));
+        world.get_mut::<UiNode>(c).unwrap().visible = false;
+        assert_eq!(focus.navigate(&world, &scope, false), Some(a));
+        assert!(!focus.set(&world, &scope, outside));
+        assert!(focus.set(&world, &scope, a));
+        world.despawn(a);
+        assert_eq!(focus.activate(&world, &scope), None);
+        assert_eq!(focus.navigate(&world, &scope, false), None);
+        world.get_mut::<UiButton>(b).unwrap().enabled = true;
+        assert_eq!(focus.navigate(&world, &scope, false), Some(b));
+        focus.clear();
+        assert_eq!(focus.focused(), None);
+        assert_eq!(focus.activate(&world, &scope), None);
     }
 
     #[test]
