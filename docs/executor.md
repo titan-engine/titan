@@ -57,6 +57,8 @@ missing-resource prefixes, deferred failure order and joined panic propagation.
 Library tests retain sequential/default behavior and resource error coverage.
 Swarm checks both policies against a closed-form oracle and historical checksums;
 [measurements](swarm.md#comparing-executor-policies) record small-workload overhead.
+The [mixed-schedule fixture](executor-overhead.md) separates compatible systems,
+uneven costs, conflicts, and command barriers across several thread limits.
 
 Local verification on 2026-09-05 passed workspace tests and strict Clippy,
 formatting, procedural-only core and WASM core checks. Native and actual-WASM
