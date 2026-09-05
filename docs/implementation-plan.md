@@ -15,19 +15,22 @@ in native and browser players and expose the same action through deterministic
 input. Keep rules and presentation game-owned; change the engine only for a
 demonstrated limitation.
 
-Execution:
+Implementation is committed in `de60f84`. All 21 local gates passed, including
+native/actual-WASM dash scenarios, unchanged no-dash survival semantics, GPU
+readback and standalone/relocated bundle checks. Independent game and host
+reviews found no actionable issues. Computer Use verified native Space input,
+browser keyboard/pointer input, restart, cooldown and the browser winning replay.
+The [dash verification report](arena-dash.md) records reviewed images and timings.
 
-1. Implement dash semantics and focused deterministic tests, including cooldown,
-   bounds, held input, restart and frozen outcomes.
-2. Wire native/browser controls and clear ready/cooldown presentation. Preserve
-   the existing no-dash survival route's semantic results. Review intentional
-   visual changes before updating arena image references.
-3. Exercise native CLI and actual WASM dash scenarios, GPU readback and both
-   playable hosts. Measure edit/build/run/inspect stages with cache and workload
-   context; do not infer clean-build gains from warm timings.
-4. Run the quality gates below, obtain independent review, and record evidence.
-   Commit small coherent increments. Playable user feedback is the final tuning
-   gate; do not claim user acceptance before it occurs.
+Cached game-source rebuild samples were 0.538s native and 1.227s browser;
+inspection roundtrips were about 6ms and captures about 9ms. These are small-game
+incremental samples, not clean-build or general productivity claims. No engine
+API change was required.
+
+Pending: user playtest and feedback on dash distance/cooldown. Tune only in
+response to that feedback or a concrete defect. Commits are local; remote CI
+must be inspected if these increments are subsequently pushed. No next engine
+objective is selected.
 
 Use subagents for implementation and verification to keep coordination compact.
 No crate publication, visibility changes or new tags are authorized. Engine crate
