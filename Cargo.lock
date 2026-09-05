@@ -1948,7 +1948,7 @@ dependencies = [
 
 [[package]]
 name = "titan"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "ctrlc",
  "pollster",
@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "titan-browser"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "png",
@@ -1981,7 +1981,7 @@ dependencies = [
 
 [[package]]
 name = "titan-cli"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "libc",
@@ -1994,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "titan-diagnostics"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "png",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "titan-macros"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -2014,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "titan-protocol"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "titan-remote"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "libc",
  "serde",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "titan-render-wgpu"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "bytemuck",
  "pollster",

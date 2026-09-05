@@ -7,6 +7,18 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
+## Release v0.4.0
+
+The user authorized the next source tag and Cargo version alignment. All eight
+engine workspace packages are now `0.4.0`; standalone arena/starter packages
+remain `0.1.0`. All three tracked lockfiles reflect the local engine versions,
+without third-party dependency updates. Publishing remains disabled, and protocol,
+save and recording format versions are unchanged.
+
+Push the release commit, verify CI for that exact revision, then create and push
+its annotated `v0.4.0` tag. See [release notes](releases/v0.4.0.md) and
+[next-task context](handoff.md). No next feature has been selected.
+
 ## Shared replay through the RPG: complete
 
 Both games now use Titan's bounded snapshot recording, consumed digital input
@@ -98,8 +110,8 @@ exercise above is complete locally. Difficulty settings remain a future possibil
 
 The UI source milestone `v0.3.0` is pushed at `6fc824d`, after
 [CI run 33948720187](https://github.com/titan-engine/titan/actions/runs/33948720187)
-passed that exact revision. Cargo package versions remain `0.1.0`, consistent
-with the earlier source-milestone tags. Save/load commits are on `main` and excluded
+passed that exact revision. Cargo package versions were `0.1.0` at that tag,
+consistent with the earlier source milestones. Save/load commits are on `main` and excluded
 from that tag; no crates were published.
 
 ## Input and live-player inspection: complete
@@ -119,8 +131,8 @@ starter remains externally copyable. No broader application framework was needed
 The user accepted dash playability; its cooldown remains unchanged. Difficulty
 settings are a possible future feature, not selected work. The next engine
 objective was the completed UI exercise above. Remote CI remains a gate if these local commits are pushed.
-No crate publication, visibility changes or new tags are authorized. Engine crate
-versions remain 0.1.0.
+That increment did not publish crates or change package versions. The later
+`v0.4.0` release alignment is documented above.
 
 ## Completed host consolidation
 

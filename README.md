@@ -15,6 +15,9 @@ are not distributed through crates.io.
 *The example RPG uses generated pixel art and the same game code for native,
 browser, and headless runs. [Before/after evidence](docs/art-iteration/README.md).*
 
+Current milestone: **v0.4.0**, with matching engine crate versions.
+[Release notes](docs/releases/v0.4.0.md).
+
 ## Try the demo
 
 Install current stable Rust with Cargo. The project is tested locally with Rust
