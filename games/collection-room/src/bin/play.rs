@@ -25,7 +25,7 @@ mod native {
         },
     };
     use titan_collection_room::{game, player::PlayerSession};
-    use titan_protocol::RunMode;
+    use titan_protocol::{Request, RequestEnvelope, ResponseOutcome, RunMode};
     use titan_remote::{RequestQueue, Server, ServerConfig};
     use titan_render_wgpu::{SurfaceRenderer3d, wgpu};
     use winit::{
@@ -36,8 +36,62 @@ mod native {
         keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowId},
     };
+    /// Automatic launch is a one-shot host policy, consumed only by a ready,
+    /// focused window. Later focus gains never undo a pause.
+    struct StartupFocus {
+        pending: bool,
+        focused: bool,
+    }
+    impl StartupFocus {
+        fn new(automatic: bool) -> Self {
+            Self {
+                pending: automatic,
+                focused: false,
+            }
+        }
+        fn focus(&mut self, focused: bool, session: &mut PlayerSession) {
+            self.focused = focused;
+            if !focused {
+                if self.pending {
+                    session.clear_input();
+                } else {
+                    session.pause();
+                }
+            }
+        }
+        fn ready(&mut self, session: &mut PlayerSession) {
+            if self.pending && self.focused {
+                self.pending = false;
+                session.resume();
+            }
+        }
+        fn dispatch(&mut self, session: &mut PlayerSession, request: &RequestEnvelope) -> Dispatch {
+            let epoch = session.clock_epoch();
+            let result = session.dispatch(request);
+            let write = matches!(
+                request.request,
+                Request::Invoke { .. }
+                    | Request::Step { .. }
+                    | Request::InjectInput { .. }
+                    | Request::SetField { .. }
+            );
+            let accepted = matches!(&result, Dispatch::Ready(response)
+                if matches!(response.outcome, ResponseOutcome::Success { .. }));
+            // Accepted controls express deliberate intent even when they leave
+            // the clock unchanged (e.g. a paused step or queued input).
+            if (write && accepted) || epoch != session.clock_epoch() {
+                self.cancel();
+            }
+            result
+        }
+        fn cancel(&mut self) {
+            self.pending = false;
+        }
+    }
     struct Player {
         session: PlayerSession,
+        startup: StartupFocus,
+        trace_focus: bool,
         captures: titan_collection_room::capture::CaptureQueue,
         queue: Option<RequestQueue>,
         stopped: Arc<AtomicBool>,
@@ -59,6 +113,7 @@ mod native {
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut verify_surface_lifecycle = false;
+        let mut trace_focus = false;
         let (mut limit, mut duration, mut recording) = (None, None, None);
         let (mut inspect, mut allow_control, mut configured, mut start_paused) =
             (false, false, false, false);
@@ -79,6 +134,7 @@ mod native {
                     recording = Some(args.next().ok_or("--recording requires a JSON path")?);
                 }
                 "--paused" => start_paused = true,
+                "--trace-focus" => trace_focus = true,
                 "--verify-surface-lifecycle" => verify_surface_lifecycle = true,
                 "--inspect" => inspect = true,
                 "--allow-control" => {
@@ -95,7 +151,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--trace-focus] [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -123,12 +179,11 @@ mod native {
             RunMode::Interactive,
             allow_control,
         );
+        let automatic = recording.is_none() && !start_paused;
         if let Some(path) = recording {
             session
                 .load_replay(read_recording(Path::new(&path))?)
                 .map_err(|e| e.message)?;
-        } else if !start_paused {
-            session.resume();
         }
         let captures = titan_collection_room::capture::CaptureQueue::install(&mut session);
         let stopped = Arc::new(AtomicBool::new(false));
@@ -154,6 +209,8 @@ mod native {
         let epoch = session.clock_epoch();
         let mut player = Player {
             session,
+            startup: StartupFocus::new(automatic),
+            trace_focus,
             captures,
             queue,
             stopped,
@@ -294,6 +351,10 @@ mod native {
                             .map_err(|e| e.to_string())?,
                     ),
                 };
+                self.startup.focused = window.has_focus();
+                if self.trace_focus {
+                    eprintln!("startup focus: created focused={}", window.has_focus());
+                }
                 let size = window.inner_size();
                 let instance =
                     wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
@@ -356,7 +417,7 @@ mod native {
             if let Some(queue) = &self.queue {
                 queue.drain_with_reply(|request, reply| {
                     let started = Instant::now();
-                    let dispatch = self.session.dispatch(request);
+                    let dispatch = self.startup.dispatch(&mut self.session, request);
                     if let Some((device, queue)) = &self.capture_device {
                         self.captures.start(device.clone(), queue.clone());
                     }
@@ -386,6 +447,15 @@ mod native {
             }
         }
         fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+            if self.trace_focus
+                && let WindowEvent::Focused(focused) = &event
+            {
+                eprintln!(
+                    "startup focus: event={focused} paused={} rendered={}",
+                    self.session.paused(),
+                    self.rendered
+                );
+            }
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::Resized(size) => {
@@ -398,8 +468,8 @@ mod native {
                     self.session.clear_input();
                     self.reset_clock();
                 }
-                WindowEvent::Focused(false) => {
-                    self.session.pause();
+                WindowEvent::Focused(focused) => {
+                    self.startup.focus(focused, &mut self.session);
                     self.reset_clock();
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
@@ -414,6 +484,7 @@ mod native {
                                 return;
                             }
                             KeyCode::KeyP => {
+                                self.startup.cancel();
                                 if self.session.paused() {
                                     self.session.resume()
                                 } else {
@@ -423,6 +494,7 @@ mod native {
                                 return;
                             }
                             KeyCode::KeyN => {
+                                self.startup.cancel();
                                 if self.session.paused() {
                                     if let Err(e) = self.session.step() {
                                         eprintln!("step: {}", e.message);
@@ -432,11 +504,13 @@ mod native {
                                 return;
                             }
                             KeyCode::KeyR => {
+                                self.startup.cancel();
                                 self.session.restart();
                                 self.sync_clock();
                                 return;
                             }
                             KeyCode::KeyL => {
+                                self.startup.cancel();
                                 self.session.stop_replay();
                                 self.sync_clock();
                                 return;
@@ -455,6 +529,8 @@ mod native {
                         self.reset_clock();
                         return;
                     }
+                    self.startup.ready(&mut self.session);
+                    self.sync_clock();
                     let now = Instant::now();
                     if !self.session.paused() {
                         self.accumulated += now
@@ -499,6 +575,83 @@ mod native {
                 }
                 _ => {}
             }
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        fn session() -> PlayerSession {
+            PlayerSession::new("startup-test", ".", RunMode::Interactive, true)
+        }
+        #[test]
+        fn launch_focus_sequence_starts_once_and_accepts_movement() {
+            let mut session = session();
+            let mut startup = StartupFocus::new(true);
+            // macOS sends false then true before the first redraw.
+            startup.focus(false, &mut session);
+            startup.ready(&mut session);
+            assert!(session.paused());
+            startup.focus(true, &mut session);
+            startup.ready(&mut session);
+            assert!(!session.paused());
+            session.set_key("KeyD", true, false);
+            session.tick();
+            assert_eq!(game::status(session.app())["position"]["x"], -2750);
+            startup.focus(false, &mut session);
+            startup.focus(true, &mut session);
+            startup.ready(&mut session);
+            assert!(session.paused());
+            session.resume();
+            session.tick();
+            assert_eq!(game::status(session.app())["position"]["x"], -2750);
+        }
+        #[test]
+        fn explicit_pause_and_recording_startup_never_auto_resume() {
+            for replay in [false, true] {
+                let mut session = session();
+                if replay {
+                    let recording = game::recording(session.app()).unwrap();
+                    session.load_replay(recording).unwrap();
+                }
+                let mut startup = StartupFocus::new(false);
+                startup.focus(false, &mut session);
+                startup.focus(true, &mut session);
+                startup.ready(&mut session);
+                assert!(session.paused());
+            }
+        }
+        #[test]
+        fn accepted_inspector_step_cancels_startup_but_reads_and_rejections_do_not() {
+            for request in [
+                Request::Step { frames: 1 },
+                Request::Status,
+                Request::Step { frames: u64::MAX },
+            ] {
+                let mut session = session();
+                let mut startup = StartupFocus::new(true);
+                let deliberate = matches!(request, Request::Step { frames: 1 });
+                let epoch = session.clock_epoch();
+                let result = startup
+                    .dispatch(&mut session, &RequestEnvelope::new("startup", request))
+                    .into_ready();
+                assert_eq!(epoch, session.clock_epoch());
+                if deliberate {
+                    assert!(matches!(result.outcome, ResponseOutcome::Success { .. }));
+                }
+                startup.focus(true, &mut session);
+                startup.ready(&mut session);
+                assert_eq!(session.paused(), deliberate);
+            }
+        }
+        #[test]
+        fn deliberate_control_cancels_pending_startup() {
+            let mut session = session();
+            let mut startup = StartupFocus::new(true);
+            startup.cancel();
+            session.pause();
+            startup.focus(true, &mut session);
+            startup.ready(&mut session);
+            assert!(session.paused());
         }
     }
 }

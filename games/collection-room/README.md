@@ -113,6 +113,9 @@ python3 games/collection-room/scripts/build-macos-app.py --name "Titan Collectio
 ```
 
 The second command builds an unsigned local development app and prints its path.
+Ordinary launches start automatically once the GPU window is ready and focused;
+no preliminary P press is needed. Use `--paused` to deliberately start paused.
+`--trace-focus` logs window creation and focus events for launch diagnostics.
 WASD/arrows move, P pauses/resumes, N advances one paused tick, R restarts and
 clears the replay, and Escape exits. Focus loss pauses and cancels held keys and
 buffered taps. A released tap still reaches the next tick; physical aliases are
@@ -174,7 +177,10 @@ python3 games/collection-room/scripts/build-browser.py
 python3 -m http.server 8000 --bind 127.0.0.1 --directory games/collection-room/web
 ```
 
-Open `/play/` and click Play. Focus the canvas to move; Space pauses/resumes,
+Open `/play/` to load the game automatically. A visible, focused page starts
+running with the canvas ready for WASD/arrows; a background page waits for its
+first focus. Later focus or visibility loss pauses and cancels input; Resume or
+Space resumes after you return. Manual pauses remain paused. Space pauses/resumes,
 N steps, and R restarts. Host buttons export/import recordings and replay the
 44-tick reference route. Imported recordings start paused; Resume plays them on
 the same canvas. Controls and the ECS overlay work without inspector permission.
@@ -190,7 +196,7 @@ await the Promise before consuming its response.
 Use `?backend=webgpu` or `?backend=webgl2` to request exactly one backend; the
 ordinary page permits either. WebGL2 requires floating-point color attachments
 for the existing text/sprite renderer. Unsupported adapters and GPU errors are
-visible and stop graphics; reload starts a fresh GPU session. Invalid control
+visible and stop graphics; Retry reloads the page to start a fresh GPU session. Invalid control
 operations and recording imports are reported without stopping graphics.
 
 The fixed camera and 320 × 180 text layer stretch with the surface. Pixel sizes
