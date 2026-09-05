@@ -105,6 +105,8 @@ origin. The checked-in compatibility fixture predates v2; this narrow reader
 support does not promise future game/save compatibility. General replay editing, RPG UI expansion, ECS serialization and rollback remain
 outside this exercise. Import validation still runs a bounded full verification
 before installing a recording; incremental import validation is not a seek API.
+The measured worst-case behavior and follow-up assessment are recorded in
+[arena replay import responsiveness](replay-import-responsiveness/README.md).
 
 ## Verification evidence
 
