@@ -7,11 +7,29 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Arena mid-run save/load: complete locally
+## Arena interactive replay: selected
 
-Implemented on `codex/arena-save-load`, with frequent local commits. The user has
-explicitly asked not to push this new work yet. The approved `v0.3.0` tag belongs
-to the preceding UI revision after its own CI passes.
+Implement snapshot-backed input recordings and visible playback in the existing
+native and browser arena players. The user approved pause, single-step, restart
+playback, inspection during playback and isolation from live gameplay input.
+Scrubbing and speed controls are deferred. Keep coherent local commits; the user
+is monitoring CI and has not asked to push this new increment yet.
+
+A recording must identify its initial gameplay state so a loaded mid-run save
+can start a valid new recording. Validate bounded input before replacing live
+state, preserve the monotonic host clock, pause at the end without extra ticks,
+and compare playback with the same headless verifier's final state and pixels.
+Expose playback mode/progress/results and provide an explicit return to live play.
+
+Verify mid-dash and contact-cooldown origins, held input edges, malformed input,
+pause/step/restart, mutation/input isolation, native/browser control paths and
+exact final state/captures. Retain the published v1 recording evidence through
+explicit compatibility or document any intentional format rejection.
+
+## Arena mid-run save/load: complete
+
+The save/load work was fast-forwarded onto `main` and pushed with the README
+preview fix at `a4ef146`. The `v0.3.0` tag remains on the preceding UI revision.
 
 Use an arena-owned, bounded, versioned save representation containing the full
 gameplay state, including RNG and dash/contact cooldowns. Validate before
@@ -25,7 +43,8 @@ complete state and exact pixels. Malformed-save rejection, HUD reconstruction,
 stale input cancellation and native CLI/browser/WASM paths are verified.
 The shared tooling addition is bounded CLI `--arguments-file` support. See
 [arena snapshots and evidence](arena-save-load.md) and
-[the persistence boundary](save-load.md). No further implementation is selected.
+[the persistence boundary](save-load.md). Interactive replay is the next selected
+exercise and will replace the initial load-invalidates-recording restriction.
 
 ## Design coverage and pending scope
 
@@ -76,7 +95,7 @@ exercise above is complete locally. Difficulty settings remain a future possibil
 The UI source milestone `v0.3.0` is pushed at `6fc824d`, after
 [CI run 33948720187](https://github.com/titan-engine/titan/actions/runs/33948720187)
 passed that exact revision. Cargo package versions remain `0.1.0`, consistent
-with the earlier source-milestone tags. Save/load commits are local and excluded
+with the earlier source-milestone tags. Save/load commits are on `main` and excluded
 from that tag; no crates were published.
 
 ## Input and live-player inspection: complete

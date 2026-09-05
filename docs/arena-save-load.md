@@ -1,8 +1,8 @@
 # Arena snapshots
 
 Arena now exercises [the save/load boundary](save-load.md) with a game-owned JSON
-format. This work is on `codex/arena-save-load` and has not been pushed. The
-published `v0.3.0` source tag precedes this increment.
+format. This work is on `main`; the published `v0.3.0` source tag precedes this
+increment.
 
 ## Use the browser player
 
