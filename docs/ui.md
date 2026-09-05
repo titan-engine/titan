@@ -107,5 +107,7 @@ and all three UI entities named and positioned correctly.
 - [Browser arena after UI restart](ui/arena-browser.png)
 - [Browser RPG completed quest](ui/rpg-browser.png)
 
-Remote CI has not run for this local UI increment. General layout, keyboard focus
-navigation and interactive playback of saved recordings remain future work.
+The UI increment is included in the published `v0.3.0` source tag. General layout
+and keyboard focus navigation remain future work. The arena now also exercises
+[interactive playback of saved recordings](arena-replay.md); during playback its
+in-game restart button is disabled and host playback controls remain available.

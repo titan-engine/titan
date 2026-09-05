@@ -65,10 +65,11 @@ session resets wall-clock accumulation while preserving its pause state,
 monotonic host frame and inspection identity. Successful protocol loading is
 accounted for as a state revision; rejected loads leave state and revision alone.
 
-Recording history is retained for diagnosis but explicitly marked invalid for
-exact replay: it was recorded from a restart, not from the loaded snapshot.
-An actual restart begins a valid new recording. Recording-from-save and general
-world serialization remain future work.
+A successful load starts a valid new recording whose initial snapshot is the
+restored gameplay state. Restart also starts a new segment. These recordings can
+be [played interactively or verified headlessly](arena-replay.md). Loading a save
+is blocked during playback; exit playback first. General world serialization
+remains outside this game-owned format.
 
 ## Verification
 
@@ -82,14 +83,13 @@ identical input through later spawns and contact. Complete exports and exact
 rendered pixels match. They also cover fresh and terminal states, preservation
 of host time/handles/assets, derived HUD updates and rejection without changing
 pending input or pointer gestures. Session and WASM tests exercise permission,
-pause, stale-input cancellation, recording invalidation and failed-load revisions.
+pause, stale-input cancellation and failed-load revisions. The subsequent
+[replay checks](arena-replay.md) cover valid snapshot recording origins.
 
-The actual browser file chooser restored an exported lost run after a reset:
-HP 0, elapsed 310 ticks, host frame still 310, with the expected replay-invalid
-notice. This separately verifies the file workflow; deterministic mid-dash
-continuation is covered by the game and actual-WASM tests.
-
-![Browser after restoring the exported file](save-load/browser-restored.png)
+The browser file chooser restored an exported lost run after a reset: HP 0,
+elapsed 310 ticks, host frame still 310. This verifies the file workflow;
+deterministic mid-dash continuation is covered by game and actual-WASM tests.
+The retained save/load evidence predates snapshot-backed recording support.
 
 No generic ECS serializer was required. The concrete shared tooling gap was
 bounded CLI argument files; the save representation and state-installation policy

@@ -7,44 +7,30 @@ including the sunlit-meadow result.
 
 This file contains pending execution work; completed plans live in Git.
 
-## Arena interactive replay: selected
+## Arena interactive replay: complete locally
 
-Implement snapshot-backed input recordings and visible playback in the existing
-native and browser arena players. The user approved pause, single-step, restart
-playback, inspection during playback and isolation from live gameplay input.
-Scrubbing and speed controls are deferred. Keep coherent local commits; the user
-is monitoring CI and has not asked to push this new increment yet.
+Snapshot-backed recordings now play in the native and browser arena players,
+with pause, single-step, restart playback, inspection, input isolation and a
+fresh-live exit. Loading a mid-run save starts a valid new recording. Bounded
+imports are verified before replacing the scene; playback preserves host time,
+auto-pauses at its end and checks complete final state and pixels.
 
-A recording must identify its initial gameplay state so a loaded mid-run save
-can start a valid new recording. Validate bounded input before replacing live
-state, preserve the monotonic host clock, pause at the end without extra ticks,
-and compare playback with the same headless verifier's final state and pixels.
-Expose playback mode/progress/results and provide an explicit return to live play.
-
-Verify mid-dash and contact-cooldown origins, held input edges, malformed input,
-pause/step/restart, mutation/input isolation, native/browser control paths and
-exact final state/captures. Retain the published v1 recording evidence through
-explicit compatibility or document any intentional format rejection.
+Native GPU, actual WASM, browser file controls and focused Rust/JavaScript checks
+pass, including mid-dash/contact origins and historical v1 recordings. See
+[interactive replay and evidence](arena-replay.md). Scrubbing and speed controls
+remain deferred. The work is in coherent local commits on `main`; the user is
+monitoring CI and no push was requested for this increment.
 
 ## Arena mid-run save/load: complete
 
-The save/load work was fast-forwarded onto `main` and pushed with the README
-preview fix at `a4ef146`. The `v0.3.0` tag remains on the preceding UI revision.
-
-Use an arena-owned, bounded, versioned save representation containing the full
-gameplay state, including RNG and dash/contact cooldowns. Validate before
-installing into a fresh world or paused live game. Reconstruct UI, clear transient
-input and preserve the live host's frame and inspection identity. Loading must
-explicitly invalidate recordings whose origin is a restart. Do not add a general
-ECS serializer or promise save-format compatibility for this first exercise.
-
-Mid-dash and contact-cooldown round trips pass with identical subsequent inputs,
-complete state and exact pixels. Malformed-save rejection, HUD reconstruction,
-stale input cancellation and native CLI/browser/WASM paths are verified.
-The shared tooling addition is bounded CLI `--arguments-file` support. See
-[arena snapshots and evidence](arena-save-load.md) and
-[the persistence boundary](save-load.md). Interactive replay is the next selected
-exercise and will replace the initial load-invalidates-recording restriction.
+The save/load work was pushed on `main` with the README preview fix at `a4ef146`.
+The `v0.3.0` tag remains on the preceding UI revision. Mid-dash/contact round trips
+preserve complete state and pixels, validate before installation, rebuild UI,
+clear transient input and preserve host frame/inspection identity. The shared
+tooling addition is bounded CLI `--arguments-file` support. Subsequent replay
+work replaces recording invalidation with an embedded snapshot origin. See
+[arena snapshots](arena-save-load.md) and [the persistence boundary](save-load.md).
+No general ECS serializer or future save-format compatibility is promised.
 
 ## Design coverage and pending scope
 
@@ -61,14 +47,14 @@ restart is an ECS button. Browser host controls and diagnostic panels remain
 separate tooling.
 
 Agreed capabilities that still need future implementation or broader coverage
-include broader UI layout and typography; save/load implementation following the
-[documented boundary](save-load.md);
-automatic parallel scheduling with configurable determinism/throughput policy;
-interactive playback of input recordings; the full generated/file-backed asset
-model and eventual native asset format; and the longer-term rendering and
-multiplayer directions in the vision. Existing headless replay, snapshots and
-procedural demo assets do not establish completion of those broader requirements.
-These are retained commitments; the completed increment below exercises UI first.
+include broader UI layout and typography; broader save/load coverage following
+the [documented boundary](save-load.md); automatic parallel scheduling with
+configurable determinism/throughput policy; replay scrubbing and speed controls;
+the full generated/file-backed asset model and eventual native asset format;
+and the longer-term rendering and multiplayer directions in the vision. The arena
+exercises snapshots and interactive/headless replay; procedural demo assets do
+not establish completion of the broader asset requirements. These remain
+retained commitments.
 
 ## Entity-based UI: complete locally
 

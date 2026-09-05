@@ -65,10 +65,10 @@ separately and account for the successful load as a state change. A newly starte
 process may begin its own host clock at zero. Neither case should restore old
 inspection credentials, discovery registrations, transport queues or GPU state.
 
-Existing arena recordings describe consumed inputs from restart and verify them
-in a fresh game. They are not arbitrary mid-run saves. Loading would begin a new
-recording origin or explicitly invalidate restart-based replay; a future format
-must identify any required saved starting state. Exact rollback snapshots are a
+Arena v2 recordings embed their initial game-owned save and begin a new segment
+after a successful load or restart. They verify complete final state and pixels
+in a fresh game and support [interactive playback](arena-replay.md). Historical
+v1 recordings retain their restart origin. Exact rollback snapshots are a
 separate capability and should not dictate the persistent save-file layout.
 
 ## First implementation proof and choices still open

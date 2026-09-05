@@ -19,8 +19,8 @@ all pooled enemies, including their active/inactive state. See the
 
 Save and restore mid-run snapshots through the browser's **Save snapshot** and
 **Load snapshot** controls or the native inspection protocol. Loading requires a
-paused live game with inspection controls enabled and invalidates restart-origin
-recordings until a new restart. See [arena snapshots](../../docs/arena-save-load.md)
+paused live game with inspection controls enabled and starts a new recording
+from the restored snapshot. See [arena snapshots](../../docs/arena-save-load.md)
 for the bounded format, CLI file workflow and verification.
 
 From this directory (stable Rust, Python 3, Node.js):
@@ -90,12 +90,32 @@ also permits the same-page message bridge to pause, resume, step and change the
 session; **Step one tick** requires pause. The isolated Inspector page remains
 available for separate controlled experiments.
 
-Recordings contain the consumed fixed-tick actions and their edges from the
-latest restart, capped at 3,600 ticks (60 seconds). Replay checks the game seed,
-action schema, final game state and exact software image checksum. Truncation
+Recordings contain an initial snapshot, consumed fixed-tick actions and their
+edges from the latest restart or successful save load, capped at 3,600 ticks
+(60 seconds). Replay checks the game seed, action schema, complete final snapshot
+and exact software image checksum. Truncation
 or a development field edit makes exact replay unavailable until restart; the
 export reports that limitation. The replay binary accepts either the exported
 recording or a saved CLI recording-query response, with a 2 MiB file limit.
+
+## Watch a recording
+
+Pause the browser player and choose **Load recording**. Use **Play/Pause**,
+**Step one tick**, **Restart playback**, and **Exit playback**; the progress
+indicator reports the final verification result. These local playback controls
+work without enabling remote inspection controls. Exit starts a fresh live game.
+
+For native playback from this directory:
+
+```sh
+cargo run --bin play -- --recording /tmp/arena-recording.json
+```
+
+Playback starts paused: P plays/pauses, N steps one recorded tick, R restarts
+playback, and L returns to a fresh live game. Inspection and captures remain
+available; live movement, dash, pointer actions and field edits cannot change the
+recorded run. Playback pauses automatically after its final tick. See
+[interactive replay](../../docs/arena-replay.md) for format and protocol details.
 
 ## Controlled inspection
 

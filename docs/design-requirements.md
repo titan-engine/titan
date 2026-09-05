@@ -22,9 +22,10 @@ chronological decision diary; Git records changes to the design and implementati
 
 Implementation evidence remains separate. The [first ECS UI slice](ui.md) now
 replaces the arena's direct-drawn HUD and adds an RPG quest display; it does not
-claim to implement general layout or typography. The bounded headless input replay
-verified in [live-player evidence](live-player.md) does not establish interactive
-playback as a shipped feature. Interactive replay remains intended future work.
+claim to implement general layout or typography. The arena also exercises
+[snapshot-backed interactive replay](arena-replay.md) in native and browser
+players, alongside headless verification. Scrubbing and speed controls remain
+future work.
 
 ## Round one: product and initial scope
 

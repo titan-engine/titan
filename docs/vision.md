@@ -230,8 +230,9 @@ world, and capture output.
 
 Verification can combine ordinary Rust assertions, Titan test helpers and
 deterministic input recordings. Image comparisons should offer a configurable
-choice between exact pixels and perceptual tolerances. Recordings should support interactive replay as well as
-headless verification; current arena exports verify in a fresh headless game.
+choice between exact pixels and perceptual tolerances. Recordings should support
+interactive replay as well as headless verification; the arena now exercises
+[both paths with snapshot-backed recordings](arena-replay.md).
 The appropriate evidence depends on the feature.
 
 Diagnostic bundles should be produced on failure by default, optionally for
