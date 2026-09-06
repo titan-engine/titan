@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from './acceptance_process.mjs';
+import { execFile } from '../../../scripts/acceptance_process.mjs';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -46,3 +46,5 @@ assert.deepEqual(state(game).structures,built.structures);
 assert.equal(state(game).tick,built.tick);
 game.free();
 console.log('Factory actual-WASM construction, rejection, deterministic sequence, read-only policy, capture and restart passed.');
+const {transportAcceptance}=await import('./transport-acceptance.mjs');
+await transportAcceptance({BrowserRuntime,root,target:metadata.target_directory,raw,ok,state});

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Factory transport GPU acceptance</title>
+<style>body{background:#101519;color:#e6edf0;font:16px system-ui;margin:24px}main{display:grid;grid-template-columns:repeat(2,minmax(320px,1fr));gap:16px}canvas{width:100%;image-rendering:pixelated}pre{white-space:pre-wrap}figure{margin:0;border:1px solid #51676c;padding:12px}figcaption{margin-bottom:8px}</style>
+<h1>Conveyor movement: actual WASM + GPU</h1>
+<p>One seeded ore travels clockwise through a four-tile loop. Each panel is a separately rendered GPU player, frozen at the labeled simulation tick. Test fixtures do not add a player injection command.</p>
+<pre id="result">Running…</pre><main id="frames"></main>
+<script type="module">
+import init, {BrowserPlayer} from '../inspector/pkg/titan_game.js';
+const players=[]; const states=[];
+try {
+  await init();
+  const expected=[[2,2],[3,2],[3,3],[2,3]];
+  for (let tick=0;tick<4;tick++) {
+    const figure=document.createElement('figure');
+    const caption=document.createElement('figcaption');
+    caption.textContent=`Tick ${tick} — ore at (${expected[tick]})`;
+    const canvas=document.createElement('canvas');canvas.width=768;canvas.height=512;
+    figure.append(caption,canvas);document.querySelector('main').append(figure);
+    const player=await BrowserPlayer.create_transport_fixture(canvas,'cycle_partial');
+    players.push(player);
+    for(let i=0;i<tick;i++)player.frame(1000/60);
+    player.frame(0);
+    const state=JSON.parse(player.status());states.push(state);
+    const occupied=state.structures.filter(s=>s.slots.output!==null);
+    if(state.tick!==tick || occupied.length!==1 || occupied[0].x!==expected[tick][0] || occupied[0].y!==expected[tick][1] || !state.conserved) throw new Error(`Movement/conservation mismatch at tick ${tick}: ${JSON.stringify(state)}`);
+  }
+  document.querySelector('#result').textContent=JSON.stringify({ok:true,checks:['actual WASM','four GPU surfaces','one hop per tick','all corner turns','conservation'],ticks:states.map(s=>({tick:s.tick,items:s.structures.flatMap(t=>t.item_positions)}))},null,2);
+  window.transportEvidence={ok:true,states};
+  document.title='PASS — Factory transport GPU';
+} catch(error) {document.querySelector('#result').textContent=error.stack??String(error);document.title='FAIL — Factory transport GPU';window.transportEvidence={ok:false,error:String(error)};}
+window.addEventListener('pagehide',()=>players.forEach(p=>p.free()));
+</script></html>

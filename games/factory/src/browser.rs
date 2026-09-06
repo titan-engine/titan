@@ -31,6 +31,19 @@ impl BrowserRuntime {
         }
     }
 
+    /// Construct an explicit bounded transport test setup; not a player command.
+    pub fn transport_fixture(name: &str, enable_control: bool) -> Result<BrowserRuntime, JsValue> {
+        let mut app = game::build_transport_fixture(name).map_err(|e| JsValue::from_str(&e))?;
+        app.update_schedule(Startup);
+        let inspector = game::inspector_with_capture(
+            InspectionConfig::controlled("factory-browser", "factory"),
+            capture,
+        );
+        Ok(Self {
+            session: BrowserSession::new(app, inspector, enable_control),
+        })
+    }
+
     /// Executes one request at a safe point and returns its JSON response envelope.
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle(request_json)
@@ -74,6 +87,27 @@ mod player {
     #[wasm_bindgen]
     impl BrowserPlayer {
         pub async fn create(canvas: HtmlCanvasElement) -> Result<BrowserPlayer, JsValue> {
+            Self::create_with_app(canvas, game::build_game()).await
+        }
+
+        /// Separate fixture constructor keeps seeding out of player commands.
+        pub async fn create_transport_fixture(
+            canvas: HtmlCanvasElement,
+            name: &str,
+        ) -> Result<BrowserPlayer, JsValue> {
+            Self::create_with_app(
+                canvas,
+                game::build_transport_fixture(name).map_err(js_error)?,
+            )
+            .await
+        }
+    }
+
+    impl BrowserPlayer {
+        async fn create_with_app(
+            canvas: HtmlCanvasElement,
+            mut app: App,
+        ) -> Result<BrowserPlayer, JsValue> {
             let instance =
                 wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
             let surface = instance
@@ -86,7 +120,6 @@ mod player {
             let (width, height) = renderer.resize(canvas.width(), canvas.height());
             canvas.set_width(width);
             canvas.set_height(height);
-            let mut app = game::build_game();
             app.update_schedule(Startup);
             let input = game::InteractiveInput::for_app(&app);
             Ok(Self {
@@ -97,7 +130,10 @@ mod player {
                 accumulated_ms: 0.0,
             })
         }
+    }
 
+    #[wasm_bindgen]
+    impl BrowserPlayer {
         pub fn set_action(&mut self, name: &str, pressed: bool) -> Result<(), JsValue> {
             self.input
                 .set_action(&self.app, name, pressed)
