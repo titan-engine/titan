@@ -36,7 +36,7 @@ function failure(error) {
 }
 function updateStatus() {
   const state = JSON.parse(player.status());
-  status.textContent = `${state.selection.kind} ${state.selection.facing} · ${mode} · delivered ${state.delivered}/10`;
+  status.textContent = `${state.selection.kind} ${state.selection.facing} · ${mode} · delivered ${state.delivered}/10 · ${state.outcome} · tick ${state.tick}${state.diagnostic ? ` · ${state.diagnostic}` : ""}`;
   document.querySelector('#facing').textContent = `Q Facing ${state.selection.facing}`;
   document.querySelectorAll('[data-kind]').forEach(button => button.setAttribute('aria-pressed', String(mode === 'place' && button.dataset.kind === state.selection.kind)));
   document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(mode === button.dataset.mode)));

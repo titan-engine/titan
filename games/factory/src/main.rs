@@ -7,14 +7,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut arguments: Vec<_> = std::env::args().skip(1).collect();
     let fixture = if arguments
         .first()
-        .is_some_and(|arg| arg == "--transport-fixture")
+        .is_some_and(|arg| arg == "--transport-fixture" || arg == "--production-fixture")
     {
         if arguments.len() != 4 || arguments[2] != "--sequence" {
-            return Err("--transport-fixture NAME requires --sequence FILE".into());
+            return Err("fixture NAME requires --sequence FILE".into());
         }
         let name = arguments.remove(1);
-        arguments.remove(0);
-        Some(name)
+        let kind = arguments.remove(0);
+        Some((kind, name))
     } else {
         None
     };
@@ -35,7 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("sequence exceeds 4096 operations".into());
         }
         let mut app = match fixture {
-            Some(name) => game::build_transport_fixture(&name)?,
+            Some((kind, name)) if kind == "--transport-fixture" => {
+                game::build_transport_fixture(&name)?
+            }
+            Some((_, name)) => game::build_production_fixture(&name)?,
             None => build_game(),
         };
         app.update_schedule(Startup);
@@ -126,7 +129,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "titan-factory [--transport-fixture NAME --sequence FILE | --sequence FILE] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, renders the initial scene and writes target/titan/capture.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "titan-factory [--transport-fixture NAME --sequence FILE | --production-fixture NAME --sequence FILE | --sequence FILE] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, renders the initial scene and writes target/titan/capture.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }

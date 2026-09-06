@@ -21,7 +21,7 @@ The browser inspector was also exercised through its visible JSON command form:
 CLI and Node actual-WASM harnesses both ran `tests/construction.json` and checked
 matching structure states, invalid-operation rejection, capture and restart.
 Node is semantic/WASM evidence; the browser test and screenshots supply player
-rendering evidence. These construction checks predate transport; production remains disabled.
+rendering evidence. These construction checks predate transport and production.
 
 `cargo test --test render -- --ignored` passed on Apple M5 Pro / Metal.
 Eight readbacks (four camera transforms × unorm/sRGB targets) matched software
@@ -61,5 +61,47 @@ Screenshots establish actual player presentation and inspected item movement;
 they are not portable exact-pixel references. Browser execution used its default
 supported GPU backend; separate WebGPU/WebGL2 transport matrix coverage is not
 claimed. Named fixtures are explicit test startup setup, not injection gameplay.
-No extraction or processing runs in this increment. Existing RPG/arena reference
+No extraction or processing ran in the transport increment. Existing RPG/arena reference
 checksums and the committed README preview are unchanged.
+
+
+## Extraction-to-delivery production
+
+Verified on 2026-09-06 on macOS Apple Silicon for issue #91.
+
+- `native-production.json` records seven snapshots after successful native GPU
+  presentations of `play --test-production`. Tool selection and physical-to-logical
+  pointer placement construct the unseeded reference route. Every presented game
+  tick checks delivery timing and independent resident-item accounting. The run
+  reaches Complete at tick 1269 and keeps presenting the frozen world.
+- `native-production.png` is the personally inspected native app window at
+  Complete, 10/10 deliveries, tick 1269. Its five remaining orange ore markers
+  match the three input belts and the processor's input and in-process slots.
+- `browser-production.json` contains checkpoint states and the PASS result of
+  `/play/test-production.html`, using actual compiled WASM and GPU presentation
+  in the Codex in-app browser. DOM tool buttons and pointer events construct the
+  route; the page checks every tick, then completion freeze, rejected edits,
+  restart and identical completion after rebuilding. `browser-production.png`
+  is its personally inspected completed GPU canvas with the same five ores.
+- `scripts/production-acceptance.mjs` compares full native and compiled-WASM state
+  at 3,469 operation boundaries. Expectations are independent of the runtime:
+  extraction tick 60, batch start 64 with remaining=120, queued input 124, first
+  plate 184, deliveries 189 + 120*(k-1), completion 1269. Completion leaves
+  extracted=15, delivered=10 and five live ores, processor remaining=116 and
+  extractor progress=1. Production is skipped on the completion tick.
+  Seeded edge fixtures verify output blocking, starvation, backlog, rotation,
+  complete processor removal (two ore and one plate discarded), rejected edits
+  and reset. Existing transport-only fixtures retain their original behavior.
+
+Factory unit/all-target tests, strict Clippy, native control, browser control/input,
+actual-WASM construction/transport/production and native Metal GPU readback gates
+pass. Workspace formatting, tests, strict Clippy and WASM checks pass, as do the
+existing native/WASM RPG control, replay, assets and browser inspector/input suites.
+Existing RPG/arena reference checksums and README preview are unchanged.
+
+The player screenshots show presentation and slot positions, not portable exact
+pixel references. Browser production used its default supported GPU backend;
+separate WebGPU/WebGL2 production matrix coverage is not claimed. Native acceptance
+advances one fixed tick per presented frame for bounded verification, so its
+wall-clock duration is display-dependent; normal play uses the 60 Hz accumulator.
+Seeded edge fixtures are startup-only verification APIs, never player actions.
