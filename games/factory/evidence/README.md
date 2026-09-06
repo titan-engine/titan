@@ -105,3 +105,68 @@ separate WebGPU/WebGL2 production matrix coverage is not claimed. Native accepta
 advances one fixed tick per presented frame for bounded verification, so its
 wall-clock duration is display-dependent; normal play uses the 60 Hz accumulator.
 Seeded edge fixtures are startup-only verification APIs, never player actions.
+
+
+## Construction interface and bottleneck diagnosis
+
+Verified on 2026-09-06 for issue #92. The implementation source revision is
+`9bbac0b5ee750cd365221c5c40db9c153d191704`; the following documentation/evidence
+commit does not change that source. Native Metal and the actual compiled-WASM
+player ran on macOS Apple Silicon. Browser verification used the Codex in-app
+browser's default supported GPU backend; a separate WebGPU/WebGL2 matrix is not
+claimed.
+
+- `native-interface.json` records the bounded `play --test-interface` assertions:
+  palette clicks cannot build, keyboard focus activates the intended control,
+  a wrong-facing processor is diagnosed and repaired, controlled steps complete
+  at tick 1269, completed stepping stays frozen, and restart resets input/world.
+  Assertions run in the native host before it presents the final inspection scene.
+- `native-interface.png` shows the personally inspected native window at tick 65:
+  conveyor (4,3) holds one ore, reports **Wrong facing**, names receiver (5,3),
+  and explains how to rotate its input toward the source. Palette, run controls,
+  selected inventory, visible discard totals, onboarding and legend fit in-window.
+  Using the visible Rotate tool three times on the south-facing processor and
+  clicking Step repaired it. `native-interface-repaired.png` shows tick 66,
+  processor facing east, one in-process ore and **Working**. Manual R reset the
+  world and selection; Escape exited the owned app.
+- `browser-interface.json` is the PASS output from `/play/test-interface.html`.
+  Actual DOM events build/select/edit the compiled-WASM player and prove visible
+  disconnected, wrong-facing, wrong-type, full and contended causes and repairs.
+  Contention names source (3,2) as the winner. It verifies exact steps, immutable
+  redraws, explicit removals, held/repeated movement across pause/resume/restart
+  and completion, fresh-key recovery, and scrolled-canvas focus mapping.
+- `browser-interface.png` shows a personally built isolated extractor at (1,3),
+  paused after 60 work ticks, with one ore in its 1/1 output and **Disconnected**
+  at (2,3). A physical palette click and canvas click added that conveyor;
+  a visible single-step click moved the ore and restarted extraction.
+  `browser-interface-repaired.png` records that repaired UI. The paused game
+  tick changed from 373 to 374; initial play time before construction accounts
+  for the offset. The whole grid fits at 1280×720; its detail column scrolls.
+  `browser-interface-900.png` verifies the narrower 900×700 layout. Temporary
+  viewport overrides were reset and owned browser tabs closed after verification.
+- `browser-interface-construction.json` preserves the existing actual-browser
+  construction PASS after the UI changes, including pan, zoom, nonuniform CSS
+  resize mapping, keyboard camera movement and restart.
+
+The native host tests cover physical-to-logical grid mapping, UI hit exclusion,
+keyboard aliases/repeats, focus, bounded text layout and glyph coverage across
+production/transport fixtures and prospective edits. UI entities use Titan's
+public `UiNode`, `UiText`, `UiButton`, `UiPointer` and `UiFocus`; no shared engine
+or widget framework changed. Queries and player descriptions use one immutable
+game-local model, with exact query/capture/state/recording checks in the native
+CLI and compiled-WASM harnesses.
+
+Final local gates passed: factory formatting, 29 library tests, seven native
+host/UI tests, strict all-target Clippy, native control, 11 browser unit tests,
+compiled-WASM construction/transport/production and explanation repair suites,
+and both native Metal GPU readback tests. Full native/WASM state comparison
+continues at 3,469 production boundaries and 86 transport boundaries. Workspace
+formatting/tests/strict Clippy/WASM and existing native/WASM RPG control, replay,
+assets and browser input/inspector tests passed. Existing RPG/arena reference
+checksums and the committed README preview are unchanged. No shared APIs changed.
+
+These screenshots prove the inspected layouts and interactions, not portable
+pixel equality. Named seeded networks are test-only setup; normal play starts
+empty. Browser side panels use HTML; native gameplay controls use entity UI.
+Automated checks plus personal inspection provide acceptance evidence, not an
+unobserved first-time human usability study.

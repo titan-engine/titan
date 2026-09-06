@@ -1,4 +1,6 @@
 //! Factory construction, snapshot transport, and bounded ore-to-plate production.
+mod interface;
+pub use interface::{interface, preview, set_preview_action};
 mod production;
 mod transport;
 pub use production::build_production_fixture;
@@ -117,6 +119,8 @@ struct State {
     camera: Camera,
     selection: Selection,
     hover: Option<(i32, i32)>,
+    inspected: Option<(i32, i32)>,
+    preview_action: String,
 }
 impl Default for State {
     fn default() -> Self {
@@ -136,6 +140,8 @@ impl Default for State {
                 facing: Facing::E,
             },
             hover: None,
+            inspected: None,
+            preview_action: "place".into(),
         }
     }
 }
@@ -346,6 +352,7 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
         }
         Operation::Inspect { x, y } => {
             tile(x, y)?;
+            app.world_mut().resource_mut::<State>().unwrap().inspected = Some((x, y));
             Ok(inspect_tile(app.world(), x, y))
         }
         Operation::Select { kind, facing } => {
@@ -453,7 +460,9 @@ fn state_value(app: &App) -> Value {
     let state = app.world().resource::<State>().unwrap();
     let mut structures: Vec<_> = app.world().iter::<Structure>().map(|(_, s)| s).collect();
     structures.sort_by_key(|s| (s.y, s.x));
-    json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|transport::structure_value(app.world(), s)).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"production_enabled":state.production_enabled,"diagnostic":state.diagnostic,"seeded":state.seeded,"extracted":state.extracted,"delivered":state.delivered,"discarded_ore":state.discarded_ore,"discarded_plate":state.discarded_plate,"completion_tick":state.completion_tick,"conserved":transport::conserved(app.world()),"outcome":if state.completion_tick.is_some(){"Complete"}else if state.diagnostic.is_some(){"Stopped"}else{"Running"},"objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3)."})
+    let mut value = json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|transport::structure_value(app.world(), s)).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"production_enabled":state.production_enabled,"diagnostic":state.diagnostic,"seeded":state.seeded,"extracted":state.extracted,"delivered":state.delivered,"discarded_ore":state.discarded_ore,"discarded_plate":state.discarded_plate,"completion_tick":state.completion_tick,"conserved":transport::conserved(app.world()),"outcome":if state.completion_tick.is_some(){"Complete"}else if state.diagnostic.is_some(){"Stopped"}else{"Running"},"objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3)."});
+    interface::state_ui(app.world(), &mut value);
+    value
 }
 pub fn status(app: &App) -> String {
     state_value(app).to_string()
@@ -571,6 +580,43 @@ pub fn inspector_with_capture(
             |app, _: Empty| Ok(state_value(app)),
         )
         .unwrap();
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct PreviewArgs {
+        x: i32,
+        y: i32,
+        action: String,
+    }
+    inspector
+        .register_query(
+            QueryMetadata {
+                name: "preview".into(),
+                description: "Read-only tile action preview; no mutation or simulation advance"
+                    .into(),
+                arguments: [
+                    ("x".into(), field("i32", "Grid column")),
+                    ("y".into(), field("i32", "Grid row")),
+                    (
+                        "action".into(),
+                        field("string", "place/rotate/remove/inspect"),
+                    ),
+                ]
+                .into(),
+            },
+            |app, args: PreviewArgs| Ok(preview(app, args.x, args.y, &args.action)),
+        )
+        .unwrap();
+    inspector
+        .register_query(
+            QueryMetadata {
+                name: "interface".into(),
+                description: "Read-only player interface and current bottleneck explanations"
+                    .into(),
+                arguments: BTreeMap::new(),
+            },
+            |app, _: Empty| Ok(interface(app)),
+        )
+        .unwrap();
     inspector.register_query(QueryMetadata{name:"recording".into(),description:"Last 256 ordered boundary operations and outcomes; dropped counts truncated records".into(),arguments:BTreeMap::new()},|app,_:Empty|{let r=app.world().resource::<Recording>().unwrap();Ok(json!({"operations":r.records,"dropped":r.dropped}))}).unwrap();
     inspector
         .register_query(
@@ -685,6 +731,14 @@ fn render_frame(world: &World) -> RenderFrame {
             Kind::Processor => Color::rgb(171, 112, 212),
             Kind::Delivery => Color::rgb(67, 186, 131),
         };
+        let details = transport::structure_value(world, s);
+        let status_color = match details["explanation"]["status"].as_str() {
+            Some("working") => Color::rgb(70, 215, 130),
+            Some("output_blocked") | Some("stopped") => Color::rgb(255, 92, 88),
+            Some("complete") => Color::rgb(110, 200, 255),
+            _ => Color::rgb(255, 191, 74),
+        };
+        rect(x + 6., y + 4., 20., 2., status_color);
         rect(x + 6., y + 6., 20., 20., color);
         // Center marks distinguish structures independently of color.
         match s.kind {
@@ -751,10 +805,58 @@ fn render_frame(world: &World) -> RenderFrame {
             rect(x - 3., y - 3., 6., 6., color);
         }
     }
+    if let Some((x, y)) = state.inspected {
+        let x = f64::from(x) * TILE;
+        let y = f64::from(y) * TILE;
+        let c = Color::rgb(120, 190, 255);
+        for (dx, dy) in [(2., 2.), (24., 2.), (2., 24.), (24., 24.)] {
+            rect(x + dx, y + dy, 6., 6., c);
+        }
+    }
     if let Some((x, y)) = state.hover {
         let x = f64::from(x) * TILE;
         let y = f64::from(y) * TILE;
-        let c = Color::rgb(255, 255, 255);
+        let preview = interface::preview_world(
+            world,
+            (x / TILE) as i32,
+            (y / TILE) as i32,
+            &state.preview_action,
+        );
+        let c = if preview["valid"] == true {
+            Color::rgb(116, 255, 176)
+        } else {
+            Color::rgb(255, 95, 95)
+        };
+        if preview["valid"] == true && matches!(state.preview_action.as_str(), "place" | "rotate") {
+            let facing: Facing = serde_json::from_value(preview["facing"].clone()).unwrap();
+            let (dx, dy) = match facing {
+                Facing::N => (0., -1.),
+                Facing::E => (1., 0.),
+                Facing::S => (0., 1.),
+                Facing::W => (-1., 0.),
+            };
+            rect(x + 8., y + 8., 16., 2., c);
+            rect(x + 8., y + 22., 16., 2., c);
+            rect(x + 8., y + 8., 2., 16., c);
+            rect(x + 22., y + 8., 2., 16., c);
+            for distance in [0., 3., 6., 9.] {
+                rect(x + 14. + dx * distance, y + 14. + dy * distance, 4., 4., c);
+            }
+            rect(
+                x + 14. + dx * 8. - dy * 4.,
+                y + 14. + dy * 8. + dx * 4.,
+                3.,
+                3.,
+                c,
+            );
+            rect(
+                x + 14. + dx * 8. + dy * 4.,
+                y + 14. + dy * 8. - dx * 4.,
+                3.,
+                3.,
+                c,
+            );
+        }
         rect(x, y, 32., 2., c);
         rect(x, y + 30., 32., 2., c);
         rect(x, y, 2., 32., c);
