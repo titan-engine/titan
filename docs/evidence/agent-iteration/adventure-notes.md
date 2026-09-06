@@ -5,7 +5,8 @@ in a disposable source copy with an empty Cargo target. It uses native CPU
 hosts, authenticated CLI discovery and no GUI focus. From the repository root:
 
 ```sh
-python3 docs/evidence/agent-iteration/adventure-baseline.py > adventure-result.json
+mkdir -p target/evidence
+python3 docs/evidence/agent-iteration/adventure-baseline.py > target/evidence/adventure-result.json
 ```
 
 Run with normal Python assertions enabled. Cargo, a Rust toolchain, Python 3.9+

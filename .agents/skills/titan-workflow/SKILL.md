@@ -10,7 +10,11 @@ quality gates and follow `docs/workflow.md` plus the GitHub board for approved
 priorities. Read `docs/cli.md` for flags and structured output. Use
 `docs/ecs-authoring.md` when editing systems, `docs/browser.md` for WASM, and
 `docs/rendering.md` for interactive or GPU work. These paths are relative to the
-repository root, three directories above this skill folder.
+repository root, three directories above this skill folder. Follow
+`docs/acceptance-evidence.md` for evidence retention: full sanitized run bundles
+go to ignored output or external temporary directories; promote selected
+baselines/illustrations only through explicit review. This preserves all checks
+and capture inspection obligations.
 
 ## New games
 

@@ -18,8 +18,10 @@ python3 docs/evidence/agent-iteration/factory-measure.py
 ```
 
 The script measures the committed `HEAD` through `git archive`, ignoring working
-changes. It writes a fresh `factory-measurement.json`, so save the initial report
-or restore it after a local rerun. It uses a disposable source tree and an empty
+changes. It writes a fresh `factory-measurement.json`, so preserve the initial report
+by running in the disposable checkout described in the
+[reproduction guidance](README.md#reading-the-numbers), then copying results to
+ignored output in the maintained checkout. It uses a disposable source tree and an empty
 private Cargo target. Existing global Cargo registry/toolchain caches remain;
 this is not a clean-machine install measurement. No native window or browser is
 opened. Other agents ran native GPU checks and workspace builds on the same machine;

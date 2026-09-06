@@ -6,7 +6,7 @@ It does not reuse the historical construction-only measurements at
 `0468ffe00b2cb109acc33591dc382839196ce7fe`. It follows the phase boundaries and
 reporting distinctions in [the shared procedure](../../../agent-iteration.md).
 
-Run from a checkout containing this report and the measured git object:
+Run from a disposable checkout containing this report and the measured git object:
 
 ```sh
 python3 docs/evidence/factory-verification/scaling/measure.py
@@ -18,7 +18,9 @@ then deletes that archive and target. It does not edit game rules, inject items,
 or write gameplay source in the working checkout. Existing global Cargo registry
 and toolchain caches remain available. The accepted build/runtime deadlines are
 hang bounds, not speed requirements. Measurements overwrite `results.json` and
-the generated fixture JSON files; preserve the committed report when rerunning.
+the generated fixture JSON files in that disposable checkout. Copy results to
+ignored output in the maintained checkout; promote baseline changes only through
+review under the [evidence lifecycle](../../../acceptance-evidence.md).
 
 The probe uses public `build_game`, `player_command`, `status`, `render_image`,
 and `image_checksum` APIs. Each fixture contains the exact ordinary placement
