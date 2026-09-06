@@ -96,10 +96,10 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Check procedural-only core
-        run: cargo check -p titan --lib --no-default-features
+        run: cargo check --locked -p titan --lib --no-default-features
 
       - name: Run all tests and examples
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
 
       - name: Exercise bounded PNG corpus and generated inputs
         run: |
@@ -135,10 +135,10 @@ jobs:
         run: python3 scripts/test-generated-assets.py
 
       - name: Run Clippy with warnings denied
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
       - name: Smoke-test structured CLI output
-        run: cargo run --quiet -p titan-cli -- --format json info
+        run: cargo run --locked --quiet -p titan-cli -- --format json info
 
       - name: Exercise the native RPG through separate CLI processes
         run: python3 scripts/test-control-loop.py
@@ -155,30 +155,30 @@ jobs:
       - name: Check and drive headless collection room
         run: |
           cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
-          cargo test --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
-          cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
+          cargo clippy --locked --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/collection-room/scripts/test-control.py
 
       - name: Check and drive two-character adventure
         run: |
           cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
-          cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
-          cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path games/adventure/Cargo.toml --all-targets --all-features
+          cargo clippy --locked --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/adventure/scripts/test-control.py
           python3 games/adventure/scripts/test-playtest.py
 
       - name: Check and drive independent arena game
         run: |
           cargo fmt --manifest-path games/arena/Cargo.toml --all --check
-          cargo test --manifest-path games/arena/Cargo.toml --all-targets
-          cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path games/arena/Cargo.toml --all-targets
+          cargo clippy --locked --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/arena/scripts/test-control.py
 
       - name: Check and drive factory construction
         run: |
           cargo fmt --manifest-path games/factory/Cargo.toml --all --check
-          cargo test --manifest-path games/factory/Cargo.toml --all-targets
-          cargo clippy --manifest-path games/factory/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path games/factory/Cargo.toml --all-targets
+          cargo clippy --locked --manifest-path games/factory/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/factory/scripts/test-control.py
 
       - name: Verify real acceptance failure retention and cleanup
@@ -269,7 +269,7 @@ jobs:
             bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-
 
       - name: Check engine and protocol for WebAssembly
-        run: cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
+        run: cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 
       - name: Exercise collection room in actual WebAssembly
         run: |
@@ -316,7 +316,7 @@ jobs:
 
       - name: Build arena WASM and exercise its control loop
         run: |
-          cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
+          cargo check --locked --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
           python3 games/arena/scripts/build-browser.py
           node games/arena/scripts/test-browser.mjs
           node --test games/arena/web/inspector/bridge.test.mjs
@@ -384,9 +384,9 @@ jobs:
           TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
           TITAN_COMPOSITION_EVIDENCE_DIR: ${{ runner.temp }}/titan-composition-evidence
         run: |
-          cargo test -p titan-render-wgpu --test three_d -- --ignored
-          cargo test -p titan-render-wgpu --test composition -- --ignored
-          cargo test -p titan-render-wgpu --lib aborted_backend_map -- --ignored
+          cargo test --locked -p titan-render-wgpu --test three_d -- --ignored
+          cargo test --locked -p titan-render-wgpu --test composition -- --ignored
+          cargo test --locked -p titan-render-wgpu --lib aborted_backend_map -- --ignored
 
       - name: Retain native 3D GPU comparison evidence
         if: always()
@@ -404,8 +404,8 @@ jobs:
 
       - name: Exercise native factory construction player
         run: |
-          cargo test --manifest-path games/factory/Cargo.toml --test render -- --ignored
-          cargo run --manifest-path games/factory/Cargo.toml --bin play -- --test-construction
+          cargo test --locked --manifest-path games/factory/Cargo.toml --test render -- --ignored
+          cargo run --locked --manifest-path games/factory/Cargo.toml --bin play -- --test-construction
 
       - name: Inspect and replay the actual native arena player
         run: python3 games/arena/scripts/test-live-player.py

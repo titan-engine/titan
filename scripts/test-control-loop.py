@@ -21,9 +21,9 @@ GAME = TARGET / "debug" / "examples" / "procedural_rpg"
 
 def main(failures):
     with failures.runtime_log() as build_log:
-        failures.record_command(["cargo", "build", "RPG and CLI"], None)
+        failures.record_command(["cargo", "build", "--locked", "RPG and CLI"], None)
         processes.run(
-            ["cargo", "build", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
+            ["cargo", "build", "--locked", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
             cwd=REPO,
             check=True, phase="build",
             stdout=build_log, stderr=build_log,

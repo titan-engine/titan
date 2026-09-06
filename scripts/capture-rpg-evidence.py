@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture startup and reference-replay evidence from the built native RPG.
 
-Build first with cargo build -p titan-cli -p titan --bin titan --example procedural_rpg.
+Build first with cargo build --locked -p titan-cli -p titan --bin titan --example procedural_rpg.
 Uses only Python's standard library; all game interaction goes through the CLI.
 """
 import argparse

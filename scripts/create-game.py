@@ -29,7 +29,8 @@ def main():
         manifest.read_text(),
     ))
     print(f"Created game: {destination}")
-    print("Open that directory and run: cargo run --bin play")
+    print("Open that directory and initialize dependencies: cargo generate-lockfile")
+    print("Then run: cargo run --locked --bin play")
     print(f"Keep this Titan checkout at: {source.parent.parent}")
 
 
