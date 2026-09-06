@@ -11,6 +11,13 @@ changes. Note checks you could not run and any limitations; maintainers can help
 
 ## Review notes
 
+<!-- For substantial diffs, explain why the parts belong in one PR and what
+accounts for the size: authored source/docs, lockfiles, necessary replay/golden
+fixtures, or recorded output. Identify the permanent consumer/purpose (test,
+current guide, or maintained claim) of newly retained artifacts. Apply
+docs/acceptance-evidence.md to recorded output; JSON is not inherently generated.
+Small focused changes need no size breakdown. -->
+
 <!-- Optional: tradeoffs, areas where you want feedback, dependencies, or
 substantial AI assistance. Agent reviews must be identified as such; link their
 attributed evidence if available. You do not need an agent review to submit a PR.
