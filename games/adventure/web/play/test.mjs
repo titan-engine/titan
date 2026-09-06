@@ -166,6 +166,20 @@ try {
  player.restart();
  check(!state().puzzle.complete&&!state().puzzle.door.open&&state().puzzle.plates.every(p=>!p.pressed),'restart after completion reconstructs all devices');
  await capture('puzzle-restarted');
+ player.resume();
+ const obstruction=[...solution.slice(0,4),{actions:['switch'],ticks:1},{actions:[],ticks:1},{actions:['up'],ticks:25},{actions:['right'],ticks:67},{actions:['switch'],ticks:1},{actions:[],ticks:1},{actions:['down'],ticks:50}];
+ for(const segment of obstruction){
+   for(const [action,key] of Object.entries(bindings))player.set_key(key,segment.actions.includes(action),false);
+   for(let i=0;i<segment.ticks;i++)tick();
+ }
+ check(state().puzzle.door.state==='open_obstructed','inactive body safely holds unrequested door open');
+ await capture('puzzle-obstructed');
+ for(const segment of [{actions:['switch'],ticks:1},{actions:[],ticks:1},{actions:['right'],ticks:15}]){
+   for(const [action,key] of Object.entries(bindings))player.set_key(key,segment.actions.includes(action),false);
+   for(let i=0;i<segment.ticks;i++)tick();
+ }
+ check(state().puzzle.door.state==='closed','door closes after obstructing body clears');
+ await capture('puzzle-cleared');player.pause();
  let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
  if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
  publish({status:'passed',backend,checks,live,replay,final:state()});

@@ -210,6 +210,23 @@ def main(failures):
                 puzzle = state()['puzzle']
                 assert not puzzle['complete'] and not puzzle['door']['open'] and not any(p['pressed'] for p in puzzle['plates'])
                 capture('puzzle-restarted')
+                # Ordinary input also produces the hold-open obstruction reason.
+                for segment in solution[:4]:
+                    move(segment['actions'], segment['ticks'])
+                move(['switch'], 1)
+                move([], 1)
+                move(['up'], 25)
+                move(['right'], 67)
+                move(['switch'], 1)
+                move([], 1)
+                move(['down'], 50)
+                assert state()['puzzle']['door']['state'] == 'open_obstructed'
+                capture('puzzle-obstructed')
+                move(['switch'], 1)
+                move([], 1)
+                move(['right'], 15)
+                assert state()['puzzle']['door']['state'] == 'closed'
+                capture('puzzle-cleared')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)
