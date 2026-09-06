@@ -1,0 +1,17 @@
+[
+  {
+    "phase": "build scratch",
+    "seconds": 4.807287375,
+    "returncode": 0
+  },
+  {
+    "phase": "build adventure",
+    "seconds": 5.030782749999999,
+    "returncode": 0
+  },
+  {
+    "phase": "runtime",
+    "seconds": 5.2056375,
+    "returncode": 0
+  }
+]

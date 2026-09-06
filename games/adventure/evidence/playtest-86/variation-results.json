@@ -1,0 +1,1962 @@
+{
+  "phases": [
+    {
+      "phase": "build scratch",
+      "seconds": 0.06309775,
+      "returncode": 0
+    },
+    {
+      "phase": "build adventure",
+      "seconds": 0.060773833,
+      "returncode": 0
+    },
+    {
+      "phase": "runtime",
+      "seconds": 4.788799959,
+      "returncode": 0
+    }
+  ],
+  "checkpoints": {
+    "plate-a": {
+      "active_character": "jumper",
+      "block": null,
+      "block_geometry": null,
+      "blocked_actions": [],
+      "characters": {
+        "jumper": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "teaching-ledge",
+          "velocity_y": 0,
+          "x": 1980,
+          "y": 1000,
+          "z": 2180
+        },
+        "strong": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 3500,
+          "y": 0,
+          "z": 6500
+        }
+      },
+      "consumed_input": {
+        "active": [],
+        "pressed": [],
+        "released": []
+      },
+      "fixture": "adventure-v3",
+      "frame": 103,
+      "pending_inputs": 0,
+      "phase": "playing",
+      "puzzle": {
+        "complete": false,
+        "door": {
+          "open": true,
+          "state": "open_plate"
+        },
+        "exit": {
+          "jumper": false,
+          "strong": false
+        },
+        "plates": [
+          {
+            "id": "A",
+            "occupants": [
+              "jumper"
+            ],
+            "pressed": true
+          },
+          {
+            "id": "B",
+            "occupants": [],
+            "pressed": false
+          }
+        ]
+      },
+      "puzzle_geometry": {
+        "door": {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 6000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 4000
+          },
+          "name": "door"
+        },
+        "exit": {
+          "max_x": 12000,
+          "max_z": 3000,
+          "min_x": 10000,
+          "min_z": 1000,
+          "y": 0
+        },
+        "plates": [
+          {
+            "max_x": 2300,
+            "max_z": 2300,
+            "min_x": 1700,
+            "min_z": 1700,
+            "y": 1000
+          },
+          {
+            "max_x": 10300,
+            "max_z": 5900,
+            "min_x": 9700,
+            "min_z": 5300,
+            "y": 0
+          }
+        ]
+      },
+      "recorded_ticks": 103,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "recovery_message_ticks": 0,
+      "room": 1,
+      "session_generation": 2,
+      "session_tick": 103,
+      "solids": [
+        {
+          "max": {
+            "x": 12000,
+            "y": 0,
+            "z": 8000
+          },
+          "min": {
+            "x": 0,
+            "y": -1000,
+            "z": 0
+          },
+          "name": "floor"
+        },
+        {
+          "max": {
+            "x": 0,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": -200,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-west"
+        },
+        {
+          "max": {
+            "x": 12200,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 12000,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-east"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 0
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-north"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 8000
+          },
+          "name": "wall-south"
+        },
+        {
+          "max": {
+            "x": 3000,
+            "y": 1000,
+            "z": 3000
+          },
+          "min": {
+            "x": 1000,
+            "y": 0,
+            "z": 1000
+          },
+          "name": "teaching-ledge"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 4000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 0
+          },
+          "name": "partition-north"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 8000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 6000
+          },
+          "name": "partition-south"
+        }
+      ]
+    },
+    "plate-b": {
+      "active_character": "strong",
+      "block": null,
+      "block_geometry": null,
+      "blocked_actions": [],
+      "characters": {
+        "jumper": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "teaching-ledge",
+          "velocity_y": 0,
+          "x": 1980,
+          "y": 1000,
+          "z": 2180
+        },
+        "strong": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 9980,
+          "y": 0,
+          "z": 5600
+        }
+      },
+      "consumed_input": {
+        "active": [
+          "down"
+        ],
+        "pressed": [],
+        "released": []
+      },
+      "fixture": "adventure-v3",
+      "frame": 248,
+      "pending_inputs": 0,
+      "phase": "playing",
+      "puzzle": {
+        "complete": false,
+        "door": {
+          "open": true,
+          "state": "open_plate"
+        },
+        "exit": {
+          "jumper": false,
+          "strong": false
+        },
+        "plates": [
+          {
+            "id": "A",
+            "occupants": [
+              "jumper"
+            ],
+            "pressed": true
+          },
+          {
+            "id": "B",
+            "occupants": [
+              "strong"
+            ],
+            "pressed": true
+          }
+        ]
+      },
+      "puzzle_geometry": {
+        "door": {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 6000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 4000
+          },
+          "name": "door"
+        },
+        "exit": {
+          "max_x": 12000,
+          "max_z": 3000,
+          "min_x": 10000,
+          "min_z": 1000,
+          "y": 0
+        },
+        "plates": [
+          {
+            "max_x": 2300,
+            "max_z": 2300,
+            "min_x": 1700,
+            "min_z": 1700,
+            "y": 1000
+          },
+          {
+            "max_x": 10300,
+            "max_z": 5900,
+            "min_x": 9700,
+            "min_z": 5300,
+            "y": 0
+          }
+        ]
+      },
+      "recorded_ticks": 248,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "recovery_message_ticks": 0,
+      "room": 1,
+      "session_generation": 2,
+      "session_tick": 248,
+      "solids": [
+        {
+          "max": {
+            "x": 12000,
+            "y": 0,
+            "z": 8000
+          },
+          "min": {
+            "x": 0,
+            "y": -1000,
+            "z": 0
+          },
+          "name": "floor"
+        },
+        {
+          "max": {
+            "x": 0,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": -200,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-west"
+        },
+        {
+          "max": {
+            "x": 12200,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 12000,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-east"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 0
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-north"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 8000
+          },
+          "name": "wall-south"
+        },
+        {
+          "max": {
+            "x": 3000,
+            "y": 1000,
+            "z": 3000
+          },
+          "min": {
+            "x": 1000,
+            "y": 0,
+            "z": 1000
+          },
+          "name": "teaching-ledge"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 4000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 0
+          },
+          "name": "partition-north"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 8000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 6000
+          },
+          "name": "partition-south"
+        }
+      ]
+    },
+    "exchange": {
+      "active_character": "jumper",
+      "block": null,
+      "block_geometry": null,
+      "blocked_actions": [],
+      "characters": {
+        "jumper": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 1980,
+          "y": 0,
+          "z": 5180
+        },
+        "strong": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 9980,
+          "y": 0,
+          "z": 5600
+        }
+      },
+      "consumed_input": {
+        "active": [
+          "down"
+        ],
+        "pressed": [],
+        "released": []
+      },
+      "fixture": "adventure-v3",
+      "frame": 300,
+      "pending_inputs": 0,
+      "phase": "playing",
+      "puzzle": {
+        "complete": false,
+        "door": {
+          "open": true,
+          "state": "open_plate"
+        },
+        "exit": {
+          "jumper": false,
+          "strong": false
+        },
+        "plates": [
+          {
+            "id": "A",
+            "occupants": [],
+            "pressed": false
+          },
+          {
+            "id": "B",
+            "occupants": [
+              "strong"
+            ],
+            "pressed": true
+          }
+        ]
+      },
+      "puzzle_geometry": {
+        "door": {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 6000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 4000
+          },
+          "name": "door"
+        },
+        "exit": {
+          "max_x": 12000,
+          "max_z": 3000,
+          "min_x": 10000,
+          "min_z": 1000,
+          "y": 0
+        },
+        "plates": [
+          {
+            "max_x": 2300,
+            "max_z": 2300,
+            "min_x": 1700,
+            "min_z": 1700,
+            "y": 1000
+          },
+          {
+            "max_x": 10300,
+            "max_z": 5900,
+            "min_x": 9700,
+            "min_z": 5300,
+            "y": 0
+          }
+        ]
+      },
+      "recorded_ticks": 300,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "recovery_message_ticks": 0,
+      "room": 1,
+      "session_generation": 2,
+      "session_tick": 300,
+      "solids": [
+        {
+          "max": {
+            "x": 12000,
+            "y": 0,
+            "z": 8000
+          },
+          "min": {
+            "x": 0,
+            "y": -1000,
+            "z": 0
+          },
+          "name": "floor"
+        },
+        {
+          "max": {
+            "x": 0,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": -200,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-west"
+        },
+        {
+          "max": {
+            "x": 12200,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 12000,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-east"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 0
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-north"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 8000
+          },
+          "name": "wall-south"
+        },
+        {
+          "max": {
+            "x": 3000,
+            "y": 1000,
+            "z": 3000
+          },
+          "min": {
+            "x": 1000,
+            "y": 0,
+            "z": 1000
+          },
+          "name": "teaching-ledge"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 4000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 0
+          },
+          "name": "partition-north"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 8000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 6000
+          },
+          "name": "partition-south"
+        }
+      ]
+    },
+    "jumper-exit": {
+      "active_character": "jumper",
+      "block": null,
+      "block_geometry": null,
+      "blocked_actions": [],
+      "characters": {
+        "jumper": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 10500,
+          "y": 0,
+          "z": 2180
+        },
+        "strong": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 9980,
+          "y": 0,
+          "z": 5600
+        }
+      },
+      "consumed_input": {
+        "active": [
+          "up"
+        ],
+        "pressed": [],
+        "released": []
+      },
+      "fixture": "adventure-v3",
+      "frame": 492,
+      "pending_inputs": 0,
+      "phase": "playing",
+      "puzzle": {
+        "complete": false,
+        "door": {
+          "open": true,
+          "state": "open_plate"
+        },
+        "exit": {
+          "jumper": true,
+          "strong": false
+        },
+        "plates": [
+          {
+            "id": "A",
+            "occupants": [],
+            "pressed": false
+          },
+          {
+            "id": "B",
+            "occupants": [
+              "strong"
+            ],
+            "pressed": true
+          }
+        ]
+      },
+      "puzzle_geometry": {
+        "door": {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 6000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 4000
+          },
+          "name": "door"
+        },
+        "exit": {
+          "max_x": 12000,
+          "max_z": 3000,
+          "min_x": 10000,
+          "min_z": 1000,
+          "y": 0
+        },
+        "plates": [
+          {
+            "max_x": 2300,
+            "max_z": 2300,
+            "min_x": 1700,
+            "min_z": 1700,
+            "y": 1000
+          },
+          {
+            "max_x": 10300,
+            "max_z": 5900,
+            "min_x": 9700,
+            "min_z": 5300,
+            "y": 0
+          }
+        ]
+      },
+      "recorded_ticks": 492,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "recovery_message_ticks": 0,
+      "room": 1,
+      "session_generation": 2,
+      "session_tick": 492,
+      "solids": [
+        {
+          "max": {
+            "x": 12000,
+            "y": 0,
+            "z": 8000
+          },
+          "min": {
+            "x": 0,
+            "y": -1000,
+            "z": 0
+          },
+          "name": "floor"
+        },
+        {
+          "max": {
+            "x": 0,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": -200,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-west"
+        },
+        {
+          "max": {
+            "x": 12200,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 12000,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-east"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 0
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-north"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 8000
+          },
+          "name": "wall-south"
+        },
+        {
+          "max": {
+            "x": 3000,
+            "y": 1000,
+            "z": 3000
+          },
+          "min": {
+            "x": 1000,
+            "y": 0,
+            "z": 1000
+          },
+          "name": "teaching-ledge"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 4000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 0
+          },
+          "name": "partition-north"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 8000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 6000
+          },
+          "name": "partition-south"
+        }
+      ]
+    },
+    "complete": {
+      "active_character": "strong",
+      "block": null,
+      "block_geometry": null,
+      "blocked_actions": [],
+      "characters": {
+        "jumper": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 10500,
+          "y": 0,
+          "z": 2180
+        },
+        "strong": {
+          "collisions": {
+            "ceiling": null,
+            "landed": null,
+            "x": null,
+            "z": null
+          },
+          "grounded": true,
+          "support": "floor",
+          "velocity_y": 0,
+          "x": 11480,
+          "y": 0,
+          "z": 2780
+        }
+      },
+      "consumed_input": {
+        "active": [],
+        "pressed": [],
+        "released": []
+      },
+      "fixture": "adventure-v3",
+      "frame": 579,
+      "pending_inputs": 0,
+      "phase": "room_complete",
+      "puzzle": {
+        "complete": true,
+        "door": {
+          "open": false,
+          "state": "closed"
+        },
+        "exit": {
+          "jumper": true,
+          "strong": true
+        },
+        "plates": [
+          {
+            "id": "A",
+            "occupants": [],
+            "pressed": false
+          },
+          {
+            "id": "B",
+            "occupants": [],
+            "pressed": false
+          }
+        ]
+      },
+      "puzzle_geometry": {
+        "door": {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 6000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 4000
+          },
+          "name": "door"
+        },
+        "exit": {
+          "max_x": 12000,
+          "max_z": 3000,
+          "min_x": 10000,
+          "min_z": 1000,
+          "y": 0
+        },
+        "plates": [
+          {
+            "max_x": 2300,
+            "max_z": 2300,
+            "min_x": 1700,
+            "min_z": 1700,
+            "y": 1000
+          },
+          {
+            "max_x": 10300,
+            "max_z": 5900,
+            "min_x": 9700,
+            "min_z": 5300,
+            "y": 0
+          }
+        ]
+      },
+      "recorded_ticks": 579,
+      "recording_truncated": false,
+      "recording_valid": true,
+      "recovery_message_ticks": 0,
+      "room": 1,
+      "session_generation": 2,
+      "session_tick": 566,
+      "solids": [
+        {
+          "max": {
+            "x": 12000,
+            "y": 0,
+            "z": 8000
+          },
+          "min": {
+            "x": 0,
+            "y": -1000,
+            "z": 0
+          },
+          "name": "floor"
+        },
+        {
+          "max": {
+            "x": 0,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": -200,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-west"
+        },
+        {
+          "max": {
+            "x": 12200,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 12000,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-east"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 0
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": -200
+          },
+          "name": "wall-north"
+        },
+        {
+          "max": {
+            "x": 12000,
+            "y": 4000,
+            "z": 8200
+          },
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 8000
+          },
+          "name": "wall-south"
+        },
+        {
+          "max": {
+            "x": 3000,
+            "y": 1000,
+            "z": 3000
+          },
+          "min": {
+            "x": 1000,
+            "y": 0,
+            "z": 1000
+          },
+          "name": "teaching-ledge"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 4000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 0
+          },
+          "name": "partition-north"
+        },
+        {
+          "max": {
+            "x": 8000,
+            "y": 4000,
+            "z": 8000
+          },
+          "min": {
+            "x": 7000,
+            "y": 0,
+            "z": 6000
+          },
+          "name": "partition-south"
+        }
+      ]
+    }
+  },
+  "calls": 623,
+  "cleanup_verified": true,
+  "capabilities": {
+    "controlled": true,
+    "mutation_enabled": false,
+    "operations": [
+      "inspect",
+      "step",
+      "invoke",
+      "inject_input",
+      "query"
+    ],
+    "run_mode": "headless",
+    "schema_version": 2,
+    "type": "capabilities"
+  },
+  "commands": {
+    "commands": [
+      {
+        "description": "Start, continue or play again on one recorded fixed tick",
+        "name": "confirm"
+      },
+      {
+        "arguments": {
+          "recording": {
+            "description": "Adventure recording object",
+            "type_name": "object",
+            "writable": false
+          }
+        },
+        "description": "Validate and replay at most 4096 recorded ticks from fixture origin",
+        "name": "replay"
+      },
+      {
+        "description": "Restore fixture and clear input/replay; increment session generation",
+        "name": "restart"
+      },
+      {
+        "arguments": {
+          "room": {
+            "description": "Room 1 or 2",
+            "type_name": "u8",
+            "writable": false
+          }
+        },
+        "description": "Development selector: reconstruct room 1 or 2",
+        "name": "select_room"
+      },
+      {
+        "description": "Switch active character on one recorded fixed tick; suppress held input until release",
+        "name": "switch"
+      }
+    ],
+    "type": "commands"
+  },
+  "queries": {
+    "queries": [
+      {
+        "description": "Bounded canonical-origin digital recording",
+        "name": "recording"
+      },
+      {
+        "description": "Bounded room state",
+        "name": "state"
+      }
+    ],
+    "type": "queries"
+  },
+  "entities": {
+    "entities": [
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::Hud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 0
+        },
+        "name": "ui/active-character"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::PuzzleHud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 1
+        },
+        "name": "ui/puzzle-0"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::PuzzleHud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 2
+        },
+        "name": "ui/puzzle-1"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::PuzzleHud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 3
+        },
+        "name": "ui/puzzle-2"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::PuzzleHud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 4
+        },
+        "name": "ui/puzzle-3"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::PuzzleHud"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 5
+        },
+        "name": "ui/puzzle-4"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan_adventure::game::presentation::Panel"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 6
+        },
+        "name": "ui/panel-top"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan_adventure::game::presentation::Panel"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 7
+        },
+        "name": "ui/panel-bottom"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan_adventure::game::presentation::Panel"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 8
+        },
+        "name": "ui/panel-screen"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 9
+        },
+        "name": "ui/screen-0"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 10
+        },
+        "name": "ui/screen-1"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 11
+        },
+        "name": "ui/screen-2"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 12
+        },
+        "name": "ui/screen-3"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 13
+        },
+        "name": "ui/screen-4"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiNode",
+          "titan::ui::UiText",
+          "titan_adventure::game::presentation::ScreenText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 14
+        },
+        "name": "ui/screen-5"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiButton",
+          "titan::ui::UiNode",
+          "titan::ui::UiText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 15
+        },
+        "name": "ui/confirm"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan::ui::UiButton",
+          "titan::ui::UiNode",
+          "titan::ui::UiText"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 16
+        },
+        "name": "ui/restart-room"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 17
+        },
+        "name": "floor"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 18
+        },
+        "name": "wall-west"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 19
+        },
+        "name": "wall-east"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 20
+        },
+        "name": "wall-north"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 21
+        },
+        "name": "teaching-ledge"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 22
+        },
+        "name": "partition-north"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 23
+        },
+        "name": "partition-south"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Character",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual",
+          "titan_adventure::game::movement::Movement"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 24
+        },
+        "name": "jumper"
+      },
+      {
+        "components": [
+          "titan::ecs::builtin::Name",
+          "titan_adventure::game::Character",
+          "titan_adventure::game::Position",
+          "titan_adventure::game::Visual",
+          "titan_adventure::game::movement::Movement"
+        ],
+        "id": {
+          "generation": 0,
+          "index": 25
+        },
+        "name": "strong"
+      }
+    ],
+    "type": "entities"
+  },
+  "initial": {
+    "active_character": "jumper",
+    "block": null,
+    "block_geometry": null,
+    "blocked_actions": [],
+    "characters": {
+      "jumper": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 1500,
+        "y": 0,
+        "z": 6500
+      },
+      "strong": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 3500,
+        "y": 0,
+        "z": 6500
+      }
+    },
+    "consumed_input": {
+      "active": [],
+      "pressed": [],
+      "released": []
+    },
+    "fixture": "adventure-v3",
+    "frame": 0,
+    "pending_inputs": 0,
+    "phase": "playing",
+    "puzzle": {
+      "complete": false,
+      "door": {
+        "open": false,
+        "state": "closed"
+      },
+      "exit": {
+        "jumper": false,
+        "strong": false
+      },
+      "plates": [
+        {
+          "id": "A",
+          "occupants": [],
+          "pressed": false
+        },
+        {
+          "id": "B",
+          "occupants": [],
+          "pressed": false
+        }
+      ]
+    },
+    "puzzle_geometry": {
+      "door": {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 6000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 4000
+        },
+        "name": "door"
+      },
+      "exit": {
+        "max_x": 12000,
+        "max_z": 3000,
+        "min_x": 10000,
+        "min_z": 1000,
+        "y": 0
+      },
+      "plates": [
+        {
+          "max_x": 2300,
+          "max_z": 2300,
+          "min_x": 1700,
+          "min_z": 1700,
+          "y": 1000
+        },
+        {
+          "max_x": 10300,
+          "max_z": 5900,
+          "min_x": 9700,
+          "min_z": 5300,
+          "y": 0
+        }
+      ]
+    },
+    "recorded_ticks": 0,
+    "recording_truncated": false,
+    "recording_valid": true,
+    "recovery_message_ticks": 0,
+    "room": 1,
+    "session_generation": 2,
+    "session_tick": 0,
+    "solids": [
+      {
+        "max": {
+          "x": 12000,
+          "y": 0,
+          "z": 8000
+        },
+        "min": {
+          "x": 0,
+          "y": -1000,
+          "z": 0
+        },
+        "name": "floor"
+      },
+      {
+        "max": {
+          "x": 0,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": -200,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-west"
+      },
+      {
+        "max": {
+          "x": 12200,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": 12000,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-east"
+      },
+      {
+        "max": {
+          "x": 12000,
+          "y": 4000,
+          "z": 0
+        },
+        "min": {
+          "x": 0,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-north"
+      },
+      {
+        "max": {
+          "x": 12000,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": 0,
+          "y": 0,
+          "z": 8000
+        },
+        "name": "wall-south"
+      },
+      {
+        "max": {
+          "x": 3000,
+          "y": 1000,
+          "z": 3000
+        },
+        "min": {
+          "x": 1000,
+          "y": 0,
+          "z": 1000
+        },
+        "name": "teaching-ledge"
+      },
+      {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 4000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 0
+        },
+        "name": "partition-north"
+      },
+      {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 8000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 6000
+        },
+        "name": "partition-south"
+      }
+    ]
+  },
+  "diagnostic_summary": {
+    "bundle_version": 1,
+    "response": {
+      "schema_version": 2,
+      "request_id": "cli-78132",
+      "instance_id": "variation-86-77483",
+      "observed_frame": 579,
+      "state_revision": 599,
+      "status": "failure",
+      "error": {
+        "code": "invalid_value",
+        "message": "unsupported, truncated or oversized recording",
+        "retryable": false
+      }
+    },
+    "capture": null,
+    "api_summary": {
+      "components": [
+        {
+          "name": "titan::ecs::builtin::Name",
+          "fields": {}
+        },
+        {
+          "name": "titan::ui::UiButton",
+          "fields": {
+            "enabled": {
+              "type_name": "bool",
+              "description": "Whether a completed gesture may activate",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "titan::ui::UiNode",
+          "fields": {
+            "height": {
+              "type_name": "u32",
+              "description": "Hit rectangle height in pixels",
+              "writable": false
+            },
+            "layer": {
+              "type_name": "i32",
+              "description": "Sprite and hit-test layer",
+              "writable": false
+            },
+            "order": {
+              "type_name": "i32",
+              "description": "Order within the layer",
+              "writable": false
+            },
+            "visible": {
+              "type_name": "bool",
+              "description": "Draw and receive pointer hits",
+              "writable": false
+            },
+            "width": {
+              "type_name": "u32",
+              "description": "Hit rectangle width in pixels",
+              "writable": false
+            },
+            "x": {
+              "type_name": "i32",
+              "description": "Framebuffer-pixel left edge",
+              "writable": false
+            },
+            "y": {
+              "type_name": "i32",
+              "description": "Framebuffer-pixel top edge",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "titan::ui::UiText",
+          "fields": {
+            "color": {
+              "type_name": "[u8; 4]",
+              "description": "Straight-alpha RGBA text tint",
+              "writable": false
+            },
+            "text": {
+              "type_name": "String",
+              "description": "Displayed text",
+              "writable": false
+            },
+            "wrap": {
+              "type_name": "bool",
+              "description": "Word wrap and truncate to whole font cells in node bounds",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "titan_adventure::game::Character",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::Hud",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::Position",
+          "fields": {
+            "x": {
+              "type_name": "i32",
+              "description": "X coordinate in millimeters",
+              "writable": false
+            },
+            "y": {
+              "type_name": "i32",
+              "description": "Foot height in millimeters",
+              "writable": false
+            },
+            "z": {
+              "type_name": "i32",
+              "description": "Z coordinate in millimeters",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "titan_adventure::game::Visual",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::movement::Movement",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::presentation::Panel",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::presentation::PuzzleHud",
+          "fields": {}
+        },
+        {
+          "name": "titan_adventure::game::presentation::ScreenText",
+          "fields": {}
+        }
+      ],
+      "commands": [
+        {
+          "name": "confirm",
+          "description": "Start, continue or play again on one recorded fixed tick"
+        },
+        {
+          "name": "replay",
+          "description": "Validate and replay at most 4096 recorded ticks from fixture origin",
+          "arguments": {
+            "recording": {
+              "type_name": "object",
+              "description": "Adventure recording object",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "restart",
+          "description": "Restore fixture and clear input/replay; increment session generation"
+        },
+        {
+          "name": "select_room",
+          "description": "Development selector: reconstruct room 1 or 2",
+          "arguments": {
+            "room": {
+              "type_name": "u8",
+              "description": "Room 1 or 2",
+              "writable": false
+            }
+          }
+        },
+        {
+          "name": "switch",
+          "description": "Switch active character on one recorded fixed tick; suppress held input until release"
+        }
+      ]
+    },
+    "world_state_present": true,
+    "api_text_read": true
+  },
+  "deliberate_rejection": {
+    "error": {
+      "code": "invalid_value",
+      "details": {
+        "diagnostic_bundle": "<scratch>/games/adventure/target/titan/diagnostics/bundle-77487-1788696409656965000-0/bundle.json"
+      },
+      "message": "unsupported, truncated or oversized recording",
+      "retryable": false
+    },
+    "instance_id": "variation-86-77483",
+    "observed_frame": 579,
+    "request_id": "cli-78132",
+    "schema_version": 2,
+    "state_revision": 599,
+    "status": "failure"
+  },
+  "replay_compared_keys": [
+    "characters",
+    "active_character",
+    "session_tick",
+    "consumed_input",
+    "puzzle",
+    "room",
+    "phase",
+    "block"
+  ],
+  "replay_equal": true
+}

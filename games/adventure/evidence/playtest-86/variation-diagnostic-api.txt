@@ -1,0 +1,34 @@
+Titan protocol schema 2
+component titan::ecs::builtin::Name
+component titan::ui::UiButton
+  enabled: bool [read-only] (Whether a completed gesture may activate)
+component titan::ui::UiNode
+  height: u32 [read-only] (Hit rectangle height in pixels)
+  layer: i32 [read-only] (Sprite and hit-test layer)
+  order: i32 [read-only] (Order within the layer)
+  visible: bool [read-only] (Draw and receive pointer hits)
+  width: u32 [read-only] (Hit rectangle width in pixels)
+  x: i32 [read-only] (Framebuffer-pixel left edge)
+  y: i32 [read-only] (Framebuffer-pixel top edge)
+component titan::ui::UiText
+  color: [u8; 4] [read-only] (Straight-alpha RGBA text tint)
+  text: String [read-only] (Displayed text)
+  wrap: bool [read-only] (Word wrap and truncate to whole font cells in node bounds)
+component titan_adventure::game::Character
+component titan_adventure::game::Hud
+component titan_adventure::game::Position
+  x: i32 [read-only] (X coordinate in millimeters)
+  y: i32 [read-only] (Foot height in millimeters)
+  z: i32 [read-only] (Z coordinate in millimeters)
+component titan_adventure::game::Visual
+component titan_adventure::game::movement::Movement
+component titan_adventure::game::presentation::Panel
+component titan_adventure::game::presentation::PuzzleHud
+component titan_adventure::game::presentation::ScreenText
+command confirm — Start, continue or play again on one recorded fixed tick
+command replay — Validate and replay at most 4096 recorded ticks from fixture origin
+  recording: object (Adventure recording object)
+command restart — Restore fixture and clear input/replay; increment session generation
+command select_room — Development selector: reconstruct room 1 or 2
+  room: u8 (Room 1 or 2)
+command switch — Switch active character on one recorded fixed tick; suppress held input until release

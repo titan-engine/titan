@@ -1,3 +1,19 @@
+# Independent whole-slice evaluation
+
+[Issue #86 evidence](evidence/playtest-86/README.md) evaluates gameplay revision
+`02272893a0d91af2b1ac6b5159644b70ab46108c` with new independent route perturbations,
+mistakes and recovery, 34 semantic checkpoint replays, native Metal presentation
+and actual browser WebGPU/WebGL2 (209 checks each). An unfamiliar agent made a
+room-1 plate variation in a disposable copy and recorded its own workflow,
+diagnostics, failures and timing limitations. No production gameplay defect
+was found in these bounded checks. The new authoring pointer in the game guide
+addresses the source-discovery friction observed in that exercise.
+
+This is agent evaluation and platform evidence, not a human usability study.
+The linked report separates ordinary-input recovery from controlled below-floor
+fixtures, documents held-switch friction and fixed-view limits, and retains
+precise source revisions and capture identities. Historical evidence follows.
+
 # Playable sequence verification
 
 Issue #85 was exercised on 2026-09-06 on macOS / Apple M5 Pro. The default
@@ -55,7 +71,7 @@ not extended human usability feedback. The fixed camera and movement tuning
 are unchanged. GPU checksums establish consistency within each backend, not
 portable pixel identity. Recordings remain bounded to 4096 ticks; Start/Continue/
 Play again preserve sequence history, while R/recovery begin a new room origin.
-Independent whole-slice playtesting remains tracked by #86.
+New independent whole-slice evaluation is recorded above for #86.
 
 The sections below retain historical evidence at their original revisions.
 

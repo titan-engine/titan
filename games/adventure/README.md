@@ -213,6 +213,7 @@ cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
 cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
 cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
 python3 games/adventure/scripts/test-control.py
+python3 games/adventure/scripts/test-playtest.py
 python3 games/adventure/scripts/build-browser.py
 node games/adventure/scripts/test-browser.mjs
 node games/adventure/scripts/test-movement.mjs
@@ -240,3 +241,15 @@ With the browser server running, visit `/play/test.html?backend=webgpu` and
 alone establishes no browser GPU behavior. See [verification evidence](verification.md)
 for the exercised environment and limitations. Build outputs and runtime
 diagnostics are ignored, and no external RPG support module is imported.
+
+## Bounded source variations
+
+Room geometry is ordinary Rust source: public `Rect`, `PLATES` and `plates(room)`
+in [game/puzzle.rs](src/game/puzzle.rs) define plate bounds; room-specific
+solids are in [game.rs](src/game.rs). Inspect `state.puzzle_geometry` to confirm
+the compiled bounds. Work in a disposable copy for an experiment, rebuild the
+game, adapt ordinary input routes, and verify both completion and replay.
+The [independent plate variation](evidence/playtest-86/variation-notes.md)
+retains an exact patch, route and reproduction command. The
+[iteration procedure](../../docs/agent-iteration.md) defines measurement and
+diagnostic reporting; this example adds no runtime editing or new mechanics.

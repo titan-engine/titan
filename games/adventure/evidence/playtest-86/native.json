@@ -1,0 +1,1453 @@
+{
+  "native_gpu_frames": 4311,
+  "replay_ticks": 11,
+  "semantic_equivalence": true,
+  "final_state": {
+    "active_character": "jumper",
+    "block": null,
+    "block_geometry": null,
+    "blocked_actions": [],
+    "characters": {
+      "jumper": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 1500,
+        "y": 0,
+        "z": 6500
+      },
+      "strong": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 3500,
+        "y": 0,
+        "z": 6320
+      }
+    },
+    "consumed_input": {
+      "active": [
+        "left"
+      ],
+      "pressed": [
+        "left"
+      ],
+      "released": []
+    },
+    "fixture": "adventure-v3",
+    "frame": 22,
+    "pending_inputs": 0,
+    "phase": "playing",
+    "puzzle": {
+      "complete": false,
+      "door": {
+        "open": false,
+        "state": "closed"
+      },
+      "exit": {
+        "jumper": false,
+        "strong": false
+      },
+      "plates": [
+        {
+          "id": "A",
+          "occupants": [],
+          "pressed": false
+        },
+        {
+          "id": "B",
+          "occupants": [],
+          "pressed": false
+        }
+      ]
+    },
+    "puzzle_geometry": {
+      "door": {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 6000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 4000
+        },
+        "name": "door"
+      },
+      "exit": {
+        "max_x": 12000,
+        "max_z": 3000,
+        "min_x": 10000,
+        "min_z": 1000,
+        "y": 0
+      },
+      "plates": [
+        {
+          "max_x": 2300,
+          "max_z": 2300,
+          "min_x": 1700,
+          "min_z": 1700,
+          "y": 1000
+        },
+        {
+          "max_x": 10300,
+          "max_z": 5300,
+          "min_x": 9700,
+          "min_z": 4700,
+          "y": 0
+        }
+      ]
+    },
+    "recorded_ticks": 11,
+    "recording_truncated": false,
+    "recording_valid": true,
+    "recovery_message_ticks": 0,
+    "room": 1,
+    "session_generation": 2,
+    "session_tick": 11,
+    "solids": [
+      {
+        "max": {
+          "x": 12000,
+          "y": 0,
+          "z": 8000
+        },
+        "min": {
+          "x": 0,
+          "y": -1000,
+          "z": 0
+        },
+        "name": "floor"
+      },
+      {
+        "max": {
+          "x": 0,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": -200,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-west"
+      },
+      {
+        "max": {
+          "x": 12200,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": 12000,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-east"
+      },
+      {
+        "max": {
+          "x": 12000,
+          "y": 4000,
+          "z": 0
+        },
+        "min": {
+          "x": 0,
+          "y": 0,
+          "z": -200
+        },
+        "name": "wall-north"
+      },
+      {
+        "max": {
+          "x": 12000,
+          "y": 4000,
+          "z": 8200
+        },
+        "min": {
+          "x": 0,
+          "y": 0,
+          "z": 8000
+        },
+        "name": "wall-south"
+      },
+      {
+        "max": {
+          "x": 3000,
+          "y": 1000,
+          "z": 3000
+        },
+        "min": {
+          "x": 1000,
+          "y": 0,
+          "z": 1000
+        },
+        "name": "teaching-ledge"
+      },
+      {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 4000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 0
+        },
+        "name": "partition-north"
+      },
+      {
+        "max": {
+          "x": 8000,
+          "y": 4000,
+          "z": 8000
+        },
+        "min": {
+          "x": 7000,
+          "y": 0,
+          "z": 6000
+        },
+        "name": "partition-south"
+      }
+    ]
+  },
+  "capture_registered": true,
+  "readonly_capture": true,
+  "surface_lifecycle_verified": true,
+  "captures": {
+    "strong-blocked": {
+      "artifact": "native-strong-blocked.png",
+      "checksum": "b1e0fd238ac82300",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 11,
+        "height": 540,
+        "instance_id": "adventure-player-test-71721",
+        "observed_frame": 275,
+        "session_generation": 5,
+        "state_revision": 294,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "strong",
+        "block": null,
+        "block_geometry": null,
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1500,
+            "y": 0,
+            "z": 6500
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": "teaching-ledge"
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 2000,
+            "y": 0,
+            "z": 3200
+          }
+        },
+        "consumed_input": {
+          "active": [
+            "up",
+            "jump"
+          ],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 275,
+        "pending_inputs": 0,
+        "phase": "playing",
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 2300,
+              "max_z": 2300,
+              "min_x": 1700,
+              "min_z": 1700,
+              "y": 1000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 116,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 1,
+        "session_generation": 5,
+        "session_tick": 116,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 3000,
+              "y": 1000,
+              "z": 3000
+            },
+            "min": {
+              "x": 1000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "teaching-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "puzzle-obstructed": {
+      "artifact": "native-puzzle-obstructed.png",
+      "checksum": "e10afe17a64e6c0f",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 19,
+        "height": 540,
+        "instance_id": "adventure-player-test-71721",
+        "observed_frame": 1652,
+        "session_generation": 8,
+        "state_revision": 1145,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "jumper",
+        "block": null,
+        "block_geometry": null,
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1980,
+            "y": 0,
+            "z": 5180
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 7520,
+            "y": 0,
+            "z": 5000
+          }
+        },
+        "consumed_input": {
+          "active": [
+            "down"
+          ],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 1652,
+        "pending_inputs": 0,
+        "phase": "playing",
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": true,
+            "state": "open_obstructed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 2300,
+              "max_z": 2300,
+              "min_x": 1700,
+              "min_z": 1700,
+              "y": 1000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 249,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 1,
+        "session_generation": 8,
+        "session_tick": 249,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 3000,
+              "y": 1000,
+              "z": 3000
+            },
+            "min": {
+              "x": 1000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "teaching-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "sequence-start": {
+      "artifact": "native-sequence-start.png",
+      "checksum": "b1c26462f64bcb35",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 42,
+        "height": 540,
+        "instance_id": "adventure-player-test-71721",
+        "observed_frame": 3970,
+        "session_generation": 18,
+        "state_revision": 2386,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "jumper",
+        "block": null,
+        "block_geometry": null,
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1500,
+            "y": 0,
+            "z": 6500
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 3500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 3970,
+        "pending_inputs": 0,
+        "phase": "start",
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 2300,
+              "max_z": 2300,
+              "min_x": 1700,
+              "min_z": 1700,
+              "y": 1000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 0,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 1,
+        "session_generation": 18,
+        "session_tick": 0,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 3000,
+              "y": 1000,
+              "z": 3000
+            },
+            "min": {
+              "x": 1000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "teaching-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "sequence-continued": {
+      "artifact": "native-sequence-continued.png",
+      "checksum": "10607abe934d8ae5",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 45,
+        "height": 540,
+        "instance_id": "adventure-player-test-71721",
+        "observed_frame": 4533,
+        "session_generation": 20,
+        "state_revision": 2407,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "jumper",
+        "block": {
+          "last_rejection": null,
+          "moves": 0,
+          "socket": 0
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 5950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 5050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [
+          "confirm"
+        ],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1500,
+            "y": 0,
+            "z": 6500
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 3500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 4533,
+        "pending_inputs": 0,
+        "phase": "playing",
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 563,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 20,
+        "session_tick": 0,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "sequence-room-2-complete": {
+      "artifact": "native-sequence-room-2-complete.png",
+      "checksum": "2281ddd450a63035",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 46,
+        "height": 540,
+        "instance_id": "adventure-player-test-71721",
+        "observed_frame": 5109,
+        "session_generation": 20,
+        "state_revision": 2437,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "strong",
+        "block": {
+          "last_rejection": null,
+          "moves": 2,
+          "socket": 2
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 3950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 3050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 10500,
+            "y": 0,
+            "z": 2300
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 11480,
+            "y": 0,
+            "z": 2780
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 5109,
+        "pending_inputs": 0,
+        "phase": "slice_complete",
+        "puzzle": {
+          "complete": true,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": true,
+            "strong": true
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 1139,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 20,
+        "session_tick": 563,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    }
+  },
+  "revision": "02272893a0d91af2b1ac6b5159644b70ab46108c"
+}
