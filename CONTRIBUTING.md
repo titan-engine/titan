@@ -132,8 +132,8 @@ one manually initiated comparison when proposing an update (no scheduled matrix)
 ```sh
 rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
 rustc +stable --version
-CARGO_BUILD_JOBS=4 cargo +stable test --workspace --all-targets
-CARGO_BUILD_JOBS=4 cargo +stable clippy --workspace --all-targets --all-features -- -D warnings
+CARGO_BUILD_JOBS=4 cargo +stable test --locked --workspace --all-targets
+CARGO_BUILD_JOBS=4 cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
 ```
 
 Record the exact tested compiler and any diagnostic differences. These bounded
