@@ -31,7 +31,8 @@ not a software reference or an image generated separately from the game.
   Both exercised keyboard sampling, switch suppression, 17-tick interactive
   replay, pause/resume, restart, owned asynchronous capture, capture cancellation,
   zero-size recovery, rapid release/repress between ticks, and 800 × 500 /
-  960 × 540 / 1280 × 720 presentation. The browser route
+  960 × 540 / 1280 × 720 presentation. High-DPI requests retain proportional
+  backing dimensions under the 2048-pixel allocation cap. The browser route
   ends at Jumper `(1980,6500)` and Strong `(3500,6020)`, with Strong active.
   The page displays assertions and provides identity-bearing capture evidence.
 - Root workspace formatting, tests, Clippy and WASM core checks passed, together

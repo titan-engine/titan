@@ -76,6 +76,9 @@ try {
  for(const [width,height] of [[640,360],[800,500],[1280,720],[960,540]]) {
    player.resize(width,height);check(player.frame(0)&&!state().surface.suspended,`${width}x${height} presents`);
  }
+ player.resize(2560,1440);
+ check(player.frame(0)&&JSON.stringify(state().surface.size)===JSON.stringify([2048,1152]),'high-DPI backing size preserves 16:9 under allocation cap');
+ player.resize(960,540);
  player.restart();player.resume();
  player.set_key('KeyD',true,false);player.set_key('ArrowRight',true,false);tick();
  player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
