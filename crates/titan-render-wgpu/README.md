@@ -137,7 +137,9 @@ The host owns keyboard/focus events, fixed ticks, camera aspect and extraction.
 which hosts must use for browser backing sizes and, by default, camera aspect.
 For a fixed camera, call `set_aspect_ratio(Some((16, 9)))?` and use the same ratio
 in the camera. Scene and UI targets fit inside the surface, centered with black
-letterbox/pillarbox bars. Fitting rounds down to whole pixels (at least one pixel
+letterbox/pillarbox bars. In this mode oversized backing surfaces scale both axes
+together to preserve window/canvas proportions, including high-DPI surfaces.
+Fitting rounds down to whole pixels (at least one pixel
 per axis). Both ratio terms must be nonzero. `set_aspect_ratio(None)` restores
 full-surface presentation; offscreen capture dimensions are unaffected.
 Zero dimensions
