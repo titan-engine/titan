@@ -1,5 +1,7 @@
-//! Factory construction and deterministic bounded transport. Production is not enabled.
+//! Factory construction, snapshot transport, and bounded ore-to-plate production.
+mod production;
 mod transport;
+pub use production::build_production_fixture;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -58,6 +60,8 @@ struct Structure {
     kind: Kind,
     facing: Facing,
     slots: Slots,
+    progress: u32,
+    remaining: u32,
     last_transfer_reason: Option<&'static str>,
 }
 impl Structure {
@@ -75,7 +79,7 @@ impl Structure {
         (self.kind != Kind::Delivery).then_some(self.facing)
     }
     fn value(&self) -> Value {
-        json!({"x":self.x,"y":self.y,"kind":self.kind,"facing":self.facing,"inputs":self.inputs(),"output":self.output(),"slots":self.slots,"item_positions":transport::item_positions(self),"last_transfer_reason":self.last_transfer_reason})
+        json!({"x":self.x,"y":self.y,"kind":self.kind,"facing":self.facing,"inputs":self.inputs(),"output":self.output(),"slots":self.slots,"progress":self.progress,"remaining":self.remaining,"item_positions":transport::item_positions(self),"last_transfer_reason":self.last_transfer_reason})
     }
 }
 #[derive(Component)]
@@ -102,6 +106,8 @@ struct Selection {
 }
 struct State {
     tick: u64,
+    production_enabled: bool,
+    diagnostic: Option<String>,
     seeded: u64,
     extracted: u64,
     delivered: u64,
@@ -116,6 +122,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             tick: 0,
+            production_enabled: true,
+            diagnostic: None,
             seeded: 0,
             extracted: 0,
             delivered: 0,
@@ -220,6 +228,8 @@ fn reset_world(world: &mut World) {
             kind: Kind::Delivery,
             facing: Facing::E,
             slots: Slots::default(),
+            progress: 0,
+            remaining: 0,
             last_transfer_reason: None,
         },
         Name::new("delivery"),
@@ -265,6 +275,11 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
     {
         return Err("COMPLETE: restart before construction".into());
     }
+    if let Some(diagnostic) = &app.world().resource::<State>().unwrap().diagnostic
+        && !matches!(op, Operation::Inspect { .. } | Operation::Restart)
+    {
+        return Err(diagnostic.clone());
+    }
     match op {
         Operation::Place { kind, x, y, facing } => {
             tile(x, y)?;
@@ -289,6 +304,8 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
                     kind,
                     facing,
                     slots: Slots::default(),
+                    progress: 0,
+                    remaining: 0,
                     last_transfer_reason: None,
                 },
                 Name::new(format!("{kind:?} ({x},{y})")),
@@ -349,6 +366,9 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
                 return Err("ADVANCE_LIMIT: use at most 36000 ticks per operation".into());
             }
             app.advance_fixed(u64::from(ticks));
+            if let Some(diagnostic) = &app.world().resource::<State>().unwrap().diagnostic {
+                return Err(diagnostic.clone());
+            }
             Ok(json!({"tick":app.world().resource::<State>().unwrap().tick}))
         }
         Operation::Restart => {
@@ -433,7 +453,7 @@ fn state_value(app: &App) -> Value {
     let state = app.world().resource::<State>().unwrap();
     let mut structures: Vec<_> = app.world().iter::<Structure>().map(|(_, s)| s).collect();
     structures.sort_by_key(|s| (s.y, s.x));
-    json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|transport::structure_value(app.world(), s)).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"seeded":state.seeded,"extracted":state.extracted,"delivered":state.delivered,"discarded_ore":state.discarded_ore,"discarded_plate":state.discarded_plate,"completion_tick":state.completion_tick,"conserved":transport::conserved(app.world()),"outcome":if state.completion_tick.is_some(){"Complete"}else{"Running"},"objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented."})
+    json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|transport::structure_value(app.world(), s)).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"production_enabled":state.production_enabled,"diagnostic":state.diagnostic,"seeded":state.seeded,"extracted":state.extracted,"delivered":state.delivered,"discarded_ore":state.discarded_ore,"discarded_plate":state.discarded_plate,"completion_tick":state.completion_tick,"conserved":transport::conserved(app.world()),"outcome":if state.completion_tick.is_some(){"Complete"}else if state.diagnostic.is_some(){"Stopped"}else{"Running"},"objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3)."})
 }
 pub fn status(app: &App) -> String {
     state_value(app).to_string()
@@ -523,6 +543,23 @@ pub fn inspector_with_capture(
             field("string|null", "Output face"),
             |s| s.output(),
         )
+        .unwrap();
+    inspector
+        .register_read_only_field::<Structure, _>(
+            "slots",
+            field("object", "Distinct input, in-process and output item slots"),
+            |s| serde_json::to_value(s.slots).unwrap(),
+        )
+        .unwrap();
+    inspector
+        .register_read_only_field::<Structure, _>(
+            "progress",
+            field("u32", "Extractor eligible ticks, 0..59"),
+            |s| s.progress,
+        )
+        .unwrap();
+    inspector
+        .register_read_only_field::<Structure, _>("remaining", field("u32", "Processor work ticks, 0..120; zero with an in-process ore is blocked finished work"), |s| s.remaining)
         .unwrap();
     inspector
         .register_query(
