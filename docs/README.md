@@ -31,7 +31,8 @@ Start with what you want to do. Titan is early in development; the
 - [Open design questions](open-questions.md) — decisions that need evidence.
 - [Current implementation overview](handoff.md).
 - [Two-character adventure](../games/adventure/README.md) — native/browser control
-  foundation and selected puzzle design.
+  foundation and selected puzzle design; [next-milestone proposal](adventure-next-milestone.md)
+  awaits maintainer selection, with no further gameplay approved.
 - [First conveyor factory slice](factory-slice.md) — selected challenge, construction,
   deterministic transport/production rules, and expected verification traces;
   [playable factory](../games/factory/README.md) includes construction, transport,
