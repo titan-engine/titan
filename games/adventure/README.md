@@ -102,7 +102,8 @@ With no plate pressed, positive body overlap with the doorway holds it fully
 open, including airborne bodies. Exact face contact alone permits closing.
 The door never crushes or shoves a character. Inspection exposes
 `puzzle.plates` with named occupants and `puzzle.door` with `open` and `state`:
-`closed`, `open_plate`, or `open_obstructed`. Plate and door symbols share a link
+`closed`, `open_plate`, or `open_obstructed`. `puzzle_geometry` exposes the exact
+plate/exit rectangles and full-height door bounds. Plate and door symbols share a link
 mark; the HUD also reports pressed/open/obstructed states in text.
 
 `puzzle.exit.jumper` and `.strong` require grounded, complete 400 × 400 mm

@@ -623,7 +623,7 @@ pub fn status(app: &App) -> serde_json::Value {
             (character_name(c.index), serde_json::json!({"x":p.x,"y":p.y,"z":p.z,"velocity_y":m.velocity_y,"grounded":m.grounded,"support":m.support,"collisions":m.collisions}))
         })
         .collect();
-    serde_json::json!({"puzzle":s.puzzle,"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
+    serde_json::json!({"puzzle":s.puzzle,"puzzle_geometry":{"plates":puzzle::PLATES,"door":puzzle::DOOR,"exit":puzzle::EXIT},"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
 }
 fn field(type_name: &str, description: &str) -> FieldMetadata {
     FieldMetadata {
