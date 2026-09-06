@@ -6,13 +6,14 @@ use agent tooling or administer the project board.
 
 Read `docs/workflow.md` and the linked GitHub issue before implementation.
 Pending work lives in https://github.com/orgs/titan-engine/projects/1.
-Proposed issues are unapproved. Only claim approved Ready work with satisfied
-prerequisites; record Owner and use an isolated worktree plus a `codex/` branch.
+Claim concrete Ready work with clear scope, acceptance criteria and satisfied
+prerequisites; no separate issue approval is required. Record Owner and use an
+isolated worktree plus a `codex/` branch.
 
 Use subagents for substantial independent implementation and review. Keep
 coherent local commits, submit reviewable batches through PRs, and continue
-independent approved work while CI runs. Never push directly to main or bypass
-its required checks. Enqueue approved scope autonomously after independent review
+independent Ready work while CI runs. Never push directly to main or bypass
+its required checks. Enqueue work within the issue scope autonomously after independent review
 and green PR CI; the required merge queue validates integration before merging.
 Do not refresh branches solely because main advanced. Review carry-forward and
 conflict handling follow docs/workflow.md; scope changes and releases require maintainer input.

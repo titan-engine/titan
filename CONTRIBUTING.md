@@ -9,7 +9,7 @@ Olle Lukowski ([@olukowski](https://github.com/olukowski)) maintains Titan and
 coordinates scope and reviews. Ask questions and discuss ideas in
 [GitHub Discussions](https://github.com/titan-engine/titan/discussions).
 Use [issues](https://github.com/titan-engine/titan/issues) for reproducible bugs
-and agreed work. Treat people respectfully, explain technical disagreements,
+and concrete work. Treat people respectfully, explain technical disagreements,
 and give actionable feedback.
 
 ## Find something to work on
@@ -21,17 +21,18 @@ and give actionable feedback.
 - Comment on an unassigned **Ready** issue before starting so the maintainer can
   coordinate ownership. Check that prerequisites are complete. You do not need
   project write access; the maintainer updates the board for you.
-- **Proposed** means implementation is unapproved, even when an issue is fully
-  specified. Reports may also need maintainer triage before becoming Ready.
+- **Ready** is the work queue. Check that scope and success criteria are clear;
+  newly filed bug reports may still need triage. No separate issue approval is
+  required.
 
 For a typo or small documentation correction, a focused PR is welcome without
-a separate issue. For larger changes, agree an issue with the maintainer first.
-An issue's priority does not mean it is approved.
+a separate issue. For larger changes, create or use a concrete issue first and
+coordinate ownership before starting.
 
 Keep brainstorming and planning in local conversations or GitHub Discussions;
 do not commit plans, speculative roadmaps or task journals in any tracked format.
 Once discussion yields concrete work, use an issue with an outcome,
-acceptance/verification criteria, boundaries and approval state. Maintainers triage
+acceptance/verification criteria and boundaries. Maintainers triage
 prerequisites through native GitHub blocking relationships and use native
 parent/sub-issue relationships for decomposition. Do not duplicate relationship
 lists or titles in issue bodies; add prerequisite rationale only when useful beyond
@@ -41,7 +42,7 @@ explains the handoff and what belongs in accepted repository documentation.
 
 Bug reports are welcome without a proposed fix or completed work specification.
 Share what happened and how to reproduce it as available; maintainers handle
-triage and approval. For usage or contributor questions, use Discussions.
+triage. For usage or contributor questions, use Discussions.
 
 ## Set up a development checkout
 

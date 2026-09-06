@@ -130,5 +130,5 @@ benefit. Increase the limit only when sufficiently heavy compatible systems can
 amortize preparation, spawning and joining, and do not choose a limit above the
 useful contiguous batch width. This evidence does not
 justify a default change, persistent worker pool, work stealing, intra-query
-parallelism, or another optimization; any such change needs separately approved
+parallelism, or another optimization; any such change needs a separate issue with concrete
 scope and before/after measurement.

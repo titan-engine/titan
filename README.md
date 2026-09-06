@@ -161,9 +161,10 @@ examples, bug reports, testing, or focused engine work.
 - **See the direction:** [vision](docs/vision.md) and
   [public development board](https://github.com/orgs/titan-engine/projects/1).
 
-Comment on an unassigned Ready issue to coordinate with the maintainer. Proposed
-issues need scope discussion first. You do not need access to private planning
-sessions or project administration to participate.
+Comment on an unassigned Ready issue to coordinate ownership, and check its
+scope and prerequisites before starting. No separate issue approval is required.
+You do not need access to private planning sessions or project administration to
+participate.
 
 ## Documentation
 

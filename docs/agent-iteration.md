@@ -54,7 +54,7 @@ There is no hot reload assumption: rebuild and relaunch changed source.
 
 These tasks exercise authoring and feedback without requiring jumping, puzzles,
 transport, recipes or completion. Final exercises substitute their actual
-approved puzzle/machine variation and solution/failure routes while retaining
+selected puzzle/machine variation and solution/failure routes while retaining
 this reporting format. #93 additionally needs repeated larger-fixture samples
 and workload counts; keep semantic assertions separate from timing. Neither
 final exercise may substitute these skeleton results for its own gameplay,

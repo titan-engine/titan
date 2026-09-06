@@ -106,7 +106,7 @@ to a currently transactional path. Keep synchronous validation for now.
 
 This is one fast reference machine, one release build and the current arena
 systems, not a device matrix or latency guarantee. Revisit the decision with a
-separate approved issue if slower target hardware, materially more expensive
+separate concrete issue if slower target hardware, materially more expensive
 per-tick game logic, raised import limits, or field reports produce repeated
 multi-frame stalls. A follow-up should define a responsiveness target and sample
 the affected targets before changing the architecture.
