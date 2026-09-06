@@ -1,0 +1,56 @@
+{
+  "ok": true,
+  "checks": [
+    "actual WASM",
+    "four GPU surfaces",
+    "one hop per tick",
+    "all corner turns",
+    "conservation"
+  ],
+  "ticks": [
+    {
+      "tick": 0,
+      "items": [
+        {
+          "item": "ore",
+          "slot": "output",
+          "x": 80,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "tick": 1,
+      "items": [
+        {
+          "item": "ore",
+          "slot": "output",
+          "x": 112,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "tick": 2,
+      "items": [
+        {
+          "item": "ore",
+          "slot": "output",
+          "x": 112,
+          "y": 112
+        }
+      ]
+    },
+    {
+      "tick": 3,
+      "items": [
+        {
+          "item": "ore",
+          "slot": "output",
+          "x": 80,
+          "y": 112
+        }
+      ]
+    }
+  ]
+}

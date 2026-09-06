@@ -1,0 +1,835 @@
+{
+  "ok": true,
+  "presented_states": [
+    {
+      "native_transport_presented": true,
+      "state": {
+        "camera": {
+          "x": 0.0,
+          "y": 0.0,
+          "zoom": 1.0
+        },
+        "completion_tick": null,
+        "conserved": true,
+        "delivered": 0,
+        "deposit": {
+          "x": 1,
+          "y": 3
+        },
+        "discarded_ore": 0,
+        "discarded_plate": 0,
+        "extracted": 0,
+        "frame": 0,
+        "height": 8,
+        "hover": null,
+        "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented.",
+        "outcome": "Running",
+        "seeded": 1,
+        "selection": {
+          "facing": "E",
+          "kind": "conveyor"
+        },
+        "structures": [
+          {
+            "facing": "E",
+            "inputs": [
+              "N",
+              "S",
+              "W"
+            ],
+            "item_positions": [
+              {
+                "item": "ore",
+                "slot": "output",
+                "x": 80.0,
+                "y": 80.0
+              }
+            ],
+            "kind": "conveyor",
+            "last_transfer_reason": null,
+            "output": "E",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": "ore"
+            },
+            "transport": {
+              "reason": "ready",
+              "target": {
+                "x": 3,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 2
+          },
+          {
+            "facing": "S",
+            "inputs": [
+              "N",
+              "E",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": null,
+            "output": "S",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 2
+          },
+          {
+            "facing": "N",
+            "inputs": [
+              "E",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": null,
+            "output": "N",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 3
+          },
+          {
+            "facing": "W",
+            "inputs": [
+              "N",
+              "E",
+              "S"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": null,
+            "output": "W",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 3
+          },
+          {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "delivery",
+            "last_transfer_reason": null,
+            "output": null,
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": null
+            },
+            "x": 10,
+            "y": 3
+          }
+        ],
+        "tick": 0,
+        "width": 12
+      }
+    },
+    {
+      "native_transport_presented": true,
+      "state": {
+        "camera": {
+          "x": 0.0,
+          "y": 0.0,
+          "zoom": 1.0
+        },
+        "completion_tick": null,
+        "conserved": true,
+        "delivered": 0,
+        "deposit": {
+          "x": 1,
+          "y": 3
+        },
+        "discarded_ore": 0,
+        "discarded_plate": 0,
+        "extracted": 0,
+        "frame": 1,
+        "height": 8,
+        "hover": null,
+        "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented.",
+        "outcome": "Running",
+        "seeded": 1,
+        "selection": {
+          "facing": "E",
+          "kind": "conveyor"
+        },
+        "structures": [
+          {
+            "facing": "E",
+            "inputs": [
+              "N",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "transferred",
+            "output": "E",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 2
+          },
+          {
+            "facing": "S",
+            "inputs": [
+              "N",
+              "E",
+              "W"
+            ],
+            "item_positions": [
+              {
+                "item": "ore",
+                "slot": "output",
+                "x": 112.0,
+                "y": 80.0
+              }
+            ],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "S",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": "ore"
+            },
+            "transport": {
+              "reason": "ready",
+              "target": {
+                "x": 3,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 2
+          },
+          {
+            "facing": "N",
+            "inputs": [
+              "E",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "N",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 3
+          },
+          {
+            "facing": "W",
+            "inputs": [
+              "N",
+              "E",
+              "S"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "W",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 3
+          },
+          {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "delivery",
+            "last_transfer_reason": "empty_source",
+            "output": null,
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": null
+            },
+            "x": 10,
+            "y": 3
+          }
+        ],
+        "tick": 1,
+        "width": 12
+      }
+    },
+    {
+      "native_transport_presented": true,
+      "state": {
+        "camera": {
+          "x": 0.0,
+          "y": 0.0,
+          "zoom": 1.0
+        },
+        "completion_tick": null,
+        "conserved": true,
+        "delivered": 0,
+        "deposit": {
+          "x": 1,
+          "y": 3
+        },
+        "discarded_ore": 0,
+        "discarded_plate": 0,
+        "extracted": 0,
+        "frame": 2,
+        "height": 8,
+        "hover": null,
+        "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented.",
+        "outcome": "Running",
+        "seeded": 1,
+        "selection": {
+          "facing": "E",
+          "kind": "conveyor"
+        },
+        "structures": [
+          {
+            "facing": "E",
+            "inputs": [
+              "N",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "E",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 2
+          },
+          {
+            "facing": "S",
+            "inputs": [
+              "N",
+              "E",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "transferred",
+            "output": "S",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 2
+          },
+          {
+            "facing": "N",
+            "inputs": [
+              "E",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "N",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 3
+          },
+          {
+            "facing": "W",
+            "inputs": [
+              "N",
+              "E",
+              "S"
+            ],
+            "item_positions": [
+              {
+                "item": "ore",
+                "slot": "output",
+                "x": 112.0,
+                "y": 112.0
+              }
+            ],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "W",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": "ore"
+            },
+            "transport": {
+              "reason": "ready",
+              "target": {
+                "x": 2,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 3
+          },
+          {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "delivery",
+            "last_transfer_reason": "empty_source",
+            "output": null,
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": null
+            },
+            "x": 10,
+            "y": 3
+          }
+        ],
+        "tick": 2,
+        "width": 12
+      }
+    },
+    {
+      "native_transport_presented": true,
+      "state": {
+        "camera": {
+          "x": 0.0,
+          "y": 0.0,
+          "zoom": 1.0
+        },
+        "completion_tick": null,
+        "conserved": true,
+        "delivered": 0,
+        "deposit": {
+          "x": 1,
+          "y": 3
+        },
+        "discarded_ore": 0,
+        "discarded_plate": 0,
+        "extracted": 0,
+        "frame": 3,
+        "height": 8,
+        "hover": null,
+        "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented.",
+        "outcome": "Running",
+        "seeded": 1,
+        "selection": {
+          "facing": "E",
+          "kind": "conveyor"
+        },
+        "structures": [
+          {
+            "facing": "E",
+            "inputs": [
+              "N",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "E",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 2
+          },
+          {
+            "facing": "S",
+            "inputs": [
+              "N",
+              "E",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "S",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 2
+          },
+          {
+            "facing": "N",
+            "inputs": [
+              "E",
+              "S",
+              "W"
+            ],
+            "item_positions": [
+              {
+                "item": "ore",
+                "slot": "output",
+                "x": 80.0,
+                "y": 112.0
+              }
+            ],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "N",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": "ore"
+            },
+            "transport": {
+              "reason": "ready",
+              "target": {
+                "x": 2,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 3
+          },
+          {
+            "facing": "W",
+            "inputs": [
+              "N",
+              "E",
+              "S"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "transferred",
+            "output": "W",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 3
+          },
+          {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "delivery",
+            "last_transfer_reason": "empty_source",
+            "output": null,
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": null
+            },
+            "x": 10,
+            "y": 3
+          }
+        ],
+        "tick": 3,
+        "width": 12
+      }
+    },
+    {
+      "native_transport_presented": true,
+      "state": {
+        "camera": {
+          "x": 0.0,
+          "y": 0.0,
+          "zoom": 1.0
+        },
+        "completion_tick": null,
+        "conserved": true,
+        "delivered": 0,
+        "deposit": {
+          "x": 1,
+          "y": 3
+        },
+        "discarded_ore": 0,
+        "discarded_plate": 0,
+        "extracted": 0,
+        "frame": 4,
+        "height": 8,
+        "hover": null,
+        "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented.",
+        "outcome": "Running",
+        "seeded": 1,
+        "selection": {
+          "facing": "E",
+          "kind": "conveyor"
+        },
+        "structures": [
+          {
+            "facing": "E",
+            "inputs": [
+              "N",
+              "S",
+              "W"
+            ],
+            "item_positions": [
+              {
+                "item": "ore",
+                "slot": "output",
+                "x": 80.0,
+                "y": 80.0
+              }
+            ],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "E",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": "ore"
+            },
+            "transport": {
+              "reason": "ready",
+              "target": {
+                "x": 3,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 2
+          },
+          {
+            "facing": "S",
+            "inputs": [
+              "N",
+              "E",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "S",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 3,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 2
+          },
+          {
+            "facing": "N",
+            "inputs": [
+              "E",
+              "S",
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "transferred",
+            "output": "N",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 2
+              }
+            },
+            "x": 2,
+            "y": 3
+          },
+          {
+            "facing": "W",
+            "inputs": [
+              "N",
+              "E",
+              "S"
+            ],
+            "item_positions": [],
+            "kind": "conveyor",
+            "last_transfer_reason": "empty_source",
+            "output": "W",
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": {
+                "x": 2,
+                "y": 3
+              }
+            },
+            "x": 3,
+            "y": 3
+          },
+          {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "item_positions": [],
+            "kind": "delivery",
+            "last_transfer_reason": "empty_source",
+            "output": null,
+            "slots": {
+              "in_process": null,
+              "input": null,
+              "output": null
+            },
+            "transport": {
+              "reason": "empty_source",
+              "target": null
+            },
+            "x": 10,
+            "y": 3
+          }
+        ],
+        "tick": 4,
+        "width": 12
+      }
+    }
+  ]
+}
