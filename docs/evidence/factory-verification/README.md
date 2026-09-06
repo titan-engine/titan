@@ -1,6 +1,6 @@
 # Independent finished-factory verification
 
-Fresh verification for [#93](https://github.com/titan-engine/titan/issues/93),
+Historical verification for [#93](https://github.com/titan-engine/titan/issues/93),
 performed 2026-09-06 against the actual merged final factory revision
 `e4800939606889669e8a9b04650cda4bce6df37d` (#92 / PR #113). This revision includes
 shared baseline commit `1b1f138da009e589521df7d3e155e711562a8375`. The production
@@ -21,7 +21,7 @@ they are not measurements of this finished game and are not substituted here.
 | --- | --- |
 | Construction, rotation, congestion, production, completion | Native and browser routes built through visible controls; deliberately west-facing last belt, observed plate backlog, inspected wrong-facing explanation, repaired to east and reached ten plates. [Player report](player/README.md). |
 | Removal and restart | Native occupied extractor preview/removal discards exactly one ore. Independent browser route removes an occupied conveyor and a processor containing queued/in-process ore, checks previews and exact counters, reconstructs, completes and resets. |
-| Reproducible fault diagnosis and repair | [Browser DOM exercise](player/browser-exercise.html), seven saved authoritative [checkpoints](player/browser-exercise.json), [native parity verifier](player/verify-traces.py): 3,767 boundaries independently conserved; all seven native/browser semantic states match. Two fresh browser runs match all snapshot fields except host frame. |
+| Reproducible fault diagnosis and repair | [Browser DOM exercise](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/player/browser-exercise.html), seven saved authoritative [checkpoints](player/browser-exercise.json), [native parity verifier](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/player/verify-traces.py): 3,767 boundaries independently conserved; all seven native/browser semantic states match. Two fresh browser runs match all snapshot fields except host frame. |
 | Actual native/browser graphics | Inspected window/canvas screenshots, including [native tick 65](player/native-known-state.png) with [matching state](player/native-known-state.json), and [repaired tick 66](player/native-known-repaired.png) with [exit state](player/native-known-repaired.json). Browser 900px layout and paused camera controls verified. |
 | Moderate larger fixture and repeated measurements | [Scaling report](scaling/README.md): bounded fixed-grid workloads, actual slot accounting and deterministic repeats, workload/environment metadata, separate timings and limitations. |
 | Unfamiliar author | [Disposable 90-tick processor variation](variation/README.md): first delivery 159, completion 969, 978 conserved boundaries, exact ordered replay, live rejection/recovery and captures. Patch retained; no new gameplay shipped. |
@@ -78,20 +78,26 @@ capacity beyond the fixed 96-cell world or a portable frame-rate guarantee.
 
 ## Reproduce and interpret
 
-Use an isolated checkout at the measured source SHA, then copy this evidence
-directory into it. The player report supplies GUI steps and the independent HTML
-harness. Build and run the native parity check with:
+The player report records historical GUI steps and links the original browser
+harness at its immutable evidence revision. Reproduce those observations in a
+disposable checkout of the measured source SHA; historical harnesses may write
+beside themselves. Keep new outputs in ignored storage.
+
+The maintained native repair regression can run against HEAD:
 
 ```sh
-cargo build --manifest-path games/factory/Cargo.toml --bin titan-factory
-python3 docs/evidence/factory-verification/player/verify-traces.py
+CARGO_BUILD_JOBS=4 cargo build --manifest-path games/factory/Cargo.toml --bin titan-factory
+python3 games/factory/scripts/verify-traces.py --output-dir target/evidence/factory-repair
 ```
 
-The script regenerates its summary and sequence in the evidence directory, checks
-every native operation for rejection, independently counts slots at every boundary,
-and compares the recorded browser checkpoints. Host/UI selection fields excluded
-from cross-host comparison are listed explicitly in its JSON. Browser replay
-comparison excludes only the host frame, which includes pre-restart startup time.
+It checks all 3,767 native operation boundaries for rejection and independently
+counts slots, then compares seven read-only historical browser semantic checkpoints.
+Its JSON summary identifies both the current native revision and the recorded
+browser source. The output directory contains only generated summary and sequence;
+fixtures are never overwritten. This checks native behavior against a recorded
+browser baseline, not current browser rendering or live native/browser parity.
+Host/UI exclusions are explicit in the summary and fixture provenance. See the
+[game guide](../../../games/factory/README.md#source-and-checks) for current checks.
 
 Follow the scaling and variation reports for their separate reproducible commands.
 All tasks used macOS 27.0 arm64 on Apple M5 Pro (18 logical CPUs), Rust/Cargo 1.98.1,

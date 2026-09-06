@@ -4,15 +4,38 @@
 synchronous validation-before-install path at both import limits. This is an
 investigation snapshot, not a performance guarantee or a new validation design.
 
-## Reproduce
+## Reproduce the historical experiment
 
-Use an otherwise idle machine and build optimized native and browser artifacts:
+This completed experiment is preserved at evidence-containing revision
+`23ff09951ffa8fe849570a0a16b38f713b2b2a2a`. Its scripts are not maintained HEAD verification tools.
+The clean native measurement used source `dc83c7ceb981cdeee5f3cff5fb21c9166c309ee2`;
+the clean browser measurement used `3ceb02018c7189e3f75ede8ef0f0b00354a9c797`.
+For native reproduction, check out its measured source and extract only the
+historical harness from the evidence revision. Run the commands below there;
+keep generated output in that checkout's ignored `target/` directory.
+
+```sh
+git worktree add --detach /tmp/titan-replay-import-responsiveness dc83c7ceb981cdeee5f3cff5fb21c9166c309ee2
+git archive 23ff09951ffa8fe849570a0a16b38f713b2b2a2a docs/replay-import-responsiveness/native.py | tar -x -C /tmp/titan-replay-import-responsiveness
+cd /tmp/titan-replay-import-responsiveness
+```
+
+Use an otherwise idle machine and build optimized native artifacts:
 
 ```sh
 cargo build --release --manifest-path games/arena/Cargo.toml --bin titan-game --bin play --bin replay
 cargo build --release -p titan-cli
+mkdir -p target/evidence/replay-import
+python3 docs/replay-import-responsiveness/native.py > target/evidence/replay-import/native-output.json
+```
+
+For browser reproduction, create a separate disposable checkout of its measured
+source (the test page is part of that source), build WASM, and serve it:
+
+```sh
+git worktree add --detach /tmp/titan-replay-import-browser 3ceb02018c7189e3f75ede8ef0f0b00354a9c797
+cd /tmp/titan-replay-import-browser
 python3 games/arena/scripts/build-browser.py
-python3 docs/replay-import-responsiveness/native.py > native-output.json
 python3 -m http.server 8080
 ```
 
@@ -21,7 +44,8 @@ Verify `git status --short` is empty, then open
 select **Replay import responsiveness**, and use **Download import evidence**.
 The fixture requires both provenance parameters and writes them into its report;
 use `working_tree_dirty=true` instead if measuring local changes. The native
-probe discovers the same Git values itself and uses the real GPU player. Each
+probe discovers Git values itself (the extracted historical harness may mark
+its disposable checkout dirty) and uses the real GPU player. Each
 probe uses seven samples and asserts that a recording rejected only by the final
 snapshot/pixel check leaves the current session unchanged.
 
@@ -31,6 +55,11 @@ case adds leading JSON whitespace. This isolates maximum accepted parsing size
 without changing the parsed recording or file format. Native control uses the
 compact recording because the CLI's separate argument-file limit is 1 MiB; the
 native `replay` verifier measures the exact 2 MiB file.
+
+The [original native runner](https://github.com/titan-engine/titan/blob/23ff09951ffa8fe849570a0a16b38f713b2b2a2a/docs/replay-import-responsiveness/native.py)
+generates all required recordings through its owned arena session; no stored
+output JSON is an input fixture. Save browser downloads under the ignored
+`target/evidence/replay-import/` directory as well.
 
 ## Results
 

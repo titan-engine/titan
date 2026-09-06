@@ -284,6 +284,26 @@ node --test games/factory/web/inspector/*.test.mjs
 node --test games/factory/web/play/*.test.mjs
 ```
 
+The repair regression checks 3,767 native operation boundaries for conservation
+and compares seven checkpoints with the browser states recorded at
+`e4800939606889669e8a9b04650cda4bce6df37d`. Its read-only input is
+[`tests/fixtures/repair-browser-checkpoints.json`](tests/fixtures/repair-browser-checkpoints.json),
+with original evidence provenance and host/UI exclusions. From the repository root:
+
+```sh
+CARGO_BUILD_JOBS=4 cargo build --manifest-path games/factory/Cargo.toml --bin titan-factory
+python3 games/factory/scripts/verify-traces.py --output-dir target/evidence/factory-repair
+python3 games/factory/scripts/test-verify-traces.py
+```
+
+Omitting `--output-dir` uses the same ignored root `target/evidence/factory-repair/`.
+Alternate destinations should be ignored or outside the checkout. The runner
+resolves the binary through Cargo metadata, including `CARGO_TARGET_DIR`; build
+with the same Cargo environment. Generated `native-browser-traces.json` and
+`repair-sequence.json` are reports, not fixtures. This is a native regression
+against historical browser states; use the browser acceptance pages above for
+fresh actual-browser checks.
+
 The native harness uses bounded build/runtime processes and retains sanitized
 failure diagnostics under the repository's `target/acceptance-failures`.
 Node executes real compiled WASM for simulation and protocol checks; it does not
