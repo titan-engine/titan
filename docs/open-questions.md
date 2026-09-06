@@ -17,7 +17,7 @@ Host setup consolidation is complete, including remote CI. The arena dash,
 input cancellation consolidation and live-player inspection are implemented.
 Difficulty settings remain a future possibility. See the
 [live-player evidence](live-player.md).
-The [implementation plan](implementation-plan.md) tracks execution; the
+The [verification guide](verification.md) defines quality gates; the
 [host setup audit](host-setup-audit.md) records completed consolidation evidence.
 The [first entity-based UI slice](ui.md) now covers both games and pointer-driven
 restart. The [quest journal](journal.md) now exercises column layout, bounded bitmap text

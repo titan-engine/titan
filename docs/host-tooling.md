@@ -1,4 +1,33 @@
-# Shared build tooling
+# Shared host and build tooling
+
+## Host boundaries
+
+Games compose public APIs explicitly. Titan does not own a game's window or
+event loop or require a generic application runner.
+
+| Shared API/tooling | Game-owned responsibility |
+| --- | --- |
+| `titan_render_wgpu::SurfaceRenderer` / `SurfaceRenderer3d`: device acquisition, surface configuration, resize and presentation | Window/canvas creation, extraction, dimensions, title and cadence; see [rendering](rendering.md#extraction-and-rendering) and [3D presentation](rendering.md#drawing-and-presentation) |
+| `titan::input::update_button_alias`: combining held physical aliases | Key/action mapping, input sampling, focus reset, Escape/restart behavior |
+| `titan::inspection::BrowserSession`: synchronous request JSON and control opt-in | Constructor, inspector registration and exported JS wrapper; see [browser inspection](browser.md) |
+| `titan_diagnostics::png_capture` / `write_png`: exact PNG encoding | Render hook and native capture path/format policy |
+| `titan_remote::Server`, safe-point queue and `DiagnosticInspector`: authenticated control and bounded diagnostics | Controlled runner lifetime, CLI defaults, signal handling, replay and useful diagnostic state; see [inspection](inspection.md) |
+| `scripts/titan_build.py`: browser builds and macOS bundles resolved from the Cargo dependency | Package/binding/output names, application identity and entrypoint wrappers |
+| Copied browser pages and message bridge | Editable UI, same-origin boundary, controls and presentation; no imports from RPG web assets |
+
+Keep native lifecycle and timing explicit: startup, replay, restart, exit rules
+and presentation count differ between games. Focus loss clears both held keys
+and game input. Diagnostics closures select useful game state and report capture
+failures; a transport timeout does not cancel an executing system.
+
+The RPG/starter/arena synchronous inspection adapters use software captures and
+keep the paused browser inspection instance separate from the playable instance.
+Live-player inspection and owned asynchronous GPU capture are distinct contracts:
+see [live-player inspection](live-player.md) and
+[asynchronous capture](inspection.md#asynchronous-capture-contract). Consult each
+game README for its actual player, restart, input and capture semantics.
+
+## Build tooling
 
 `scripts/titan_build.py` is a public Python 3 helper shipped with the Titan
 source dependency. It requires Cargo and rustup; browser builds also use Node

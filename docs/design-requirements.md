@@ -13,7 +13,7 @@ clarified by another requirement; its qualifications remain visible.
 **Instruction** records a project working constraint, not an engine feature.
 
 The [vision](vision.md) explains the durable product direction. The
-[implementation plan](implementation-plan.md) selects current work, and
+[verification guide](verification.md) defines quality gates, and
 [open questions](open-questions.md) tracks unresolved choices. A requirement in
 this reference does not authorize implementing it immediately. This is not a
 chronological decision diary; Git records changes to the design and implementation.

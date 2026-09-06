@@ -1,23 +1,8 @@
-# Implementation plan and quality gates
+# Verification and quality gates
 
-Pending execution work lives in [Titan Development](https://github.com/orgs/titan-engine/projects/1)
-and linked [GitHub issues](https://github.com/titan-engine/titan/issues).
-Start with [the contribution guide](../CONTRIBUTING.md) for outside contributions.
-Use [the maintainer and agent workflow](workflow.md) for approval, ownership, dependencies,
-PRs, stacks, reviews and autonomous integration. Proposed ideas are not approved
-implementation. Do not duplicate the backlog here.
-
-The accepted procedural RPG and standalone arena milestones, shared host tooling,
-entity-based UI, snapshots/replay, quest journal and first loose-file PNG exercise
-remain complete. See [handoff](handoff.md), [asset evidence](assets.md),
-[journal](journal.md), [replay](replay.md), [UI](ui.md) and the
-[v0.4.0 release](releases/v0.4.0.md). Historical execution plans remain in Git.
-Engine package versions remain 0.4.0; no new release is selected.
-
-The [vision](vision.md) and [design requirements](design-requirements.md) retain
-firm commitments, tentative preferences and open questions. Backlog migration
-does not change their certainty or approve all future capabilities. Use issues
-for selection and execution, and update design docs when decisions change.
+Use this guide to select checks for the affected runtime or tooling. Start with
+[CONTRIBUTING.md](../CONTRIBUTING.md) for contribution setup and
+[workflow.md](workflow.md) for approval, ownership, review and integration policy.
 
 See [acceptance deadlines](acceptance-timeouts.md) for configurable build/runtime
 limits, owned-process cleanup and CI evidence headroom.
@@ -27,7 +12,9 @@ limits, owned-process cleanup and CI evidence headroom.
 Preserve the accepted RPG behavior and software checksum `f7a298f62ad75c1c` for
 changes unrelated to its visuals. Preserve arena initial `e096abf94fd12c24`
 and winning replay `b5cf61da6f50efd7`, including existing no-dash survival
-semantics. Keep discovery authentication, browser control opt-in, field
+semantics. Keep the README preview at its committed 1280×896 nearest-neighbor
+resolution; GitHub strips image-rendering CSS, so do not replace it with the
+160×112 source capture. Keep discovery authentication, browser control opt-in, field
 validation, deterministic safe points, and bounded diagnostics.
 Do not silently present transport timeouts as cancellation of running systems.
 
@@ -63,7 +50,7 @@ node scripts/test-rpg-assets.mjs
 cargo check --locked -p titan --lib --no-default-features
 ```
 
-Preserve CI coverage for the starter and both games. Run
+Preserve CI coverage for the copied starter and all standalone games. Run
 native GPU readback and inspect the browser canvas when rendering changes.
 Software images are exact references; GPU comparisons are integration evidence.
 Commit small coherent increments, keep current examples compiling, and document

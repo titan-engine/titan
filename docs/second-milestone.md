@@ -5,7 +5,7 @@
 Accepted on 2026-09-05 after maintainer playtesting of both native and browser
 versions. Implementation, independent verification and playable review are
 complete. This page preserves the original milestone brief and acceptance
-evidence; use the [implementation plan](implementation-plan.md) and
+evidence; use the [verification guide](verification.md) for current checks and the
 [development board](https://github.com/orgs/titan-engine/projects/1) for current
 status. Start with the [arena play instructions](../games/arena/README.md).
 The [starter verification](starter-verification.md),
@@ -24,7 +24,8 @@ to build a tiny arena-survival demo through repository-local guidance.
 
 The accepted RPG stays as an independent regression example. This milestone
 measures reuse and discoverability, not how many engine features can be added.
-The [implementation plan](implementation-plan.md) defines execution order.
+The milestone's [implementation plan](https://github.com/titan-engine/titan/blob/5c211c04c9d5399a301cc3e6592d047d14b43664/docs/implementation-plan.md)
+defined execution order.
 
 ## Game brief
 
