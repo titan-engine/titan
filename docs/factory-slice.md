@@ -279,6 +279,6 @@ Verification must assert the above traces and conservation at
 every tick, including invalid edits, rotation of occupied structures, wrong-type
 inputs, out-of-bounds outputs, and reset from blocked and completed states.
 Run the same fixtures natively and in actual WASM for transport
-and production changes. Follow [quality gates](implementation-plan.md) and the
+and production changes. Follow [quality gates](verification.md) and the
 [runtime workflow](../.agents/skills/titan-workflow/SKILL.md) for runtime evidence.
 This design does not change existing RPG/arena checksums or platform claims.

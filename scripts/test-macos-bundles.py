@@ -31,6 +31,9 @@ def main():
             manifest.write_text(re.sub(r'path = "(\.\./\.\.[^"]*)"',
                 lambda m: 'path = ' + json.dumps(str((source / m[1]).resolve())),
                 manifest.read_text()))
+            # Initialize the copied project after deliberately rewriting its manifest.
+            processes.run(["cargo", "generate-lockfile"], cwd=project, env=env,
+                          check=True, phase="build")
             result = processes.run([sys.executable, "scripts/build-macos-app.py",
                 "--name", name, "--bundle-id", bundle_id], cwd=project, env=env,
                 check=True, text=True, stdout=subprocess.PIPE, phase="build")

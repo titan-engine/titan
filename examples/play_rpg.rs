@@ -1,8 +1,7 @@
 //! Native interactive runner; the engine and game remain independent of winit.
 
 #[cfg(not(target_arch = "wasm32"))]
-#[path = "support/procedural_rpg.rs"]
-pub mod game;
+pub use titan_rpg as game;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -177,9 +176,10 @@ mod native {
         let mut config = InspectionConfig::controlled(&instance, project.to_string_lossy());
         config.run_mode = RunMode::Interactive;
         config.mutation_enabled = enable_control;
-        let inspector = game::inspector_with_capture(config, |app| {
+        let mut inspector = game::inspector_with_capture(config, |app| {
             titan_diagnostics::png_capture(&game::render_image(app.world())?)
         });
+        game::register_legacy_component_names(&mut inspector, "play_rpg::game");
         let mut session = RpgSession::new(app, inspector, enable_control);
         if let Some(recording) = recording {
             session

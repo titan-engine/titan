@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--browser", action="store_true", help="also build and test copied WASM")
     options = parser.parse_args()
-    processes.run(["cargo", "build", "-p", "titan-cli"], cwd=REPO, check=True, phase="build")
+    processes.run(["cargo", "build", "--locked", "-p", "titan-cli"], cwd=REPO, check=True, phase="build")
     with tempfile.TemporaryDirectory(prefix="titan-starter-") as directory:
         project = Path(directory) / "my-game"
         processes.run(["python3", str(REPO / "scripts/create-game.py"), str(project)], check=True)
@@ -31,17 +31,21 @@ def main():
         assert sentinel.read_text() == "work in progress"
         assert "examples/support" not in "\n".join(p.read_text() for p in (project / "src").rglob("*.rs"))
         env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "starter-smoke"))
+        # The copied manifest is a new consumer graph; initialize it explicitly.
+        processes.run(["cargo", "generate-lockfile"], cwd=project, env=env, check=True, phase="build")
+        lockfile = (project / "Cargo.lock").read_bytes()
         for command in (["cargo", "fmt", "--all", "--check"],
-                        ["cargo", "test", "--all-targets"],
-                        ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
-                        ["cargo", "build", "--bins"]):
+                        ["cargo", "test", "--locked", "--all-targets"],
+                        ["cargo", "clippy", "--locked", "--all-targets", "--all-features", "--", "-D", "warnings"],
+                        ["cargo", "build", "--locked", "--bins"]):
             processes.run(command, cwd=project, env=env, check=True, phase="build")
         if options.browser:
-            for command in (["cargo", "check", "--lib", "--target", "wasm32-unknown-unknown"],
+            for command in (["cargo", "check", "--locked", "--lib", "--target", "wasm32-unknown-unknown"],
                             ["python3", "scripts/build-browser.py"],
                             ["node", "scripts/test-browser.mjs"],
                             ["node", "--test", "web/inspector/bridge.test.mjs"]):
                 processes.run(command, cwd=project, env=env, check=True, phase="runtime" if command[0] == "node" else "build")
+        assert (project / "Cargo.lock").read_bytes() == lockfile, "verification changed the copied lockfile"
         executable = TARGET / "starter-smoke/debug/titan-game"
         with tempfile.TemporaryFile(mode="w+") as log:
             process = processes.Popen([str(executable), "--serve", "--allow-mutation",

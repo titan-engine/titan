@@ -8,7 +8,7 @@ publish.workspace = true
 description = "Experimental Rust game engine for agent-driven development."
 
 [workspace]
-members = ["crates/titan-browser", "crates/titan-cli", "crates/titan-diagnostics", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote", "crates/titan-render-wgpu", "fixtures/generated-asset"]
+members = ["crates/titan-browser", "crates/titan-cli", "crates/titan-diagnostics", "crates/titan-macros", "crates/titan-protocol", "crates/titan-remote", "crates/titan-render-wgpu", "fixtures/generated-asset", "fixtures/rpg"]
 
 [workspace.package]
 version = "0.4.0"
@@ -28,6 +28,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 titan-macros = { path = "crates/titan-macros" }
 titan-protocol = { path = "crates/titan-protocol" }
+
+[dev-dependencies]
+titan-rpg = { path = "fixtures/rpg" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 titan-diagnostics = { path = "crates/titan-diagnostics" }

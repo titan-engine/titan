@@ -1991,6 +1991,7 @@ dependencies = [
  "titan-protocol",
  "titan-remote",
  "titan-render-wgpu",
+ "titan-rpg",
  "trybuild",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2009,6 +2010,7 @@ dependencies = [
  "titan-diagnostics",
  "titan-protocol",
  "titan-render-wgpu",
+ "titan-rpg",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -2089,10 +2091,21 @@ dependencies = [
  "titan",
  "titan-diagnostics",
  "titan-protocol",
+ "titan-rpg",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+]
+
+[[package]]
+name = "titan-rpg"
+version = "0.4.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "titan",
+ "titan-protocol",
 ]
 
 [[package]]

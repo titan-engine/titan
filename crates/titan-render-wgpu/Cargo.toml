@@ -13,6 +13,7 @@ wgpu = { version = "30", features = ["webgl"] }
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+titan-rpg = { path = "../../fixtures/rpg" }
 pollster = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

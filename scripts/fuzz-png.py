@@ -57,7 +57,7 @@ def main():
     processes.run(["cargo", "build", "--locked", "--example", "png_fuzz"],
                   cwd=ROOT, phase="build", check=True)
     metadata = json.loads(processes.check_output(
-        ["cargo", "metadata", "--format-version=1", "--no-deps"], cwd=ROOT, phase="build"))
+        ["cargo", "metadata", "--locked", "--format-version=1", "--no-deps"], cwd=ROOT, phase="build"))
     target = Path(metadata["target_directory"])
     evidence_root = target / "png-fuzz"
     evidence_root.mkdir(parents=True, exist_ok=True)

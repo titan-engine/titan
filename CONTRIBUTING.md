@@ -45,11 +45,14 @@ triage and approval. For usage or contributor questions, use Discussions.
 
 ## Set up a development checkout
 
-Install stable Rust with Cargo and Git. Native development and discovery support
+Install Git and Rust through rustup. The checkout selects Rust 1.98.1, rustfmt,
+Clippy and the WASM target through `rust-toolchain.toml`. Native development and discovery support
 macOS and Linux. A native window needs a graphics backend and desktop session;
 headless tests do not require a GPU. Windows native discovery is not supported.
-Python 3 is needed for acceptance/build scripts; Node.js is needed for browser
-acceptance tests. The browser build script installs matching `wasm-bindgen`
+Use Python 3.12.3 for acceptance/build scripts and Node.js 22.23.2 for browser
+acceptance tests (recorded in `.python-version` and `.node-version`).
+Install these with your preferred version manager; ensure `python3` and `node`
+on PATH report those versions. The browser build script installs matching `wasm-bindgen`
 tooling and adds the Rust WASM target when needed.
 
 Fork [titan-engine/titan](https://github.com/titan-engine/titan), clone your fork,
@@ -82,15 +85,15 @@ For Rust changes, run:
 
 ```sh
 cargo fmt --all --check
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
+cargo test --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 ```
 
 The WASM check requires `rustup target add wasm32-unknown-unknown` if it is not
 installed. For documentation-only changes, check local links, formatting, and
 commands you changed. For tooling changes, run the relevant script tests.
-The [quality gates](docs/implementation-plan.md#constraints-and-quality-gates)
+The [quality gates](docs/verification.md#constraints-and-quality-gates)
 list additional native/browser and standalone-game checks by area. Ordinary
 tests run without a GPU; GPU checks are opt-in. Say which checks you could not
 run and why, so the maintainer can help cover them.
@@ -99,6 +102,45 @@ Preserve demo reference images and checksums unless an intentional visual change
 is agreed. Never replace an expected checksum solely to make a test pass. Inspect
 logs and captures before attaching them; omit credentials and raw runtime
 discovery registrations.
+
+## Update the verification environment intentionally
+
+The pins are the routine verification baseline, not an MSRV declaration. We do
+not set `rust-version`: older Rust releases have not been verified. The baseline
+Rust 1.98.1 passed the workspace tests (including compiler-diagnostic fixtures),
+strict Clippy, standalone/copied games, actual WASM and macOS packaging in
+[main CI](https://github.com/titan-engine/titan/actions/runs/34044965687).
+Python 3.12.3 and Node.js 22.23.2 were selected from that successful run's
+[Ubuntu image inventory](https://github.com/actions/runner-images/blob/ubuntu24/20260831.293/images/ubuntu/Ubuntu2404-Readme.md).
+CI explicitly installs all three versions on native, WASM, macOS and Pages
+builds and prints their identities. Rust caches use `rustc -vV` plus platform
+identity, so changing the compiler cannot restore another compiler's build cache.
+The browser helper continues to install the lockfile-matched wasm-bindgen CLI.
+
+Propose version changes in a focused PR. Update `rust-toolchain.toml` and the
+starter's copy together, `.python-version`, `.node-version` and the prerequisite
+versions above and in the starter README as applicable. Keep dependency updates
+intentional and review the workspace and each independent game/fixture lockfile;
+do not combine a toolchain pin change with unrelated dependency upgrades.
+Run the quality gates for workspace tests, strict Clippy and diagnostic fixtures,
+all standalone games, the copied starter, actual WASM and macOS bundles. Require
+the existing CI and Browser demos builds to pass before adopting the pins.
+
+To check newer stable compatibility without changing the routine baseline, use
+one manually initiated comparison when proposing an update (no scheduled matrix):
+
+```sh
+rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+rustc +stable --version
+CARGO_BUILD_JOBS=4 cargo +stable test --locked --workspace --all-targets
+CARGO_BUILD_JOBS=4 cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
+```
+
+Record the exact tested compiler and any diagnostic differences. These bounded
+checks are a compatibility probe; adoption still requires the full existing CI
+coverage with the candidate pinned. Update diagnostic expectations only for an
+understood compiler change, preserving their intended error coverage. A copied
+game keeps its own pin until its owner intentionally updates it.
 
 ## Open a pull request
 

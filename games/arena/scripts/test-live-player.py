@@ -15,13 +15,13 @@ REPO = GAME.parents[1]
 
 def target(manifest):
     return Path(json.loads(processes.check_output([
-        'cargo', 'metadata', '--no-deps', '--format-version', '1',
+        'cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1',
         '--manifest-path', str(manifest),
     ], phase='build'))['target_directory'])
 
 
-processes.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'), '--bin', 'play', '--bin', 'replay'], check=True, phase="build")
-processes.run(['cargo', 'build', '--manifest-path', str(REPO / 'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build")
+processes.run(['cargo', 'build', '--locked', '--manifest-path', str(GAME / 'Cargo.toml'), '--bin', 'play', '--bin', 'replay'], check=True, phase="build")
+processes.run(['cargo', 'build', '--locked', '--manifest-path', str(REPO / 'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build")
 BINARY = target(GAME / 'Cargo.toml') / 'debug/play'
 CLI = target(REPO / 'Cargo.toml') / 'debug/titan'
 

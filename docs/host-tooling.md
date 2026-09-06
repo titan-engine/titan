@@ -1,4 +1,33 @@
-# Shared build tooling
+# Shared host and build tooling
+
+## Host boundaries
+
+Games compose public APIs explicitly. Titan does not own a game's window or
+event loop or require a generic application runner.
+
+| Shared API/tooling | Game-owned responsibility |
+| --- | --- |
+| `titan_render_wgpu::SurfaceRenderer` / `SurfaceRenderer3d`: device acquisition, surface configuration, resize and presentation | Window/canvas creation, extraction, dimensions, title and cadence; see [rendering](rendering.md#extraction-and-rendering) and [3D presentation](rendering.md#drawing-and-presentation) |
+| `titan::input::update_button_alias`: combining held physical aliases | Key/action mapping, input sampling, focus reset, Escape/restart behavior |
+| `titan::inspection::BrowserSession`: synchronous request JSON and control opt-in | Constructor, inspector registration and exported JS wrapper; see [browser inspection](browser.md) |
+| `titan_diagnostics::png_capture` / `write_png`: exact PNG encoding | Render hook and native capture path/format policy |
+| `titan_remote::Server`, safe-point queue and `DiagnosticInspector`: authenticated control and bounded diagnostics | Controlled runner lifetime, CLI defaults, signal handling, replay and useful diagnostic state; see [inspection](inspection.md) |
+| `scripts/titan_build.py`: browser builds and macOS bundles resolved from the Cargo dependency | Package/binding/output names, application identity and entrypoint wrappers |
+| Copied browser pages and message bridge | Editable UI, same-origin boundary, controls and presentation; no imports from RPG web assets |
+
+Keep native lifecycle and timing explicit: startup, replay, restart, exit rules
+and presentation count differ between games. Focus loss clears both held keys
+and game input. Diagnostics closures select useful game state and report capture
+failures; a transport timeout does not cancel an executing system.
+
+The RPG/starter/arena synchronous inspection adapters use software captures and
+keep the paused browser inspection instance separate from the playable instance.
+Live-player inspection and owned asynchronous GPU capture are distinct contracts:
+see [live-player inspection](live-player.md) and
+[asynchronous capture](inspection.md#asynchronous-capture-contract). Consult each
+game README for its actual player, restart, input and capture semantics.
+
+## Build tooling
 
 `scripts/titan_build.py` is a public Python 3 helper shipped with the Titan
 source dependency. It requires Cargo and rustup; browser builds also use Node
@@ -6,7 +35,7 @@ for the separately invoked WASM tests. Games retain small entrypoints and their
 own browser pages, binding names, application names and bundle IDs.
 
 - `cargo_metadata(root)` returns resolved Cargo metadata and respects
-  `CARGO_TARGET_DIR`.
+  `CARGO_TARGET_DIR`. Metadata, browser builds and native bundles use `--locked`.
 - `browser(root, metadata, package_name=..., out_name=...)` builds the named
   package's single cdylib for release WASM, resolves the matching wasm-bindgen
   CLI, and writes web bindings to `root/web/inspector/pkg` and Node bindings to
@@ -31,6 +60,14 @@ source or fixed checkout location is needed. More than one resolved package
 with a required name is rejected explicitly rather than choosing an arbitrary
 version. A game with another web layout can call the bindings tool itself;
 this is a narrow convention, not a project generator or general build CLI.
+
+Verification requires an existing, current project `Cargo.lock` and fails with
+Cargo's lockfile diagnostic when it is missing or stale. No helper retries with
+unlocked resolution. After configuring a new copied project, explicitly run
+`cargo generate-lockfile` in that project. For deliberate dependency changes,
+use `cargo update -p PACKAGE` or regenerate the whole graph intentionally,
+review and commit the resulting lockfile, then rerun locked verification. The
+workspace, starter and games keep independent lockfiles.
 
 Browser builds reuse a CLI under the game's Cargo target directory, the Titan
 checkout's default target directory, or PATH only if its reported version

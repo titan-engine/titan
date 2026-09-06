@@ -15,13 +15,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gpu', action='store_true')
     options = parser.parse_args()
-    build = ['cargo', 'build', '-p', 'titan-cli', '-p', 'titan', '--bin', 'titan',
+    build = ['cargo', 'build', '--locked', '-p', 'titan-cli', '-p', 'titan', '--bin', 'titan',
              '--example', 'procedural_rpg', '--example', 'replay_rpg']
     if options.gpu:
         build += ['--example', 'play_rpg']
     processes.run(build, cwd=REPO, check=True, phase="build")
     metadata = json.loads(processes.check_output(
-        ['cargo', 'metadata', '--no-deps', '--format-version', '1'], cwd=REPO, text=True, phase='build'))
+        ['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'], cwd=REPO, text=True, phase='build'))
     target = Path(metadata['target_directory'])
     cli = target / 'debug/titan'
     examples = target / 'debug/examples'

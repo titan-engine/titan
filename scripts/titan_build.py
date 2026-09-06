@@ -19,7 +19,7 @@ import tempfile
 
 def cargo_metadata(root):
     return json.loads(processes.check_output(
-        ["cargo", "metadata", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"],
+        ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"],
         cwd=root, text=True, phase="build",
     ))
 
@@ -108,7 +108,7 @@ def browser(root, metadata, *, package_name, out_name, assets_source=None, featu
                         "--locked", "--root", str(tool_root), "--force"], cwd=root, check=True, phase="build")
         bindgen = tool_root / "bin/wasm-bindgen"
     processes.run(["rustup", "target", "add", "wasm32-unknown-unknown"], cwd=root, check=True, phase="build")
-    processes.run(["cargo", "build", "--package", package_name, "--lib", "--target",
+    processes.run(["cargo", "build", "--locked", "--package", package_name, "--lib", "--target",
                     "wasm32-unknown-unknown", "--release",
                     *(["--features", ",".join(features)] if features else [])], cwd=root, check=True, phase="build")
     wasm = target / "wasm32-unknown-unknown/release" / (libraries[0]["name"].replace("-", "_") + ".wasm")
@@ -144,7 +144,7 @@ def macos_app(root, metadata, argv=None, *, assets_source=None, features=()):
                and "bin" in target["crate_types"] for target in package["targets"]):
         parser.error(f"no executable {target_kind} target named {target_name!r} in {package['name']}")
     resources = asset_source(root, assets_source)
-    command = ["cargo", "build", "--package", package["name"], f"--{target_kind}", target_name, "--message-format=json-render-diagnostics"]
+    command = ["cargo", "build", "--locked", "--package", package["name"], f"--{target_kind}", target_name, "--message-format=json-render-diagnostics"]
     if features:
         command.extend(["--features", ",".join(features)])
     if args.release:

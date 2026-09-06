@@ -168,7 +168,22 @@ inspector.register_field::<Position, i32>(
 # Ok::<(), titan_protocol::ProtocolError>(())
 ```
 
-The component key is its full Rust type name, matching entity inspection.
+The component key defaults to its full Rust type name, matching entity inspection.
+For source-package migrations, `Inspector::register_component_alias::<T>(legacy_name)`
+can retain an existing component key for a particular host. Aliases apply to
+entity lists/details, filters, field metadata, field writes and diagnostic
+world/API summaries, including `api.txt`. Register them before exposing the
+inspector; field registration can come before or after alias registration.
+One alias per type is allowed. Empty names and collisions with registered names
+are rejected; inspection also checks components subsequently registered in the
+world. An alias replaces the original request key without enabling mutation or
+changing field validation. The default inspector has no aliases.
+Diagnostic adapters using raw world metadata must call
+`validate_component_aliases(world)` before mapping names with `component_name`;
+an ambiguous description must be omitted on failure. Direct Rust ECS and system
+metadata retain their actual defining-package identities. The
+[RPG fixture](../fixtures/rpg/README.md#inspection-compatibility) documents the
+specific retained host names.
 `EntityDetails.components[component]` contains an object of registered field
 values; unregistered component types remain `null`. The optional
 `component_fields[component][field]` object describes each exposed field's type,

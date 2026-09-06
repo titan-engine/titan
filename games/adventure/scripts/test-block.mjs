@@ -15,7 +15,7 @@ if (process.argv.includes('--wasm-worker')) {
   process.stdout.write(block_acceptance());
 } else {
   const build = (file, args) => execFile(file, args, { phase: 'build', cwd: root, encoding: 'utf8' });
-  const metadata = JSON.parse(await build('cargo', ['metadata', '--format-version', '1', '--filter-platform', 'wasm32-unknown-unknown']));
+  const metadata = JSON.parse(await build('cargo', ['metadata', '--locked', '--format-version', '1', '--filter-platform', 'wasm32-unknown-unknown']));
   const target = metadata.target_directory;
   const engine = metadata.packages.find(p => p.name === 'titan');
   const version = metadata.packages.find(p => p.name === 'wasm-bindgen').version;
@@ -37,9 +37,9 @@ if (process.argv.includes('--wasm-worker')) {
     await build('cargo', ['install', 'wasm-bindgen-cli', '--version', version, '--locked', '--root', toolRoot, '--force']);
     bindgen = join(toolRoot, 'bin/wasm-bindgen');
   }
-  await build('cargo', ['build', '--bin', 'block-acceptance', '--features', 'movement-acceptance']);
+  await build('cargo', ['build', '--locked', '--bin', 'block-acceptance', '--features', 'movement-acceptance']);
   const native = JSON.parse(await execFile(join(target, 'debug/block-acceptance'), [], { cwd: root, encoding: 'utf8' }));
-  await build('cargo', ['build', '--lib', '--target', 'wasm32-unknown-unknown', '--release', '--features', 'movement-acceptance']);
+  await build('cargo', ['build', '--locked', '--lib', '--target', 'wasm32-unknown-unknown', '--release', '--features', 'movement-acceptance']);
   const directory = await mkdtemp(resolve(tmpdir(), 'adventure-block-'));
   try {
     await build(bindgen, [join(target, 'wasm32-unknown-unknown/release/titan_adventure.wasm'),

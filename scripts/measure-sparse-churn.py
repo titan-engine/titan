@@ -40,7 +40,7 @@ def main():
         parser.error('at most 180 fresh processes per invocation')
     if sys.platform not in ('darwin', 'linux'):
         parser.error('RSS measurement supports macOS and Linux; run the Rust example directly elsewhere')
-    build = ['cargo', 'build', '-p', 'titan', '--example', 'sparse_churn', '--message-format=json']
+    build = ['cargo', 'build', '--locked', '-p', 'titan', '--example', 'sparse_churn', '--message-format=json']
     if not args.debug:
         build.append('--release')
     result = processes.run(build, phase='build', cwd=REPO, check=True, stdout=subprocess.PIPE, text=True)

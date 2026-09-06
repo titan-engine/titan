@@ -5,7 +5,7 @@ import { execFile } from './acceptance_process.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 const repo = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], { phase: 'build', cwd: repo, encoding: 'utf8' }));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], { phase: 'build', cwd: repo, encoding: 'utf8' }));
 const require = createRequire(import.meta.url);
 const { BrowserRuntime } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 let sequence = 0;
@@ -23,7 +23,7 @@ assert.equal(capabilities.mutation_enabled, false);
 const readOnlyPlayer = call(readOnly, { type: 'entities' }).response.entities.find(entity => entity.name === 'player').id;
 const readOnlyDetails = call(readOnly, { type: 'entity', entity: readOnlyPlayer }).response;
 const readOnlyPosition = Object.keys(readOnlyDetails.components).find(name => name.endsWith('::Position'));
-assert.ok(readOnlyPosition);
+assert.equal(readOnlyPosition, 'titan_browser::game::Position');
 const readOnlyCapture = call(readOnly, { type: 'capture' }).response.checksum;
 for (const operation of ['step', 'invoke', 'inject_input', 'mutate']) assert.ok(!capabilities.operations.includes(operation));
 for (const request of [

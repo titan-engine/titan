@@ -16,9 +16,9 @@ import acceptance_process as processes
 
 def main(failures, log):
     started=time.monotonic()
-    processes.run(['cargo', 'build', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True, phase="build", stdout=log, stderr=log)
+    processes.run(['cargo', 'build', '--locked', '--manifest-path', str(GAME/'Cargo.toml'), '--bin', 'titan-game', '--bin', 'replay'], check=True, phase="build", stdout=log, stderr=log)
     build_seconds=time.monotonic()-started
-    processes.run(['cargo', 'build', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build", stdout=log, stderr=log)
+    processes.run(['cargo', 'build', '--locked', '--manifest-path', str(REPO/'Cargo.toml'), '-p', 'titan-cli'], check=True, phase="build", stdout=log, stderr=log)
     def output(command, **kwargs):
         failures.record_command(command, None)
         result = processes.run(command, capture_output=True, **kwargs)
@@ -27,7 +27,7 @@ def main(failures, log):
         return result.stdout
 
     def target(manifest):
-        return Path(json.loads(output(['cargo','metadata','--no-deps','--format-version','1','--manifest-path',str(manifest)], phase='build'))['target_directory'])
+        return Path(json.loads(output(['cargo','metadata', '--locked','--no-deps','--format-version','1','--manifest-path',str(manifest)], phase='build'))['target_directory'])
     CLI=target(REPO/'Cargo.toml')/'debug/titan'
     BINARY=target(GAME/'Cargo.toml')/'debug/titan-game'
     evidence=GAME/'target/arena-evidence'; evidence.mkdir(parents=True,exist_ok=True)

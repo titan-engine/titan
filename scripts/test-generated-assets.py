@@ -15,12 +15,12 @@ def command(args, **kwargs):
 
 
 def main():
-    metadata = json.loads(command(["cargo", "metadata", "--format-version", "1", "--no-deps"]))
+    metadata = json.loads(command(["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"]))
     # Distinct tokens force actual build.rs executions without changing sources.
     # The cache is stable in OUT_DIR across these two invocations.
     for token in ("cold-check", "warm-check"):
         environment = dict(os.environ, TITAN_ASSET_BUILD_CHECK=token)
-        command(["cargo", "build", "-p", "titan-generated-asset"], env=environment)
+        command(["cargo", "build", "--locked", "-p", "titan-generated-asset"], env=environment)
     binary = Path(metadata["target_directory"]) / "debug" / ("titan-generated-asset.exe" if os.name == "nt" else "titan-generated-asset")
     with tempfile.TemporaryDirectory(prefix="titan generated asset ") as directory:
         cache = Path(directory) / "cache"

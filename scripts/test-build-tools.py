@@ -5,6 +5,7 @@ import io
 import importlib.util
 import os
 import sys
+import subprocess
 import json
 from pathlib import Path
 import plistlib
@@ -58,7 +59,7 @@ class BuildTools(unittest.TestCase):
         commands = [call.args[0] for call in run.call_args_list]
         install = next(command for command in commands if command[:2] == ["cargo", "install"])
         self.assertEqual(install[install.index("--version") + 1], "0.2.127")
-        self.assertIn(["cargo", "build", "--package", "independent-game", "--lib", "--target", "wasm32-unknown-unknown", "--release"], commands)
+        self.assertIn(["cargo", "build", "--locked", "--package", "independent-game", "--lib", "--target", "wasm32-unknown-unknown", "--release"], commands)
         bindings = [command for command in commands if "--out-dir" in command]
         self.assertEqual(len(bindings), 2)
         self.assertEqual(bindings[0][1], str(self.target / "wasm32-unknown-unknown/release/custom_library.wasm"))
@@ -142,6 +143,7 @@ class BuildTools(unittest.TestCase):
             build.stdout = "\n".join([json.dumps(unrelated), json.dumps(artifact)])
             build.returncode = 0
             titan_build.macos_app(self.root, self.metadata, ["--name", "Copied Game", "--bundle-id", "dev.example.copy", "--release"])
+        self.assertIn("--locked", run.call_args.args[0])
         bundle = Path(output.getvalue().strip())
         self.assertEqual(bundle, self.target / "macos-app/release/Copied Game.app")
         with (bundle / "Contents/Info.plist").open("rb") as file:
@@ -180,6 +182,66 @@ class BuildTools(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 titan_build.macos_app(self.root, self.metadata, ["--name", "../escape"])
             run.assert_not_called()
+
+
+class LockedMetadata(unittest.TestCase):
+    """Exercise real Cargo resolution without network or the engine's lockfile."""
+
+    def test_existing_stale_and_initialized_consumer_graphs(self):
+        repository = Path(__file__).resolve().parent.parent
+        loaders = [None, *sorted(repository.glob("games/*/scripts/titan_tools.py")),
+                   repository / "starters/minimal/scripts/titan_tools.py"]
+        with tempfile.TemporaryDirectory(prefix="titan locked consumer ") as temporary:
+            root = Path(temporary)
+            (root / "src").mkdir()
+            (root / "src/lib.rs").write_text("")
+            manifest = root / "Cargo.toml"
+            manifest.write_text('[package]\nname = "consumer"\nversion = "0.1.0"\nedition = "2021"\n[workspace]\n')
+            environment = dict(os.environ, CARGO_NET_OFFLINE="true")
+
+            def initialize():
+                subprocess.run(["cargo", "generate-lockfile", "--offline"], cwd=root,
+                               env=environment, check=True, capture_output=True)
+
+            def metadata(loader):
+                if loader is None:
+                    code = (f"import sys; sys.path.insert(0, {str(repository / 'scripts')!r}); "
+                            f"import titan_build; titan_build.cargo_metadata({str(root)!r})")
+                else:
+                    code = ("import importlib.util; from pathlib import Path; "
+                            f"s = importlib.util.spec_from_file_location('loader', {str(loader)!r}); "
+                            "m = importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+                            f"m.ROOT = Path({str(root)!r}); m.metadata_bootstrap()")
+                return subprocess.run([sys.executable, "-c", code], cwd=root,
+                                      env=environment, text=True, capture_output=True)
+
+            for loader in loaders:
+                with self.subTest(loader=str(loader)):
+                    lock = root / "Cargo.lock"
+                    lock.unlink(missing_ok=True)
+                    missing = metadata(loader)
+                    self.assertNotEqual(missing.returncode, 0)
+                    self.assertIn("--locked", missing.stderr)
+                    self.assertFalse(lock.exists())
+                    initialize()
+                    original = lock.read_bytes()
+                    unchanged = metadata(loader)
+                    self.assertEqual(unchanged.returncode, 0, unchanged.stderr)
+                    self.assertEqual(lock.read_bytes(), original)
+                    # A package identity edit requires a different lockfile even
+                    # though this tiny consumer has no registry dependencies.
+                    manifest.write_text(manifest.read_text().replace('0.1.0', '0.2.0'))
+                    stale = metadata(loader)
+                    self.assertNotEqual(stale.returncode, 0)
+                    self.assertIn("--locked", stale.stderr)
+                    self.assertEqual(lock.read_bytes(), original)
+                    initialize()
+                    self.assertNotEqual(lock.read_bytes(), original)
+                    refreshed = lock.read_bytes()
+                    initialized = metadata(loader)
+                    self.assertEqual(initialized.returncode, 0, initialized.stderr)
+                    self.assertEqual(lock.read_bytes(), refreshed)
+                    manifest.write_text(manifest.read_text().replace('0.2.0', '0.1.0'))
 
 
 class MetadataBootstrap(unittest.TestCase):

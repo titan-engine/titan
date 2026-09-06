@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {execFile} from '../../../scripts/acceptance_process.mjs';
 
 export async function transportAcceptance({BrowserRuntime,root,target,raw,ok,state}) {
-  await execFile('cargo',['build','--bin','titan-factory'],{phase:'build',cwd:root});
+  await execFile('cargo',['build', '--locked','--bin','titan-factory'],{phase:'build',cwd:root});
   const directory=mkdtempSync(join(tmpdir(),'factory-transport-'));
   const at=(s,x,y)=>s.structures.find(t=>t.x===x&&t.y===y);
   const item=(s,x,y)=>at(s,x,y)?.slots.output ?? null;

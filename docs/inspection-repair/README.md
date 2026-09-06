@@ -10,15 +10,17 @@ ambiguity output does not name the CLI discovery command or selector.
 This report records findings and evidence, not implemented repair guidance.
 No engine, protocol, permissions, or automatic repair behavior changes here.
 
-## Reproduce
+## Run maintained regression cases
 
+These maintained cases support [issue #96](https://github.com/titan-engine/titan/issues/96).
+They generate their own runtime fixtures; the historical JSON below is not input.
 Run from the repository root on macOS or Linux:
 
 ```sh
 cargo build --locked -p titan-cli -p titan --example procedural_rpg --bin titan
-python3 docs/inspection-repair/native.py
+python3 scripts/inspection-repair/native.py --output target/evidence/inspection-repair/native-output.json
 python3 scripts/build-browser.py
-node docs/inspection-repair/browser.mjs
+node scripts/inspection-repair/browser.mjs --output target/evidence/inspection-repair/browser-output.json
 ```
 
 The native probe starts two owned, bounded RPG processes in a temporary project,
@@ -33,8 +35,14 @@ Neither probe is a new CI gate or a general repair API.
 Recorded on 2026-09-05, macOS arm64, against engine revision
 `5736101cbc6462b3bb51ce7617f8300605175b9a` (see the PR for the evidence commit).
 Tool versions: Rust 1.98.1, Node 26.8.1, Python 3.9.6.
-The scripts and JSON are an investigation snapshot; if messages change, examine
-the new output rather than treating this snapshot as a compatibility oracle.
+The JSON and assessment below are a historical investigation snapshot, not a
+compatibility oracle. The maintained runners default to the ignored output paths
+shown above and accept `--output`; choose an ignored path for local alternatives.
+For the original experiment, use the
+[original native probe](https://github.com/titan-engine/titan/blob/57f12a8f95dad3e7819b43f9ab2708fdbe10d708/docs/inspection-repair/native.py) and
+[original WASM probe](https://github.com/titan-engine/titan/blob/57f12a8f95dad3e7819b43f9ab2708fdbe10d708/docs/inspection-repair/browser.mjs)
+from that evidence-containing revision in a disposable checkout. The measured
+engine revision above is distinct from the evidence-containing revision.
 
 - [Native output](native-output.json): response envelopes, selected diagnostic
   bundle fields, component metadata, discovery and follow-up reads. Only project

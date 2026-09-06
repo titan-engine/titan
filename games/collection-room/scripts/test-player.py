@@ -20,12 +20,12 @@ from acceptance_evidence import FailureEvidence, sanitize, _png, _read_regular, 
 
 
 def main(failures):
-    processes.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'),
+    processes.run(['cargo', 'build', '--locked', '--manifest-path', str(GAME / 'Cargo.toml'),
                    '--features', 'player', '--bin', 'play'], phase='build', check=True)
-    processes.run(['cargo', 'build', '-p', 'titan-cli'], cwd=REPO, phase='build', check=True)
+    processes.run(['cargo', 'build', '--locked', '-p', 'titan-cli'], cwd=REPO, phase='build', check=True)
 
     def target(root):
-        result = processes.run(['cargo', 'metadata', '--no-deps', '--format-version', '1',
+        result = processes.run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1',
                                 '--manifest-path', str(root / 'Cargo.toml')],
                                phase='build', capture_output=True, text=True, check=True)
         return Path(json.loads(result.stdout)['target_directory']) / 'debug'

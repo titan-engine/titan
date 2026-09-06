@@ -21,9 +21,9 @@ GAME = TARGET / "debug" / "examples" / "procedural_rpg"
 
 def main(failures):
     with failures.runtime_log() as build_log:
-        failures.record_command(["cargo", "build", "RPG and CLI"], None)
+        failures.record_command(["cargo", "build", "--locked", "RPG and CLI"], None)
         processes.run(
-            ["cargo", "build", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
+            ["cargo", "build", "--locked", "-p", "titan-cli", "-p", "titan", "--example", "procedural_rpg", "--bin", "titan"],
             cwd=REPO,
             check=True, phase="build",
             stdout=build_log, stderr=build_log,
@@ -111,6 +111,7 @@ def main(failures):
                 player = next(entity["id"] for entity in entities if entity["name"] == "player")
                 player_details = cli("entity", str(player["index"]), str(player["generation"]))["response"]
                 position_type = next(name for name in player_details["components"] if name.endswith("::Position"))
+                assert position_type == "procedural_rpg::game::Position"
                 assert player_details["components"][position_type] == {"x": 10, "y": 5}
                 assert player_details["component_fields"][position_type]["x"]["maximum"] == 19
                 changed = cli("set-field", str(player["index"]), str(player["generation"]), position_type, "x", "--value", "9")

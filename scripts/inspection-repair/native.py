@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reproduce issue #39 native evidence; build CLI/RPG first. Uses owned games."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -8,7 +9,8 @@ import subprocess
 import tempfile
 import time
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = next(parent for parent in Path(__file__).resolve().parents
+            if (parent / "Cargo.toml").is_file() and (parent / "scripts").is_dir())
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", REPO / "target"))
 if not TARGET.is_absolute():
     TARGET = REPO / TARGET
@@ -17,6 +19,12 @@ GAME = TARGET / "debug/examples/procedural_rpg"
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path,
+                        default=REPO / "target/evidence/inspection-repair/native-output.json")
+    options = parser.parse_args()
+    if not __debug__:
+        parser.error("Python assertions must be enabled (do not use -O)")
     with tempfile.TemporaryDirectory(prefix="titan-repair-") as directory:
         project = Path(directory).resolve()
         owned = []
@@ -100,7 +108,9 @@ def main():
                 if isinstance(value, str):
                     return value.replace(str(project), "<project>")
                 return value
-            print(json.dumps(sanitize(evidence), indent=2, sort_keys=True))
+            options.output.parent.mkdir(parents=True, exist_ok=True)
+            options.output.write_text(json.dumps(sanitize(evidence), indent=2, sort_keys=True) + "\n")
+            print(f"Native inspection evidence: {options.output}")
         finally:
             for process in owned:
                 if process.poll() is None:

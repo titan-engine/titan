@@ -10,8 +10,8 @@ advancing time creates no items or deliveries.
 with failure recovery and pre-edit rule probes. The unchanged
 [first sample](factory-initial-measurement.json) is retained separately. Both preserve measured values,
 metadata, scenario state and operation recording. Run the
-[measurement script](factory-measure.py) from a checkout containing the two
-skeletons:
+[historical measurement script](https://github.com/titan-engine/titan/blob/1b1f138da009e589521df7d3e155e711562a8375/docs/evidence/agent-iteration/factory-measure.py) from the pinned
+[disposable reproduction checkout](README.md#reading-the-numbers):
 
 ```sh
 python3 docs/evidence/agent-iteration/factory-measure.py

@@ -238,7 +238,7 @@ not a software reference or an image generated separately from the game.
   RPG references and the committed README preview were not changed.
 
 Run commands and inspection examples are in the [game guide](README.md);
-[quality gates](../../docs/implementation-plan.md) include this standalone package
+[quality gates](../../docs/verification.md) include this standalone package
 in all three PR jobs. Native captures/JSON and bounded failure diagnostics are
 retained under the repository's ignored `target/` directory; public review
 comments identify the exact authored SHA and current CI evidence.

@@ -1,5 +1,4 @@
-#[path = "support/procedural_rpg.rs"]
-pub mod game;
+pub use titan_rpg as game;
 
 use game::{
     QuestState, build_game, build_inspector, configured_inspector, image_checksum, recorded_walk,
@@ -29,6 +28,7 @@ fn render_reference(mut app: titan::App) {
     let image = game::render_image(app.world()).expect("render RPG frame");
     let output_path = PathBuf::from("target/titan/procedural-rpg.ppm");
     let mut inspector = build_inspector(output_path.clone());
+    game::register_legacy_component_names(&mut inspector, "procedural_rpg::game");
     let capture = inspector.handle(
         &mut app,
         &titan_protocol::RequestEnvelope::new("capture", titan_protocol::Request::Capture),
@@ -171,7 +171,8 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
         .join("capture.ppm");
     let mut config = InspectionConfig::controlled(&instance, project.to_string_lossy());
     config.mutation_enabled = allow_mutation;
-    let inspector = configured_inspector(output, config);
+    let mut inspector = configured_inspector(output, config);
+    game::register_legacy_component_names(&mut inspector, "procedural_rpg::game");
     let mut session = game::live::RpgSession::new(app, inspector, true);
     let (mut server, queue) = Server::start(ServerConfig::new(
         &project,

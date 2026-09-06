@@ -3,9 +3,11 @@
 Verified on macOS on 2026-09-05 by a fresh agent assigned only the documented
 starter workflow. This verification did not change implementation files or
 inspect engine internals. It read the Titan workflow skill,
-`docs/implementation-plan.md`, `docs/cli.md`, `docs/browser.md`,
+[`docs/implementation-plan.md` at the report revision](https://github.com/titan-engine/titan/blob/dc8a024c8542f668a5df3541f5671e881e077147/docs/implementation-plan.md),
+`docs/cli.md`, `docs/browser.md`,
 `starters/minimal/README.md` and `docs/host-tooling.md`, then checked the starter's
 manifest, public host imports, build entrypoints and acceptance scripts.
+For current quality gates, use [the verification guide](verification.md).
 
 ## Executed check
 

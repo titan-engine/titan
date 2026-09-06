@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const metadata = JSON.parse(await execFile('cargo', ['metadata', '--format-version', '1', '--no-deps'], { phase: 'build', cwd: root, encoding: 'utf8' }));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--format-version', '1', '--no-deps'], { phase: 'build', cwd: root, encoding: 'utf8' }));
 const { BrowserRuntime } = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_game.js'));
 let sequence = 0;
 const raw = (runtime, request) => JSON.parse(runtime.handle(JSON.stringify({schema_version:2,request_id:`test-${++sequence}`,request})));
