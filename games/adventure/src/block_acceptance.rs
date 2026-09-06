@@ -401,6 +401,57 @@ pub fn run() -> Value {
         }
         scenarios.insert(label.into(), r.trace);
     }
+    // Ordinary inputs cover both key orders, a distant approach, contact, and
+    // release/repress after success. These traces run identically in native/WASM.
+    for (label, first, z) in [
+        ("direction-before-e-at-contact", vec![Action::Up], 6150),
+        (
+            "e-before-direction-at-contact",
+            vec![Action::Interact],
+            6150,
+        ),
+        ("held-combination-during-approach", vec![Action::Up], 7500),
+    ] {
+        let mut r = Run::new();
+        r.strong();
+        r.place(1, 5740, 0, z, true);
+        r.tick(&first, 20);
+        r.tick(&[Action::Interact, Action::Up], 60);
+        assert_eq!(r.state()["block"]["moves"], 1, "{label}");
+        assert_eq!(r.character("strong")["z"], 5150, "{label}");
+        r.tick(&[Action::Interact], 1);
+        r.tick(&[Action::Interact, Action::Up], 1);
+        assert_eq!(
+            r.state()["block"]["moves"],
+            1,
+            "direction alone cannot rearm"
+        );
+        r.tick(&[Action::Up], 1);
+        r.tick(&[Action::Interact, Action::Up], 1);
+        assert_eq!(r.state()["block"]["moves"], 2, "{label}");
+        scenarios.insert(label.into(), r.trace);
+    }
+    for (label, y) in [("occupied-hold-retry", 750), ("obstructed-hold-retry", 0)] {
+        let mut r = Run::new();
+        r.strong();
+        r.place(1, 5500, 0, 6150, true);
+        r.place(0, 5500, y, if y == 750 { 5500 } else { 4500 }, true);
+        r.tick(&[], 1); // Resolve block support before requesting a push.
+        r.tick(&[Action::Interact, Action::Up], 3);
+        assert_eq!(r.state()["block"]["moves"], 0);
+        assert_eq!(
+            r.state()["block"]["last_rejection"],
+            if y == 750 {
+                "block_occupied"
+            } else {
+                "path_obstructed"
+            }
+        );
+        r.place(0, 1500, 0, 6500, true);
+        r.tick(&[Action::Interact, Action::Up], 1);
+        assert_eq!(r.state()["block"]["moves"], 1);
+        scenarios.insert(label.into(), r.trace);
+    }
     let mut edges = Run::new();
     edges.strong();
     edges.place(1, 5500, 0, 6500, true);

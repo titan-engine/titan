@@ -250,7 +250,8 @@ requires explicit coverage of W/H and latch state rather than assuming it works.
 
 Outcome: a disposable, bounded comparison of current release/repress movement
 with carrying a held direction to the newly active character on the tick after
-switch. Keep the switch tick motionless and jump/push edge-gated; inactive
+switch. Keep the switch tick motionless and preserve jump edges and push
+release/repress gating after success; inactive
 characters still receive no horizontal input. This tests a concrete extra gesture
 observed in #86; it does not add abilities or approve changing shipped defaults.
 

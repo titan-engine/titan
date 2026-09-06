@@ -93,12 +93,12 @@ pub(super) fn sync(world: &mut World) {
             match session.block.last_rejection {
                 Some("wrong_character") => "PUSH WITH STRONG",
                 Some("not_grounded") => "PUSH FROM THE FLOOR WITHOUT JUMPING",
-                Some("invalid_direction") => "PUSH WITH E AND ONE OF UP OR DOWN",
-                Some("invalid_stance") => "STAND CLOSE BEHIND THE BLOCK TO PUSH",
+                Some("invalid_direction") => "HOLD E AND ONE OF UP OR DOWN",
+                Some("invalid_stance") => "ALIGN AT NORTH/SOUTH FACE. HOLD E TOWARD BLOCK.",
                 Some("rail_end") => "BLOCK AT END OF TRACK",
                 Some("block_occupied") => "BLOCK OCCUPIED. STEP OFF BEFORE PUSHING",
                 Some("path_obstructed") => "PATH BLOCKED. MOVE YOUR PARTNER CLEAR",
-                _ => "STRONG PUSHES THE STRIPED BLOCK WITH E AND UP OR DOWN",
+                _ => "STRONG HOLDS E AND UP/DOWN. RELEASE E TO REPEAT.",
             }
             .into()
         } else {
@@ -111,7 +111,7 @@ pub(super) fn sync(world: &mut World) {
             "ADVENTURE / TWO CHARACTERS. ONE TEAM.",
             "WASD OR ARROWS MOVE. Q SWITCHES PARTNERS.",
             "SPACE JUMPS. JUMPER CAN REACH HIGHER LEDGES.",
-            "STRONG PUSHES BLOCKS WITH E AND UP OR DOWN.",
+            "STRONG HOLDS E AND UP/DOWN. RELEASE E TO REPEAT.",
             "HOLD THE STRIPED PLATES TO OPEN THE STRIPED DOOR.",
             "BRING BOTH TO THE OUTLINED EXIT. R RESTARTS ROOM.",
         ],

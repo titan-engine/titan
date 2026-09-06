@@ -153,12 +153,13 @@ final north socket is terminal: its reverse stance is inside the ledge, so R is
 the way to restore the block after that placement. There is no pulling, grabbing,
 throwing, stacking, friction simulation or rotation.
 
-Under the initial E-plus-direction scheme, Strong must be grounded on
-the floor, within 100 of the stance point one metre behind the block relative
-to exactly one effective cardinal direction, with no jump on that tick. The
-stance tolerance and direction gesture are prototype ergonomics to validate. A valid request moves the block
-atomically one socket in the requested direction; Strong stays at the stance
-point and receives no movement/jump that tick. A short cosmetic slide may depict
+Strong must be grounded on the floor, within 250 mm laterally of the block
+centre and 650–1100 mm behind it relative to exactly one effective north/south
+direction, with no jump request on that tick. Natural face contact is 650 mm.
+Hold E and direction in either order; failed requests retry during approach.
+A valid request moves the block
+atomically one socket in the requested direction; Strong stays at its current
+position and receives no movement/jump that tick. A short cosmetic slide may depict
 the move, but simulation support/collision use the destination immediately.
 Switching never cancels or partly applies an accepted move.
 
@@ -174,8 +175,8 @@ ordinary character movement can still proceed that tick. Report a stable reason:
 `wrong_character`, `not_grounded`, `invalid_direction`, `invalid_stance`,
 `rail_end`, `block_occupied`, or `path_obstructed`, in that priority order.
 A jump plus push request is rejected as `not_grounded` (jump requested), then
-ordinary jumping proceeds. Initially, holding E never chains pushes; release it
-each time. A held action must not produce an unintended push after switching.
+ordinary jumping proceeds. Success suppresses E through the existing held-action
+gate until release/repress, so holding E never chains pushes. A held action must not produce an unintended push after switching.
 
 ## Room geometry
 

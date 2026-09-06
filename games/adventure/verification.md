@@ -305,6 +305,43 @@ the extended native GPU harness remains in the macOS job. Historical RPG/arena
 checksums and the committed crisp README preview are unchanged.
 
 These are deterministic prototype and platform-integration checks, not a human
-usability study or a new platform claim. The 100 mm push-stance tolerance,
-release/repress gesture and fixed camera remain prototype defaults. Independent
+usability study or a new platform claim. The original 100 mm push-stance tolerance was later superseded by the
+contact interaction correction in #124 below; the fixed camera remains unchanged. Independent
 whole-slice playtesting follows in #86.
+
+
+## Contact pushing correction (#124)
+
+On 2026-09-06 the maintainer played room 2 using ordinary keyboard input in the
+optimized native Metal player on macOS / Apple M5 Pro. Inspection was read-only:
+no injected inputs or position edits drove this playtest. Strong pushed twice,
+Jumper reached the ledge, and both characters completed the room at simulation
+tick 1042. The maintainer reported that it “feels exactly the way it should feel
+now”. The [game-only recording](evidence/push-124/human-recording.json),
+[final state and provenance](evidence/push-124/human-result.json), and
+[completion capture](evidence/push-124/human-complete.png) retain this evidence.
+The 1165 recorded frames include frozen frames after completion; native and
+actual-WASM replay match the final gameplay state exactly. The playtested build
+used the final gameplay logic before a HUD plus-sign was changed to the supported
+word AND and focused tests were added.
+
+The new contract accepts centrally aligned contact at 650 mm through 1100 mm
+from the block center, with 250 mm lateral tolerance. Holding E and Up/Down in
+either order retries during approach; one successful push requires releasing E
+before another. Strong-only, grounded, occupied-support, rail and swept-volume
+checks retain their order and safety behavior. Focused native/actual-WASM block
+acceptance passes 32 scenarios and 2927 matching states, including contact,
+both key orders, held approach, repeat gating, reverse pushes, rejected stance,
+and occupied/obstructed retries. Existing one- and two-push solution fixtures
+remain valid unchanged.
+
+Workspace formatting, tests, Clippy and core WASM checks passed, as did the
+adventure package gates, native control/playtest, movement/puzzle/sequence WASM
+parity and browser input-adapter tests. The native GPU harness passed and
+presented 3710 frames. Existing native/actual-WASM RPG control, replay and asset
+checks passed, including native GPU coverage; reference assets and checksums
+were preserved. The browser GPU harness additionally exercises contact with
+Up held before E, E held before approaching, one move per E hold, between-tick
+release/repress, and exact keyboard-route replay. Both WebGPU and WebGL2 pass
+229 checks on this host. This is one maintainer usability check and platform
+verification, not a broader user study or cross-platform performance claim.
