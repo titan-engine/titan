@@ -2,7 +2,7 @@
 
 Status: selected rules for [issue #80](https://github.com/titan-engine/titan/issues/80),
 implemented as the bounded sequence in [#85](https://github.com/titan-engine/titan/issues/85).
-See [verification](verification.md) for runtime evidence and its limitations. The bounded outcome is one
+See [verification](README.md#historical-exercise-provenance) for runtime evidence and its limitations. The bounded outcome is one
 player, two freely switchable characters and two cooperative rooms. Names
 **Jumper** and **Strong** are functional labels, not a narrative commitment.
 
@@ -16,7 +16,7 @@ of a second fundamentally different puzzle. Neither room contains a pit.
 
 Numeric movement/jump values, body dimensions, camera framing, and exact key
 bindings below are the implemented **prototype defaults**, not settled usability
-choices. The [finished evaluation](evidence/playtest-86/README.md) records bounded
+choices. The [finished evaluation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md) records bounded
 runtime checks and observed switching/positioning friction; it does not establish
 comfortable controls or unprompted human puzzle discovery. The ability gates and
 solution routes below remain the selected contract.
@@ -51,7 +51,7 @@ smaller surfaces show a size hint. These are presentation acceptance targets,
 not an existing platform guarantee. Omit foreground exterior wall meshes; tall
 partition walls may use a cutaway visual while retaining full collision. Keep
 both characters, plate symbols and exit visible. The
-[verification guide](verification.md) records native/browser capture coverage.
+[verification record](README.md#historical-exercise-provenance) records native/browser capture coverage.
 
 Jumper has a narrow silhouette and triangle marker; Strong has a broad silhouette
 and square marker. An active ring and text name identify control. Plate-to-door
@@ -332,7 +332,7 @@ the destination; there is no backward room navigation in this slice.
 ## Verification contract for implementation
 
 These scenarios define the verification contract. The
-[verification guide](verification.md) records executed checks and limitations.
+[verification record](README.md#historical-exercise-provenance) records executed checks and limitations.
 Inspect active character, both positions/velocities/support,
 room/tick/reset identity, block socket, plate conditions, door state, exit
 occupancy and last rejection. Record fixed input and bounded ticks for each
