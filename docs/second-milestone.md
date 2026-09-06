@@ -24,7 +24,8 @@ to build a tiny arena-survival demo through repository-local guidance.
 
 The accepted RPG stays as an independent regression example. This milestone
 measures reuse and discoverability, not how many engine features can be added.
-The [verification guide](verification.md) defines current quality gates.
+The milestone's [implementation plan](https://github.com/titan-engine/titan/blob/5d63e12aabab1f6d5aa1ea3e9ab092a2f2b981f6/docs/implementation-plan.md)
+defined execution order.
 
 ## Game brief
 
