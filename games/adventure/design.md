@@ -15,19 +15,17 @@ room 1's door exchange. It is a bounded ability-integration exercise, not a clai
 of a second fundamentally different puzzle. Neither room contains a pit.
 
 Numeric movement/jump values, body dimensions, camera framing, and exact key
-bindings below are **provisional defaults for a rough playable prototype**.
-They make the design implementable without claiming the controls feel good.
-Validate landing comfort, push positioning, and held-input switching in that
-prototype before treating them as settled tuning. Adjust values and document
-the result within the existing character/puzzle implementation issues; preserve
-the ability gates and solution routes described here. A new mechanic or puzzle
-is a scope decision, not tuning.
+bindings below are the implemented **prototype defaults**, not settled usability
+choices. The [finished evaluation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md) records bounded
+runtime checks and observed switching/positioning friction; it does not establish
+comfortable controls or unprompted human puzzle discovery. The ability gates and
+solution routes below remain the selected contract.
 
 ## Controls and presentation
 
-The table gives the initial control scheme to try, not a final binding contract.
-In particular, E plus direction, release/repress requirements, and the switch
-suppression policy below need hands-on validation for unnecessary friction.
+The table gives the implemented prototype control scheme. E plus direction,
+release/repress requirements, and switch suppression retain the usability
+limitations described in the finished evaluation.
 
 | Action | Native and focused browser player | Rule |
 | --- | --- | --- |
@@ -52,8 +50,8 @@ viewport with letterboxing, preserving composition at 960x540 and 1280x720;
 smaller surfaces show a size hint. These are presentation acceptance targets,
 not an existing platform guarantee. Omit foreground exterior wall meshes; tall
 partition walls may use a cutaway visual while retaining full collision. Keep
-both characters, plate symbols and exit visible; validate occlusion in actual
-native/browser captures during implementation.
+both characters, plate symbols and exit visible. The
+[verification record](README.md#historical-exercise-provenance) records native/browser capture coverage.
 
 Jumper has a narrow silhouette and triangle marker; Strong has a broad silhouette
 and square marker. An active ring and text name identify control. Plate-to-door
@@ -333,8 +331,9 @@ the destination; there is no backward room navigation in this slice.
 
 ## Verification contract for implementation
 
-These are required scenarios for subsequent implementation, not tests executed
-by this design issue. Inspect active character, both positions/velocities/support,
+These scenarios define the verification contract. The
+[verification record](README.md#historical-exercise-provenance) records executed checks and limitations.
+Inspect active character, both positions/velocities/support,
 room/tick/reset identity, block socket, plate conditions, door state, exit
 occupancy and last rejection. Record fixed input and bounded ticks for each
 route; replay should reproduce semantic state in headless native and actual WASM.
@@ -362,10 +361,11 @@ The selected rules are continuous planar movement, fixed-step jumps, atomic
 rail pushes, noncolliding characters, two hold plates per door, safe ordinary
 landings and defensive full-room recovery. Room 2 accepts any physically valid
 route to A, including from the intermediate socket. Exact tuning and input
-ergonomics remain provisional until the rough playable prototype is evaluated. Free block physics,
+ergonomics remain prototype choices with bounded evaluation. Free block physics,
 carrying partners, plate timers/latches, rotating cameras, gamepads, additional
-abilities/rooms, checkpoints and persistent saves are not selected. Future
-milestone decisions belong in [issue #87](https://github.com/titan-engine/titan/issues/87).
+abilities/rooms, checkpoints and persistent saves are not selected. Further scope
+decisions belong in the
+[development board](https://github.com/orgs/titan-engine/projects/1).
 This design does not settle general engine physics, scene authoring or framework
 extension policy; [#17](https://github.com/titan-engine/titan/issues/17) and
 [#18](https://github.com/titan-engine/titan/issues/18) remain separate proposals.

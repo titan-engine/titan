@@ -1,7 +1,7 @@
 # Independent arena verification
 
 A fresh verification agent checked the current arena on 2026-09-05 using
-[the milestone brief](second-milestone.md), [arena README](../games/arena/README.md),
+[the historical milestone brief](https://github.com/titan-engine/titan/blob/5c211c04c9d5399a301cc3e6592d047d14b43664/docs/second-milestone.md), [arena README](../games/arena/README.md),
 [exercise record](arena-exercise.md), implementation plan, and titan-workflow
 skill. It reviewed the arena game, host adapters, manifest and test scripts.
 It did not read the RPG implementation/history or engine implementation source.

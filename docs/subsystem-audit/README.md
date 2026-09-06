@@ -123,15 +123,12 @@ cfg-omitted on WASM while frame limits remain. Those are separate target choices
 not optional-subsystem features. The source audit and selected state assertions
 support the initialization conclusions; no OS syscall/thread trace was collected.
 
-## One bounded recommendation
+## Boundary conclusions
 
-Recommend a separately approved **external ECS consumer CI check**: compile and
-run a PNG-free public-API workload natively and in WASM, and check its resolved
-normal/build graph for accidental PNG, GPU/window or host dependencies. Existing
-root `cargo check -p titan --lib --no-default-features` checks library compilation
-but does not exercise external public-API use or execute the WASM ECS workload.
-The reproduction above supplies evidence for that gap; it does not install a CI
-gate or fix a permanent dependency allowlist.
+At the audited revision, root `cargo check -p titan --lib --no-default-features`
+checked library compilation, but did not exercise external public-API use or
+execute the WASM ECS workload. The reproduction above supplies that bounded
+evidence; it does not establish a permanent dependency allowlist.
 
 The audit does not justify splitting crates or adding subsystem feature flags:
 there is no observed unwanted runtime initialization or measured cost to motivate
