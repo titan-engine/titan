@@ -34,7 +34,8 @@ Start with what you want to do. Titan is early in development; the
   foundation and selected puzzle design.
 - [First conveyor factory slice](factory-slice.md) — selected challenge, construction,
   deterministic transport/production rules, and expected verification traces;
-  the factory game is not implemented yet.
+  [construction foundation](../games/factory/README.md) is implemented; transport
+  and production are subsequent increments.
 - [First sound exercise proposal](audio-exercise.md) — pickup cue, playback lifetime
   and device-free verification; audio is not implemented.
 - [Parallel ECS executor](executor.md), [swarm measurements](swarm.md),
@@ -58,6 +59,8 @@ Start with what you want to do. Titan is early in development; the
 These reports explain how particular changes were checked. Use the guides above
 for current instructions; measurements and environments describe specific runs.
 
+- [Shared agent iteration procedure](agent-iteration.md) and
+  [initial skeleton measurements](evidence/agent-iteration/README.md).
 - [Starter milestone](second-milestone.md), [starter verification](starter-verification.md),
   and [public API boundary audit](starter-audit.md).
 - [Arena development exercise](arena-exercise.md), [verification](arena-verification.md),

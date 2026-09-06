@@ -1,0 +1,22 @@
+{
+  "format": "titan-agent-iteration-1",
+  "task": "Replace with the bounded task and expected result",
+  "issue": 95,
+  "game": "adventure or factory",
+  "revision": "full source SHA",
+  "variant_patch": null,
+  "evaluator": {"public_label": "agent exercise label", "model": "unavailable", "prior_familiarity": "describe"},
+  "environment": {"utc": "ISO-8601", "os": "", "cpu": "", "rust": "", "python": "", "node": null, "profile": "dev", "target": "", "backend": "CPU or actual GPU adapter", "cache": "", "concurrent_work": ""},
+  "measurement": {"boundary_start": "", "boundary_end": "", "full_task_seconds": null, "command_phase_seconds": null, "preparation_seconds": null, "coordination_seconds": null, "samples": 1},
+  "commands": [],
+  "expected_assertions": [],
+  "observed_assertions": [],
+  "attempts": [{"number": 1, "outcome": "pass/fail/unsupported/unmeasured", "elapsed_seconds": null, "failure": null, "correction": null}],
+  "deliberate_rejections": [],
+  "missing_documentation": [],
+  "human_interventions": [],
+  "agent_interventions": [],
+  "evidence": {"fixture": null, "sanitized_results": null, "diagnostic_bundle": null, "capture": null, "capture_identity": null, "replay_comparison": null},
+  "cleanup_verified": false,
+  "limitations": []
+}

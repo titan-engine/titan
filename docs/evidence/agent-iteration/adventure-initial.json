@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "game": "adventure",
+  "revision": "0468ffe00b2cb109acc33591dc382839196ce7fe",
+  "started_utc": "2026-09-06T08:46:21.773832+00:00",
+  "environment": {
+    "os": "Darwin",
+    "release": "27.0.0",
+    "machine": "arm64",
+    "python": "3.9.6",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "cpu": "Apple M5 Pro"
+  },
+  "cache": "Empty isolated CARGO_TARGET_DIR; existing shared Cargo registry/download cache; no cache purge.",
+  "boundaries": "perf_counter wall seconds; each phase includes subprocess startup, JSON decoding and assertions. Preparation and script authoring excluded. Build timers end on successful cargo exit. No agent cognition, GUI, browser, network fetch or population percentile claims.",
+  "human_interventions": 0,
+  "phases": [
+    {
+      "name": "build_cli",
+      "elapsed_seconds": 7.897843,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "cargo_exit": 0,
+        "build_lock_wait_observed": false
+      }
+    },
+    {
+      "name": "build_game",
+      "elapsed_seconds": 5.644266,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "cargo_exit": 0,
+        "build_lock_wait_observed": false
+      }
+    },
+    {
+      "name": "launch_discover_initial_state",
+      "elapsed_seconds": 0.303509,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "discovery_polls": 2,
+        "initial_characters": {
+          "jumper": {
+            "x": 1500,
+            "z": 6500
+          },
+          "strong": {
+            "x": 3500,
+            "z": 6500
+          }
+        }
+      }
+    },
+    {
+      "name": "discover_capabilities_inspect_entities",
+      "elapsed_seconds": 0.031286,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "capabilities": {
+          "controlled": true,
+          "mutation_enabled": false,
+          "operations": [
+            "inspect",
+            "step",
+            "invoke",
+            "inject_input",
+            "query"
+          ],
+          "run_mode": "headless",
+          "schema_version": 2,
+          "type": "capabilities"
+        },
+        "read_only_character_positions": true
+      }
+    },
+    {
+      "name": "construct_two_character_scenario",
+      "elapsed_seconds": 0.131612,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "action_snapshots": [
+          [
+            "right"
+          ],
+          [
+            "right",
+            "switch"
+          ],
+          [],
+          [
+            "up"
+          ]
+        ],
+        "state": {
+          "active_character": "strong",
+          "blocked_actions": [],
+          "characters": {
+            "jumper": {
+              "x": 1560,
+              "z": 6500
+            },
+            "strong": {
+              "x": 3500,
+              "z": 6440
+            }
+          },
+          "consumed_input": {
+            "active": [
+              "up"
+            ],
+            "pressed": [
+              "up"
+            ],
+            "released": []
+          },
+          "fixture": "adventure-v1",
+          "frame": 4,
+          "pending_inputs": 0,
+          "recorded_ticks": 4,
+          "recording_truncated": false,
+          "recording_valid": true,
+          "session_generation": 0,
+          "session_tick": 4
+        }
+      }
+    },
+    {
+      "name": "replay_scenario",
+      "elapsed_seconds": 0.029745,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "recording": {
+          "fixture": "adventure-v1",
+          "format_version": 1,
+          "frames": [
+            {
+              "active": [
+                "right"
+              ],
+              "pressed": [
+                "right"
+              ],
+              "released": []
+            },
+            {
+              "active": [
+                "right",
+                "switch"
+              ],
+              "pressed": [
+                "switch"
+              ],
+              "released": []
+            },
+            {
+              "active": [],
+              "pressed": [],
+              "released": [
+                "right",
+                "switch"
+              ]
+            },
+            {
+              "active": [
+                "up"
+              ],
+              "pressed": [
+                "up"
+              ],
+              "released": []
+            }
+          ],
+          "truncated": false
+        },
+        "compared_fields": [
+          "characters",
+          "active_character",
+          "session_tick",
+          "consumed_input"
+        ],
+        "equal": true
+      }
+    },
+    {
+      "name": "diagnose_invalid_recording",
+      "elapsed_seconds": 0.025964,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "error_code": "invalid_value",
+        "message": "unsupported, truncated or oversized recording",
+        "diagnostic_manifest_read": true,
+        "manifest_keys": [
+          "api_summary",
+          "bundle_version",
+          "capture",
+          "context",
+          "history",
+          "local_error",
+          "logs",
+          "request",
+          "response",
+          "timings_us",
+          "world_state"
+        ],
+        "state_unchanged": true,
+        "cause": "Recording fixture identity was deliberately changed to wrong; replay rejects before restart."
+      }
+    },
+    {
+      "name": "cpu_capture_rejection",
+      "elapsed_seconds": 0.009033,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "error_code": "unsupported",
+        "message": "this operation has not been registered by the game",
+        "image_produced": false
+      }
+    },
+    {
+      "name": "change_rule_edit_build_launch_control_assert",
+      "elapsed_seconds": 0.899522,
+      "attempts": 1,
+      "outcome": "verified",
+      "evidence": {
+        "scratch_diff": "AXIAL_STEP: 60 -> 90 mm/tick; diagonal unchanged",
+        "state": {
+          "active_character": "jumper",
+          "blocked_actions": [],
+          "characters": {
+            "jumper": {
+              "x": 1590,
+              "z": 6500
+            },
+            "strong": {
+              "x": 3500,
+              "z": 6500
+            }
+          },
+          "consumed_input": {
+            "active": [
+              "right"
+            ],
+            "pressed": [
+              "right"
+            ],
+            "released": []
+          },
+          "fixture": "adventure-v1",
+          "frame": 1,
+          "pending_inputs": 0,
+          "recorded_ticks": 1,
+          "recording_truncated": false,
+          "recording_valid": true,
+          "session_generation": 0,
+          "session_tick": 1
+        },
+        "cargo_exit": 0,
+        "build_lock_wait_observed": false
+      }
+    }
+  ],
+  "unexpected_failed_attempts": 0,
+  "cleanup": "Owned hosts stopped; discovery empty; disposable source and build deleted on exit."
+}
