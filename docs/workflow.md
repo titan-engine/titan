@@ -93,6 +93,20 @@ identities exist; changing this documentation does not alter GitHub protections.
 
 ## Attributed agent reviews
 
+Independent review includes repository maintenance and reviewability. For
+substantial diffs, require a concise explanation of why the parts belong together
+and what accounts for their size, distinguishing authored source/docs, lockfiles,
+necessary replay/golden fixtures and recorded output. Identify the permanent
+consumer/purpose of newly retained artifacts: a test, current guide or maintained
+claim. Classify by use, not extension; JSON can be an authored input or fixture.
+
+Assess unnecessary historical output, duplicate current guidance and whether
+independent concerns should be separated. Before declaring a change ready,
+require unexplained bulk run output to be removed or justified under the
+[evidence lifecycle](acceptance-evidence.md), and record retention findings in the
+attributed review. This is part of existing independent review, with no blanket
+line cap, size-based maintainer permission requirement or additional CI gate.
+
 Maintainer-run agents are authorized to comment on PRs for review. Clearly identify each
 review as agent-generated, never as a human approval. Include actual available
 model identity; do not invent a model/version when unavailable. Example:
