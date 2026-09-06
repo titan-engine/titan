@@ -31,6 +31,8 @@ own pending work and approval status. Historical observations describe only the 
 
 ## Understand the project
 
+- [Source and crate map](source-map.md) — package responsibilities, entry
+  points, representative tests, and a native CLI inspection request route.
 - [Vision and principles](vision.md) — intended direction and tradeoffs.
 - [Design requirements](design-requirements.md) — stable requirement IDs,
   commitments, preferences, and unresolved choices.
