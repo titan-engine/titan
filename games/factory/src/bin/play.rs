@@ -238,6 +238,7 @@ mod native {
                         &mut self.held_keys,
                         key,
                         event.state == ElementState::Pressed,
+                        event.repeat,
                     ) {
                         self.input
                             .set_action(&self.app, action, pressed)
@@ -431,7 +432,13 @@ mod native {
         held: &mut HashSet<KeyCode>,
         key: KeyCode,
         pressed: bool,
+        repeat: bool,
     ) -> Option<(&'static str, bool)> {
+        // Held movement is sampled by fixed ticks. Repeated keydown events must
+        // not resurrect a key cleared by restart or focus loss.
+        if pressed && repeat {
+            return None;
+        }
         titan::input::update_button_alias(held, key, pressed, action_for_key)
     }
 
@@ -456,25 +463,52 @@ mod native {
         }
 
         #[test]
+        fn repeat_after_restart_cannot_restore_old_movement_but_new_press_can() {
+            let mut app = game::build_game();
+            let mut input = game::InteractiveInput::for_app(&app);
+            let mut held = HashSet::new();
+            let (action, pressed) = update_key(&mut held, KeyCode::KeyD, true, false).unwrap();
+            input.set_action(&app, action, pressed).unwrap();
+            input.tick(&mut app);
+            game::restart(&mut app);
+            held.clear();
+            input = game::InteractiveInput::for_app(&app);
+            assert_eq!(update_key(&mut held, KeyCode::KeyD, true, true), None);
+            assert!(held.is_empty());
+            input.tick(&mut app);
+            let state: serde_json::Value = serde_json::from_str(&game::status(&app)).unwrap();
+            assert_eq!(state["camera"]["x"], 0.0);
+            // Release the old physical key, then a genuinely new keydown works
+            // on its first fixed tick, including the other movement alias.
+            update_key(&mut held, KeyCode::KeyD, false, false);
+            let (action, pressed) =
+                update_key(&mut held, KeyCode::ArrowRight, true, false).unwrap();
+            input.set_action(&app, action, pressed).unwrap();
+            input.tick(&mut app);
+            let state: serde_json::Value = serde_json::from_str(&game::status(&app)).unwrap();
+            assert_eq!(state["camera"]["x"], -4.0);
+        }
+
+        #[test]
         fn releasing_one_keyboard_alias_keeps_the_other_held() {
             let mut held = HashSet::new();
             assert_eq!(
-                update_key(&mut held, KeyCode::KeyW, true),
+                update_key(&mut held, KeyCode::KeyW, true, false),
                 Some(("up", true))
             );
             assert_eq!(
-                update_key(&mut held, KeyCode::ArrowUp, true),
+                update_key(&mut held, KeyCode::ArrowUp, true, false),
                 Some(("up", true))
             );
             assert_eq!(
-                update_key(&mut held, KeyCode::KeyW, false),
+                update_key(&mut held, KeyCode::KeyW, false, false),
                 Some(("up", true))
             );
             assert_eq!(
-                update_key(&mut held, KeyCode::ArrowUp, false),
+                update_key(&mut held, KeyCode::ArrowUp, false, false),
                 Some(("up", false))
             );
-            assert_eq!(update_key(&mut held, KeyCode::Space, true), None);
+            assert_eq!(update_key(&mut held, KeyCode::Space, true, false), None);
             assert!(held.is_empty());
         }
     }
