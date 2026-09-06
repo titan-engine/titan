@@ -11,3 +11,6 @@ pub mod player;
 
 #[cfg(feature = "player")]
 pub mod capture;
+
+#[cfg(feature = "movement-acceptance")]
+pub mod puzzle_acceptance;

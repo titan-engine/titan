@@ -44,3 +44,9 @@ impl BrowserRuntime {
         self.session.handle(request_json)
     }
 }
+
+#[cfg(feature = "movement-acceptance")]
+#[wasm_bindgen]
+pub fn puzzle_acceptance() -> String {
+    crate::puzzle_acceptance::run().to_string()
+}
