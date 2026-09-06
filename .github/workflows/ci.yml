@@ -46,6 +46,7 @@ jobs:
       - name: Install pinned Rust
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup toolchain install
           rustup show active-toolchain
           rustc --version
           cargo --version
@@ -219,6 +220,7 @@ jobs:
       - name: Install pinned Rust
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup toolchain install
           rustup show active-toolchain
           rustc --version
           cargo --version
@@ -338,6 +340,7 @@ jobs:
       - name: Install pinned Rust
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup toolchain install
           rustup show active-toolchain
           rustc --version
           cargo --version
