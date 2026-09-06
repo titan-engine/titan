@@ -23,7 +23,7 @@ test('shortcuts only run on canvas and do not repeat',()=>{
 test('focus loss pauses; Q, R and Space use gameplay input',()=>{
  const window=new Events(),document=new Events(),canvas={},calls=[];
  bindKeys({canvas,window,document,key:(...a)=>calls.push(a),clear:()=>calls.push('clear'),pause:()=>calls.push('pause'),shortcut:()=>false});
- for(const code of ['KeyQ','KeyR','Space']) window.emit('keydown',{target:canvas,code,repeat:false});
- assert.deepEqual(calls,[['KeyQ',true,false],['KeyR',true,false],['Space',true,false]]);
+ for(const code of ['KeyQ','KeyR','KeyE','Space']) window.emit('keydown',{target:canvas,code,repeat:false});
+ assert.deepEqual(calls,[['KeyQ',true,false],['KeyR',true,false],['KeyE',true,false],['Space',true,false]]);
  document.emit('focusin',{target:{}});assert.deepEqual(calls.slice(-2),['clear','pause']);
 });

@@ -5,7 +5,7 @@ use super::*;
 pub(super) struct PuzzleHud(u8);
 
 pub(super) fn setup(world: &mut World) {
-    for (index, y) in [18, 28, 165].into_iter().enumerate() {
+    for (index, y) in [18, 28, 165, 155].into_iter().enumerate() {
         world.spawn_with((
             Name::new(format!("ui/puzzle-{index}")),
             PuzzleHud(index as u8),
@@ -16,7 +16,8 @@ pub(super) fn setup(world: &mut World) {
 }
 
 pub(super) fn sync(world: &mut World) {
-    let puzzle = &world.resource::<Session>().unwrap().puzzle;
+    let session = world.resource::<Session>().unwrap();
+    let puzzle = &session.puzzle;
     let pressed = |i: usize| {
         if puzzle.plates[i].pressed {
             "HELD"
@@ -37,9 +38,28 @@ pub(super) fn sync(world: &mut World) {
             if puzzle.exit.strong { "IN" } else { "OUT" }
         ),
         if puzzle.complete {
-            "ROOM COMPLETE!  [R] RESTART ROOM".into()
+            format!("ROOM {} COMPLETE!  [R] RESTART ROOM", session.room)
         } else {
-            "HOLD A, CROSS TO B, BRING BOTH TO EXIT".into()
+            if session.room == 2 {
+                "[E]+UP/DOWN PUSH  BLOCK -> A -> B -> EXIT".into()
+            } else {
+                "HOLD A, CROSS TO B, BRING BOTH TO EXIT".into()
+            }
+        },
+        if session.room == 2 {
+            let feedback = match session.block.last_rejection {
+                Some("wrong_character") => "STRONG ONLY",
+                Some("not_grounded") => "STAND ON FLOOR - NO JUMP",
+                Some("invalid_direction") => "ONE RAIL DIRECTION REQUIRED",
+                Some("invalid_stance") => "STAND 1M BEHIND BLOCK",
+                Some("rail_end") => "RAIL END",
+                Some("block_occupied") => "BLOCK OCCUPIED",
+                Some("path_obstructed") => "PATH OBSTRUCTED",
+                _ => "READY",
+            };
+            format!("K SOCKET {} / 3: {}", session.block.socket + 1, feedback)
+        } else {
+            String::new()
         },
     ];
     let ids: Vec<_> = world.iter::<PuzzleHud>().map(|(id, h)| (id, h.0)).collect();
@@ -49,7 +69,8 @@ pub(super) fn sync(world: &mut World) {
 }
 
 pub(super) fn append(world: &World, draws: &mut Vec<Draw3d>) {
-    let puzzle = &world.resource::<Session>().unwrap().puzzle;
+    let session = world.resource::<Session>().unwrap();
+    let puzzle = &session.puzzle;
     let cube = world.resource::<Markers>().unwrap().cube;
     let mut order = 1u64 << 63;
     let mut block = |x, y, z, sx, sy, sz, color| {
@@ -66,8 +87,40 @@ pub(super) fn append(world: &World, draws: &mut Vec<Draw3d>) {
         });
         order += 1;
     };
+    if session.room == 2 {
+        for z in block::SOCKET_Z {
+            let z = z as f32 / 1000.;
+            for x in [5.04, 5.96] {
+                block(
+                    x,
+                    0.018,
+                    z,
+                    0.04,
+                    0.025,
+                    0.92,
+                    BaseColor::rgb(185, 170, 110),
+                );
+            }
+            for offset in [-0.46, 0.46] {
+                block(
+                    5.5,
+                    0.018,
+                    z + offset,
+                    0.92,
+                    0.025,
+                    0.04,
+                    BaseColor::rgb(185, 170, 110),
+                );
+            }
+        }
+        let z = block::SOCKET_Z[session.block.socket] as f32 / 1000.;
+        block(5.5, 0.375, z, 0.9, 0.75, 0.9, BaseColor::rgb(165, 115, 65));
+        for x in [5.25, 5.75] {
+            block(x, 0.76, z, 0.07, 0.025, 0.55, BaseColor::rgb(250, 222, 150));
+        }
+    }
     let link = BaseColor::rgb(255, 237, 175);
-    for (plate, rect) in puzzle.plates.iter().zip(puzzle::PLATES) {
+    for (plate, rect) in puzzle.plates.iter().zip(puzzle::plates(session.room)) {
         let x = (rect.min_x + rect.max_x) as f32 / 2000.;
         let z = (rect.min_z + rect.max_z) as f32 / 2000.;
         let y = rect.y as f32 / 1000.;

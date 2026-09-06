@@ -10,3 +10,5 @@
 
 # Generated adventure browser acceptance route
 /games/adventure/web/play/puzzle-solution.json
+/games/adventure/web/play/block-solution.json
+/games/adventure/web/play/block-intermediate-solution.json

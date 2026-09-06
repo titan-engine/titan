@@ -254,6 +254,7 @@ jobs:
           node games/adventure/scripts/test-browser.mjs
           node games/adventure/scripts/test-movement.mjs
           node games/adventure/scripts/test-puzzle.mjs
+          node games/adventure/scripts/test-block.mjs
           node --test games/adventure/web/play/*.test.mjs
 
       - name: Exercise headless 3D primitives in actual WebAssembly

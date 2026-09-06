@@ -128,6 +128,11 @@ impl BrowserPlayer {
     pub fn restart(&mut self) {
         self.session.restart();
     }
+    pub fn select_room(&mut self, room: u8) -> Result<(), JsValue> {
+        self.session
+            .select_room(room)
+            .map_err(|error| js(error.message))
+    }
     pub fn replay_route(&mut self) -> Result<(), JsValue> {
         self.session
             .load_replay(reference_recording())

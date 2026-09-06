@@ -20,6 +20,9 @@ from acceptance_evidence import FailureEvidence, sanitize, _png, _read_regular, 
 
 
 def main(failures):
+    # Two room routes plus replay/captures outlive the generic 60-second host
+    # limit on CI. Preserve an explicit caller limit and owned-process cleanup.
+    os.environ.setdefault("TITAN_RUNTIME_TIMEOUT_SECONDS", "240")
     processes.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'),
                    '--features', 'player', '--bin', 'play'], phase='build', check=True)
     processes.run(['cargo', 'build', '-p', 'titan-cli'], cwd=REPO, phase='build', check=True)
@@ -89,12 +92,12 @@ def main(failures):
         with log_path.open('w') as log:
             process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
-                                       '--run-for-ms', '120000'], project=GAME, instance=instance,
+                                       '--run-for-ms', '240000'], project=GAME, instance=instance,
                                       cwd=GAME, stdout=log, stderr=log)
             failures.record_process(process)
             try:
                 deadline = time.monotonic() + 15
-                while not call('instances')['instances']:
+                while not any(item['instance_id'] == instance for item in call('instances')['instances']):
                     assert process.poll() is None, log_path.read_text()
                     assert time.monotonic() < deadline, 'player discovery timed out'
                     time.sleep(.05)
@@ -227,6 +230,30 @@ def main(failures):
                 move(['right'], 15)
                 assert state()['puzzle']['door']['state'] == 'closed'
                 capture('puzzle-cleared')
+                invoke('select_room', {'room': 2})
+                move(['interact', 'up'], 1)
+                assert state()['block']['last_rejection'] == 'wrong_character'
+                assert state()['block']['socket'] == 0
+                capture('block-rejected')
+                for route_name in ('block-solution.json', 'block-intermediate-solution.json'):
+                    invoke('select_room', {'room': 2})
+                    assert state()['room'] == 2
+                    capture(f'{route_name}-initial')
+                    for segment in json.loads((GAME / 'tests' / route_name).read_text()):
+                        move(segment['actions'], segment['ticks'])
+                        if segment.get('checkpoint'):
+                            capture(f"{route_name}-{segment['checkpoint']}")
+                    solved_block = state()
+                    assert solved_block['puzzle']['complete'], solved_block
+                    block_recording = call('query', 'recording')['response']['value']
+                    arguments.write_text(json.dumps({'recording': block_recording}))
+                    call('invoke', 'load_replay', '--arguments-file', arguments)
+                    call('step', len(block_recording['frames']))
+                    assert state()['room'] == 2 and state()['puzzle']['complete']
+                    assert state()['characters'] == solved_block['characters']
+                    invoke('restart')
+                    assert state()['room'] == 2 and not state()['puzzle']['complete']
+                capture('block-reset')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)
@@ -247,7 +274,7 @@ def main(failures):
             failures.record_process(process)
             try:
                 deadline = time.monotonic() + 10
-                while not call('instances')['instances']:
+                while not any(item['instance_id'] == instance for item in call('instances')['instances']):
                     assert process.poll() is None, 'read-only GPU host exited'
                     assert time.monotonic() < deadline, 'read-only discovery timed out'
                     time.sleep(.05)

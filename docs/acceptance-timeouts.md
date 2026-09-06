@@ -4,6 +4,9 @@ Native acceptance commands and browser subprocesses use separate wall-clock
 limits: `TITAN_RUNTIME_TIMEOUT_SECONDS` defaults to 60 seconds and
 `TITAN_BUILD_TIMEOUT_SECONDS` defaults to 1200 seconds. Set positive finite
 seconds in the environment to accommodate cold builds or to diagnose a hang.
+The adventure GPU acceptance harness defaults its runtime limit to 240 seconds
+for both rooms, replays and checkpoint captures; an explicit
+`TITAN_RUNTIME_TIMEOUT_SECONDS` still overrides it.
 Build limits cover Cargo build/test/check/clippy/metadata, tool installation,
 and packaging; runtime limits cover CLI requests, replay verification and
 browser test subprocesses. These are hang bounds, not performance thresholds.

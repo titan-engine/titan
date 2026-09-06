@@ -50,3 +50,9 @@ impl BrowserRuntime {
 pub fn puzzle_acceptance() -> String {
     crate::puzzle_acceptance::run().to_string()
 }
+
+#[cfg(feature = "movement-acceptance")]
+#[wasm_bindgen]
+pub fn block_acceptance() -> String {
+    crate::block_acceptance::run().to_string()
+}

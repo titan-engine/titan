@@ -16,6 +16,7 @@ pub const MAX_RECORDING_TICKS: usize = 4096;
 pub const AXIAL_STEP: i32 = 60;
 pub const DIAGONAL_STEP: i32 = 42;
 pub const FIXTURE: &str = "adventure-v3";
+pub mod block;
 pub mod movement;
 mod presentation;
 pub mod puzzle;
@@ -48,8 +49,9 @@ pub enum Action {
     Switch,
     Restart,
     Jump,
+    Interact,
 }
-pub(crate) const SCHEMA: [(Action, &str); 7] = [
+pub(crate) const SCHEMA: [(Action, &str); 8] = [
     (Action::Up, "up"),
     (Action::Down, "down"),
     (Action::Left, "left"),
@@ -57,6 +59,7 @@ pub(crate) const SCHEMA: [(Action, &str); 7] = [
     (Action::Switch, "switch"),
     (Action::Restart, "restart"),
     (Action::Jump, "jump"),
+    (Action::Interact, "interact"),
 ];
 #[derive(Default)]
 struct ScheduledInput {
@@ -68,6 +71,8 @@ struct ScheduledInput {
 }
 struct PendingSwitch;
 struct Session {
+    room: u8,
+    block: block::BlockState,
     generation: u64,
     puzzle: puzzle::PuzzleState,
     tick: u64,
@@ -84,6 +89,8 @@ impl Session {
     fn new(generation: u64) -> Self {
         Self {
             generation,
+            room: 1,
+            block: block::BlockState::default(),
             puzzle: puzzle::PuzzleState::default(),
             tick: 0,
             recording: InputRecording::new(RecordingHeader::new(16_666_667, 81, 0x81)),
@@ -109,6 +116,8 @@ pub struct RecordingOrigin {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Recording {
+    #[serde(default = "default_room", skip_serializing_if = "is_default_room")]
+    pub room: u8,
     #[serde(default)]
     pub origin: RecordingOrigin,
     pub format_version: u32,
@@ -120,6 +129,12 @@ pub struct Recording {
 #[serde(deny_unknown_fields)]
 struct ReplayArgs {
     recording: Recording,
+}
+fn is_default_room(room: &u8) -> bool {
+    *room == 1
+}
+pub(crate) fn default_room() -> u8 {
+    1
 }
 fn initial_position(index: usize) -> Position {
     Position {
@@ -281,7 +296,10 @@ fn reset_world(world: &mut World) {
         .generation
         .checked_add(1)
         .expect("session generation exhausted");
-    world.insert_resource(Session::new(generation));
+    let room = world.resource::<Session>().unwrap().room;
+    let mut session = Session::new(generation);
+    session.room = room;
+    world.insert_resource(session);
     world.remove_resource::<PendingSwitch>();
     clear_scheduled_input(world);
     world.insert_resource(InputFrame::<Action>::default());
@@ -293,6 +311,44 @@ pub fn restart(app: &mut App) {
     crate::player::reset_input(app.world_mut());
     sync_hud(app.world_mut());
     app.refresh_extracted();
+}
+/// Development room selector, separate from the future slice progression UI.
+pub fn select_room(app: &mut App, room: u8) -> Result<(), ProtocolError> {
+    if !matches!(room, 1 | 2) {
+        return Err(invalid("room must be 1 or 2"));
+    }
+    app.update_schedule(Startup);
+    app.world_mut().resource_mut::<Session>().unwrap().room = room;
+    restart(app);
+    let world = app.world_mut();
+    let id = world
+        .iter::<Name>()
+        .find(|(_, n)| matches!(n.as_str(), "teaching-ledge" | "high-ledge"))
+        .unwrap()
+        .0;
+    let ledge = room_solids(room)[5];
+    *world.get_mut::<Name>(id).unwrap() = Name::new(ledge.name);
+    *world.get_mut::<Position>(id).unwrap() = Position {
+        x: (ledge.min.x + ledge.max.x) / 2,
+        y: 0,
+        z: 2000,
+    };
+    let visual = world.get_mut::<Visual>(id).unwrap();
+    visual.scale = Vec3::new(
+        (ledge.max.x - ledge.min.x) as f32 / 1000.,
+        ledge.max.y as f32 / 1000.,
+        2.,
+    );
+    visual.height = ledge.max.y as f32 / 2000.;
+    app.refresh_extracted();
+    Ok(())
+}
+pub fn room_solids(room: u8) -> [movement::Solid; 8] {
+    let mut solids = SOLIDS;
+    if room == 2 {
+        solids[5] = movement::solid("high-ledge", (4000, 0, 1000), (7000, 2000, 3000));
+    }
+    solids
 }
 pub(crate) fn clear_scheduled_input(world: &mut World) {
     let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
@@ -396,6 +452,9 @@ fn tick(world: &mut World) {
         - i32::from(session.consumed.is_active(&Action::Up));
     let target = session.active;
     let jump = session.consumed.just_pressed(&Action::Jump);
+    let push = session.consumed.just_pressed(&Action::Interact);
+    let direction_count = usize::from(dx != 0) + usize::from(dz != 0);
+    let room = session.room;
     session.recovery_message_ticks = session.recovery_message_ticks.saturating_sub(1);
     session.tick += 1;
     if session.recording.len() < MAX_RECORDING_TICKS {
@@ -410,9 +469,25 @@ fn tick(world: &mut World) {
     };
     // The solids are selected once before either character moves. Plate and
     // obstruction sampling below determines collision for the following tick.
-    let mut solids = SOLIDS.to_vec();
+    let mut solids = room_solids(room).to_vec();
     if !session.puzzle.door.open {
         solids.push(puzzle::DOOR);
+    }
+    let mut bodies = [(initial_position(0), Movement::default()); 2];
+    for (id, c) in world.iter::<Character>() {
+        bodies[c.index] = (
+            *world.get::<Position>(id).unwrap(),
+            *world.get::<Movement>(id).unwrap(),
+        );
+    }
+    let session = world.resource_mut::<Session>().unwrap();
+    let pushed = room == 2
+        && push
+        && session
+            .block
+            .push(target, (dx, dz, direction_count), jump, bodies, &solids);
+    if room == 2 {
+        solids.push(session.block.solid());
     }
     let mut ids: Vec<_> = world
         .iter::<Character>()
@@ -422,7 +497,7 @@ fn tick(world: &mut World) {
     for (index, id) in ids {
         let mut p = *world.get::<Position>(id).unwrap();
         let mut m = *world.get::<Movement>(id).unwrap();
-        let controlled = index == target;
+        let controlled = index == target && !pushed;
         movement::advance(
             &mut p,
             &mut m,
@@ -470,7 +545,7 @@ fn tick(world: &mut World) {
         .resource_mut::<Session>()
         .unwrap()
         .puzzle
-        .sample(bodies);
+        .sample_room(bodies, room);
     sync_hud(world);
 }
 fn sync_hud(world: &mut World) {
@@ -573,6 +648,7 @@ fn invalid(message: &str) -> ProtocolError {
 pub fn recording(app: &App) -> Result<Recording, ProtocolError> {
     let s = app.world().resource::<Session>().unwrap();
     Ok(Recording {
+        room: s.room,
         origin: s.origin.clone(),
         format_version: 1,
         fixture: FIXTURE.into(),
@@ -587,6 +663,7 @@ pub fn recording(app: &App) -> Result<Recording, ProtocolError> {
 }
 pub fn replay(app: &mut App, recording: Recording) -> Result<(), ProtocolError> {
     if recording.format_version != 1
+        || !matches!(recording.room, 1 | 2)
         || recording.fixture != FIXTURE
         || recording.truncated
         || recording.frames.len() > MAX_RECORDING_TICKS
@@ -602,7 +679,7 @@ pub fn replay(app: &mut App, recording: Recording) -> Result<(), ProtocolError> 
         })
         .collect::<Result<Vec<_>, _>>()?;
     validate_origin(&recording.origin)?;
-    restart(app);
+    select_room(app, recording.room)?;
     apply_origin(app, &recording.origin);
     for frame in frames {
         app.world_mut().insert_resource(frame);
@@ -623,7 +700,7 @@ pub fn status(app: &App) -> serde_json::Value {
             (character_name(c.index), serde_json::json!({"x":p.x,"y":p.y,"z":p.z,"velocity_y":m.velocity_y,"grounded":m.grounded,"support":m.support,"collisions":m.collisions}))
         })
         .collect();
-    serde_json::json!({"puzzle":s.puzzle,"puzzle_geometry":{"plates":puzzle::PLATES,"door":puzzle::DOOR,"exit":puzzle::EXIT},"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
+    serde_json::json!({"room":s.room,"block":if s.room == 2 {Some(&s.block)} else {None},"block_geometry":if s.room == 2 {Some(s.block.solid())} else {None},"puzzle":s.puzzle,"puzzle_geometry":{"plates":puzzle::plates(s.room),"door":puzzle::DOOR,"exit":puzzle::EXIT},"solids":room_solids(s.room),"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
 }
 fn field(type_name: &str, description: &str) -> FieldMetadata {
     FieldMetadata {
@@ -705,6 +782,21 @@ pub fn configured_inspector(config: InspectionConfig) -> Inspector {
                 )]),
             },
             |app, args: ReplayArgs| replay(app, args.recording),
+        )
+        .unwrap();
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RoomArgs {
+        room: u8,
+    }
+    inspector
+        .register_command(
+            CommandMetadata {
+                name: "select_room".into(),
+                description: "Development selector: reconstruct room 1 or 2".into(),
+                arguments: BTreeMap::from([("room".into(), field("u8", "Room 1 or 2"))]),
+            },
+            |app, args: RoomArgs| select_room(app, args.room),
         )
         .unwrap();
     inspector.register_command(CommandMetadata {name:"switch".into(),description:"Switch active character on one recorded fixed tick; suppress held input until release".into(),arguments:BTreeMap::new()}, |app, _:Empty| {
