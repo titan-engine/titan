@@ -5,7 +5,7 @@ description: Build, run, inspect, replay, and diagnose Titan games using the sta
 
 # Titan game iteration
 
-Run commands from the repository root. Read `docs/implementation-plan.md` for
+Run commands from the repository root. Read `docs/verification.md` for
 quality gates and follow `docs/workflow.md` plus the GitHub board for approved
 priorities. Read `docs/cli.md` for flags and structured output. Use
 `docs/ecs-authoring.md` when editing systems, `docs/browser.md` for WASM, and
@@ -18,8 +18,7 @@ Start with `starters/minimal/README.md`: copy the standalone package, configure
 its Titan path dependencies, and put game definitions in `src/game.rs`. The
 starter has its own native controlled runner, GPU player, browser adapters and
 portable build script. It does not import RPG support code. Shared host APIs
-are documented in `docs/host-setup-audit.md`, `docs/rendering.md` and
-`docs/host-tooling.md`: surface presentation, browser inspection policy, PNG
+are documented in `docs/host-tooling.md#host-boundaries` and `docs/rendering.md`: surface presentation, browser inspection policy, PNG
 encoding and build packaging are reused; game inputs and presentation stay local.
 For native macOS visual verification, use the package's
 `scripts/build-macos-app.py --name "My Game" --bundle-id dev.example.my-game`.
@@ -93,7 +92,7 @@ three collected shards, active shrine, software RGBA checksum
 visual changes, compare before/after images and semantic results before updating
 an expected checksum; a new checksum alone is not evidence of improvement.
 
-After an engine change, use the quality gates listed in the implementation plan.
+After an engine change, use the quality gates listed in `docs/verification.md`.
 Ordinary `cargo test` remains useful; the Titan CLI adds structured results and
 bounded execution. Stop owned runtime processes after verification and let their
 normal shutdown remove discovery registrations.

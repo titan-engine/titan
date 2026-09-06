@@ -75,7 +75,7 @@ cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-
 The WASM check requires `rustup target add wasm32-unknown-unknown` if it is not
 installed. For documentation-only changes, check local links, formatting, and
 commands you changed. For tooling changes, run the relevant script tests.
-The [quality gates](docs/implementation-plan.md#constraints-and-quality-gates)
+The [quality gates](docs/verification.md#constraints-and-quality-gates)
 list additional native/browser and standalone-game checks by area. Ordinary
 tests run without a GPU; GPU checks are opt-in. Say which checks you could not
 run and why, so the maintainer can help cover them.

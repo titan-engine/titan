@@ -3,7 +3,7 @@
 This document states intended capabilities and design direction, including work
 that is not implemented or scheduled. The [design requirements](design-requirements.md)
 record requirements and their certainty; the
-[implementation plan](implementation-plan.md) tracks selected execution work.
+[verification guide](verification.md) defines quality gates.
 Undecided choices remain in [open questions](open-questions.md).
 
 ## Purpose

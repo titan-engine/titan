@@ -3,6 +3,13 @@
 Start with what you want to do. Titan is early in development; the
 [README](../README.md#what-works-today) describes what is supported today.
 
+The README owns supported capabilities and getting started; this index owns
+navigation. Reference guides own API contracts and usage, and each game directory
+owns its game rules and controls. [Verification](verification.md) owns quality
+gates; [workflow](workflow.md) owns contribution and integration policy. Issues
+own pending work and approval status. Historical reports below describe only
+the revisions they verified.
+
 ## Try Titan
 
 - [Play the collection room](../games/collection-room/README.md) — Titan's first
@@ -29,7 +36,6 @@ Start with what you want to do. Titan is early in development; the
 - [Design requirements](design-requirements.md) — stable requirement IDs,
   commitments, preferences, and unresolved choices.
 - [Open design questions](open-questions.md) — decisions that need evidence.
-- [Current implementation overview](handoff.md).
 - [Two-character adventure](../games/adventure/README.md) — native/browser control
   foundation and selected puzzle design; [next-milestone proposal](adventure-next-milestone.md)
   awaits maintainer selection, with no further gameplay approved.
@@ -52,7 +58,7 @@ Start with what you want to do. Titan is early in development; the
 - [Ask questions](https://github.com/titan-engine/titan/discussions).
 - [Find starter issues](https://github.com/titan-engine/titan/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
   or browse the [development board](https://github.com/orgs/titan-engine/projects/1).
-- [Quality gates](implementation-plan.md) and [acceptance failure evidence](acceptance-evidence.md).
+- [Quality gates](verification.md) and [acceptance failure evidence](acceptance-evidence.md).
 - [Maintainer and agent workflow](workflow.md) and
   [agent runtime skill](../.agents/skills/titan-workflow/SKILL.md).
 

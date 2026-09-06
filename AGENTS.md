@@ -28,7 +28,7 @@ share one GitHub account; PR comments provide review evidence, not human approva
 Use the gh-stack skill for dependent PR stacks; ordinary independent work uses
 ordinary PRs. Keep requirements/architecture/usage in repository docs and TODOs
 in issues. Read `docs/vision.md`, `docs/design-requirements.md` and relevant runtime
-skills before engine changes. Quality gates are in `docs/implementation-plan.md`.
+skills before engine changes. Quality gates are in `docs/verification.md`.
 Preserve reference checksums and the committed crisp README preview unless an
 intentional visual change is approved. Do not publish crates or create release
 tags without authorization.
