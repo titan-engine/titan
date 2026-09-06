@@ -29,7 +29,7 @@ fn delta(facing: Facing) -> (i32, i32) {
         Facing::W => (-1, 0),
     }
 }
-fn target(s: &Structure) -> Option<(i32, i32)> {
+pub(super) fn target(s: &Structure) -> Option<(i32, i32)> {
     s.output().map(|f| {
         let (dx, dy) = delta(f);
         (s.x + dx, s.y + dy)
@@ -168,6 +168,7 @@ pub(super) fn structure_value(world: &World, s: &Structure) -> Value {
     let mut value = s.value();
     value["machine_status"] = json!(production::machine_status(state, s));
     value["transport"] = json!({"reason":if state.completion_tick.is_some(){"complete"}else{plans[i].0},"target":target(s).map(|(x,y)|json!({"x":x,"y":y}))});
+    interface::enrich(world, s, &mut value);
     value
 }
 pub(super) fn item_positions(s: &Structure) -> Vec<Value> {
