@@ -73,7 +73,7 @@ try {
  check((await capture('replay')).checksum===finish.checksum,'replay pixels match live route');
  player.resize(0,0);check(!player.frame(0)&&state().surface.suspended,'zero-sized canvas suspends presentation');
  check((await capture('suspended')).checksum===finish.checksum,'offscreen capture survives suspended surface');
- for(const [width,height] of [[640,360],[1280,720],[960,540]]) {
+ for(const [width,height] of [[640,360],[800,500],[1280,720],[960,540]]) {
    player.resize(width,height);check(player.frame(0)&&!state().surface.suspended,`${width}x${height} presents`);
  }
  player.restart();player.resume();
@@ -83,12 +83,18 @@ try {
  check(state().characters.strong.x===3500,'switch suppresses held physical aliases at logical action level');
  player.set_key('ArrowRight',false,false);tick();player.set_key('KeyD',true,false);tick();
  check(state().characters.strong.x===3560,'fresh movement controls selected character');
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
+ check(state().characters.jumper.x===1620,'release/repress between ticks unlocks the selected action');
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
+ check(state().characters.strong.x===3620,'quick release/repress survives a second switch');
  player.pause();const pausedTick=state().session_tick;player.frame(100);
  check(state().session_tick===pausedTick,'pause freezes simulation ticks');
  player.resume();player.set_key('KeyD',true,true);tick();
- check(state().characters.strong.x===3560,'resume discards stale held movement');
+ check(state().characters.strong.x===3620,'resume discards stale held movement');
  player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
- check(state().characters.strong.x===3620,'release and repress restores movement after pause');
+ check(state().characters.strong.x===3680,'release and repress restores movement after pause');
  player.set_key('KeyR',true,false);tick();player.set_key('KeyR',false,false);
  check(state().characters.jumper.x===1500&&state().characters.strong.x===3500&&state().active_character==='jumper','R reconstructs both character starts');
  player.pause();
