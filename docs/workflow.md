@@ -254,20 +254,21 @@ The main-push selector requires one unambiguous completed successful
 `merge_group` run from this repository's `.github/workflows/ci.yml` workflow ID,
 for the exact full main SHA. It checks the workflow contents at that SHA, the
 latest run attempt, the **CI revision** job's successful step naming the executed
-workflow SHA, and every expected required job and named verification step. The
+workflow SHA, and all 17 expanded workload jobs, three aggregate gates and their applicable
+named verification steps. The
 revision job checks both `github.workflow_sha` and the checkout SHA. Missing,
 pending, failed, cancelled, incomplete, ambiguous or inaccessible evidence means
 full CI. A failed selector job also starts full CI; no empty output grants reuse.
 The final result fails unless accepted queue evidence or the full fallback passes.
 
-PR and queue required jobs are unconditional. The separate main workflow's
+PR and queue workload jobs are unconditional; their aggregate gates always run. The separate main workflow's
 selection, summary and reusable full-suite job names do not replace their required
 check names. No branch protection or queue rules are changed. The verification
 commands are shared by calling the same `ci.yml` at the same commit; they do not
 branch on event or ref. Cache scope, cancellation and diagnostic artifact names
 can differ without changing verification. The selector deliberately rejects an
 unrecognized gate layout or event-dependent verification. When changing the gate
-contract (including parallel CI), update its extraction/tests before expecting
+contract, update its extraction/tests before expecting
 reuse; a contract it cannot prove continues to run full CI. Mutable runner images
 and existing action aliases remain environmental variation, just as between two
 full runs; this policy proves revision and command equivalence, not hermeticity.
@@ -279,12 +280,13 @@ composite actions and CI cache tooling) warms main immediately. A weekly Monday
 them too. `workflow_dispatch` on **Main verification** or **CI** at `main` forces
 full verification and permits manual warming after eviction. Existing immutable
 cache keys still control writes: a full run populates a missing key, not an
-existing cache entry. Restore prefixes remain available between warmings. Browser
+existing cache entry. The daily generation key gives weekly runs a fresh slot;
+restore prefixes remain available between warmings. Browser
 demos keeps its independent main build/deploy and cache policy.
 
 Evaluate savings over a complete warming interval, including full warming/fallback
 jobs and the selector/summary jobs, rather than counting only skipped suites.
-For the historical same-SHA pair in issue #119, the
+For the historical pair at `a9555a7d643bfcd6430e3f0473d37267d9267a5f` in issue #119, the
 [queue run](https://github.com/titan-engine/titan/actions/runs/34026940070)
 used 21.90 runner-minutes and the
 [main run](https://github.com/titan-engine/titan/actions/runs/34027341007)
@@ -293,7 +295,9 @@ wall time was 11m23s. These are baseline measurements, not measured savings of
 this implementation. At those costs, `n` otherwise redundant main suites and `w`
 additional warmings would save `24.85 × (n − w)` runner-minutes minus decision and
 summary overhead; low merge frequency may yield no net saving. Record actual
-run timings and cache effects before making a maintained performance claim.
+run timings and cache effects before making a maintained performance claim. Reproduce
+the baseline with `python3 scripts/measure-ci.py 34027341007 --attempt 1` (and
+`34026940070` for the queue); this helper reports required-job durations.
 
 Live rollout verification requires a merged revision containing this workflow:
 link its actual queue run and main summary demonstrating reuse, then a forced
@@ -311,10 +315,12 @@ Main pushes use **Main verification** to select exact-SHA queue evidence or call
 the same CI workflow in full. Scheduled and manual Main verification runs always
 run the full suite. Feature-branch pushes do not
 also start a duplicate push run. Superseded runs cancel only within the same PR;
-main and merge-group runs remain independent. Build/download caches are separated by platform,
-job and toolchain, with manifest/lockfile keys. Runtime diagnostic/discovery data
-is excluded. Cache misses affect speed, not whether verification runs. All stack
+main and merge-group runs remain independent. Independent workspace, game and copied-project workloads run on separate runners.
+The three existing required check names are aggregate gates: every necessary
+shard must succeed, including after upstream failures or cancellation. All stack
 layers retain full required gates; no stack-top-only exception is configured.
+See [CI workload and cache verification](verification.md#ci-workloads-and-cache-measurement)
+for the command map, cache boundaries, refresh policy and timing procedure.
 
 ```sh
 gh issue create --title 'Concrete outcome' --body-file /tmp/issue.md --label investigation

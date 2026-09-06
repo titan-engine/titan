@@ -19,6 +19,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Keep debug assertions/tests, omit debugger symbols from transferred builds.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 defaults:
   run:
@@ -39,90 +42,73 @@ jobs:
           test "$WORKFLOW_SHA" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-  native:
-    name: Native checks
-    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+  native-workloads:
+    name: native / ${{ matrix.workload }}
+    # Each runner retains the 45-minute command budget and evidence headroom.
     timeout-minutes: 55
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [workspace, starter, collection-room, adventure, arena, factory]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install supported Python
-        uses: actions/setup-python@v6
+      - name: Prepare CI toolchain
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version-file: .python-version
-      - name: Install supported Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-      - name: Install pinned Rust
-        run: |
-          # rustup reads the channel, components and targets from rust-toolchain.toml.
-          rustup toolchain install
-          # External copied games must use the same toolchain as this checkout.
-          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
-          rustc --version
-          cargo --version
-          python3 --version
-          node --version
+          platform: native
+          workload: ${{ matrix.workload }}
 
-      - name: Identify Rust build cache
-        id: rust-cache
-        run: |
-          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
-          import hashlib, os, subprocess
-          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
-          print("version=" + hashlib.sha256(identity).hexdigest())
-          PYTHON
-
-      # Cache build outputs, never target/titan runtime captures or discovery data.
-      # Copied games retain their own target directories and still build and run.
-      - name: Cache Cargo downloads and Rust builds
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore workload cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/src
-            ~/.cargo/git/db
-            target/debug
-            target/starter-smoke/debug
-            games/arena/target/debug
-          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+          restore-keys: ${{ steps.setup.outputs.restore-prefix }}
 
       - name: Verify acceptance process timeout and cleanup
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-acceptance-process.py
           python3 scripts/test-ci-deadline.py
           python3 scripts/test-ci-queue-evidence.py
           python3 scripts/test-main-verification.py
+          python3 scripts/test-ci-measurement.py
+          python3 scripts/test-ci-cache.py
           node --test scripts/acceptance_process.test.mjs
 
       - name: Check portable build tooling policy
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-build-tools.py
 
       - name: Verify bounded acceptance failure evidence
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-acceptance-evidence.py
 
       - name: Check formatting
+        if: matrix.workload == 'workspace'
         run: cargo fmt --all --check
 
       - name: Check procedural-only core
+        if: matrix.workload == 'workspace'
         run: cargo check --locked -p titan --lib --no-default-features
 
       - name: Run all tests and examples
+        if: matrix.workload == 'workspace'
         run: cargo test --locked --workspace --all-targets
 
       - name: Exercise bounded PNG corpus and generated inputs
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-png-fuzz-runner.py
           python3 scripts/fuzz-png.py --seed 69 --iterations 1000
 
       - name: Upload PNG fuzz failure evidence
-        if: failure()
+        if: failure() && matrix.workload == 'workspace'
         uses: actions/upload-artifact@v4
         with:
           name: png-fuzz-failures-${{ github.run_id }}-${{ github.run_attempt }}
@@ -131,43 +117,54 @@ jobs:
           if-no-files-found: ignore
 
       - name: Verify swarm measurement runner
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-swarm-measurement.py
           python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1
           python3 scripts/measure-swarm.py --debug --counts 0 32 --steps 8 --repeats 1 --threads 2
 
       - name: Verify sparse component retention smoke workload
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-sparse-churn-measurement.py
           python3 scripts/measure-sparse-churn.py --debug --counts 1 32 --cycles 3 --repeats 2
 
       - name: Verify mixed-schedule measurement runner
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-mixed-schedule-measurement.py
           python3 scripts/measure-mixed-schedules.py --debug --counts 0 16 --steps 2 --work-iterations 1 --repeats 1 --threads 1 2 4
 
       - name: Verify generated asset cache across processes
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-generated-assets.py
 
       - name: Run Clippy with warnings denied
+        if: matrix.workload == 'workspace'
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
       - name: Smoke-test structured CLI output
+        if: matrix.workload == 'workspace'
         run: cargo run --locked --quiet -p titan-cli -- --format json info
 
       - name: Exercise the native RPG through separate CLI processes
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-control-loop.py
 
       - name: Verify RPG snapshot recording and playback
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-rpg-replay.py
 
       - name: Verify file-backed RPG assets
+        if: matrix.workload == 'workspace'
         run: python3 scripts/test-rpg-assets.py
 
       - name: Verify copied standalone starter
+        if: matrix.workload == 'starter'
         run: python3 scripts/test-starter.py
 
       - name: Check and drive headless collection room
+        if: matrix.workload == 'collection-room'
         run: |
           cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
           cargo test --locked --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
@@ -175,6 +172,7 @@ jobs:
           python3 games/collection-room/scripts/test-control.py
 
       - name: Check and drive two-character adventure
+        if: matrix.workload == 'adventure'
         run: |
           cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
           cargo test --locked --manifest-path games/adventure/Cargo.toml --all-targets --all-features
@@ -183,6 +181,7 @@ jobs:
           python3 games/adventure/scripts/test-playtest.py
 
       - name: Check and drive independent arena game
+        if: matrix.workload == 'arena'
         run: |
           cargo fmt --manifest-path games/arena/Cargo.toml --all --check
           cargo test --locked --manifest-path games/arena/Cargo.toml --all-targets
@@ -190,6 +189,7 @@ jobs:
           python3 games/arena/scripts/test-control.py
 
       - name: Check and drive factory construction
+        if: matrix.workload == 'factory'
         run: |
           cargo fmt --manifest-path games/factory/Cargo.toml --all --check
           cargo test --locked --manifest-path games/factory/Cargo.toml --all-targets
@@ -197,13 +197,14 @@ jobs:
           python3 games/factory/scripts/test-control.py
 
       - name: Verify real acceptance failure retention and cleanup
+        if: matrix.workload == 'arena'
         run: python3 scripts/test-acceptance-failure-integration.py
 
       - name: Upload sanitized native acceptance failures
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: acceptance-failures-${{ github.job }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: acceptance-failures-${{ github.job }}-${{ matrix.workload }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             target/acceptance-failures/*/context.json
             target/acceptance-failures/*/commands.log
@@ -216,83 +217,56 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: false
 
-  wasm:
-    name: WebAssembly core check
-    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+      # Immutable keys refresh daily; successful main runs warm PR/queue fallbacks.
+      # A miss never skips a command. Failed workloads never publish a cache.
+      - name: Save workload cache
+        if: success() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+
+  wasm-workloads:
+    name: wasm / ${{ matrix.workload }}
+    # Each runner retains the 45-minute command budget and evidence headroom.
     timeout-minutes: 55
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [workspace, starter, collection-room, adventure, arena, factory]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install supported Python
-        uses: actions/setup-python@v6
+      - name: Prepare CI toolchain
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version-file: .python-version
-      - name: Install supported Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-      - name: Install pinned Rust
-        run: |
-          # rustup reads the channel, components and targets from rust-toolchain.toml.
-          rustup toolchain install
-          # External copied games must use the same toolchain as this checkout.
-          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
-          rustc --version
-          cargo --version
-          python3 --version
-          node --version
+          platform: wasm
+          workload: ${{ matrix.workload }}
 
-      - name: Identify Rust build cache
-        id: rust-cache
-        run: |
-          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
-          import hashlib, os, subprocess
-          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
-          print("version=" + hashlib.sha256(identity).hexdigest())
-          PYTHON
-
-      # Cache build outputs, never target/titan runtime captures or discovery data.
-      # Copied games retain their own target directories and still build and run.
-      - name: Cache Cargo downloads and Rust builds
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore workload cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/src
-            ~/.cargo/git/db
-            target/debug
-            target/wasm32-unknown-unknown
-            target/starter-smoke/debug
-            target/starter-smoke/wasm32-unknown-unknown
-            games/arena/target/debug
-            games/arena/target/wasm32-unknown-unknown
-          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
-
-      # The helper checks the executable version before reusing it. Copied
-      # starter/arena builds also look here; do not cache the rest of target/titan.
-      - name: Cache matching wasm-bindgen CLI
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: target/titan/tools
-          key: bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+          restore-keys: ${{ steps.setup.outputs.restore-prefix }}
 
       - name: Check engine and protocol for WebAssembly
+        if: matrix.workload == 'workspace'
         run: cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 
       - name: Exercise collection room in actual WebAssembly
+        if: matrix.workload == 'collection-room'
         run: |
           python3 games/collection-room/scripts/build-browser.py
           node games/collection-room/scripts/test-browser.mjs
           node --test games/collection-room/web/play/*.test.mjs
 
       - name: Exercise adventure in actual WebAssembly with native agreement
+        if: matrix.workload == 'adventure'
         run: |
           python3 games/adventure/scripts/build-browser.py
           node games/adventure/scripts/test-browser.mjs
@@ -303,12 +277,15 @@ jobs:
           node --test games/adventure/web/play/*.test.mjs
 
       - name: Exercise headless 3D primitives in actual WebAssembly
+        if: matrix.workload == 'workspace'
         run: node scripts/test-render-3d.mjs
 
       - name: Build actual browser 3D GPU verification fixture
+        if: matrix.workload == 'workspace'
         run: python3 scripts/build-render-3d-browser.py
 
       - name: Build the browser adapter and run the real WASM control loop
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/build-browser.py
           node scripts/test-browser.mjs
@@ -319,10 +296,12 @@ jobs:
           node --test web/play/*.test.mjs
 
       - name: Build starter WASM and exercise its control loop
+        if: matrix.workload == 'starter'
         run: |
           python3 scripts/test-starter.py --browser
 
       - name: Build factory WASM and exercise construction
+        if: matrix.workload == 'factory'
         run: |
           python3 games/factory/scripts/build-browser.py
           node games/factory/scripts/test-browser.mjs
@@ -330,6 +309,7 @@ jobs:
           node --test games/factory/web/play/*.test.mjs
 
       - name: Build arena WASM and exercise its control loop
+        if: matrix.workload == 'arena'
         run: |
           cargo check --locked --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
           python3 games/arena/scripts/build-browser.py
@@ -337,64 +317,49 @@ jobs:
           node --test games/arena/web/inspector/bridge.test.mjs
           node --test games/arena/web/play/*.test.mjs
 
-  macos-bundles:
-    name: macOS development app bundles
-    # 45-minute shared command budget + 10 minutes for evidence/actions cleanup.
+      # Immutable keys refresh daily; successful main runs warm PR/queue fallbacks.
+      # A miss never skips a command. Failed workloads never publish a cache.
+      - name: Save workload cache
+        if: success() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+
+  macos-bundles-workloads:
+    name: macos / ${{ matrix.workload }}
+    # Each runner retains the 45-minute command budget and evidence headroom.
     timeout-minutes: 55
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [workspace, bundles, adventure, arena, factory]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install supported Python
-        uses: actions/setup-python@v6
+      - name: Prepare CI toolchain
+        id: setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version-file: .python-version
-      - name: Install supported Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-      - name: Install pinned Rust
-        run: |
-          # rustup reads the channel, components and targets from rust-toolchain.toml.
-          rustup toolchain install
-          # External copied games must use the same toolchain as this checkout.
-          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
-          rustc --version
-          cargo --version
-          python3 --version
-          node --version
+          platform: macos
+          workload: ${{ matrix.workload }}
 
-      - name: Identify Rust build cache
-        id: rust-cache
-        run: |
-          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
-          import hashlib, os, subprocess
-          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
-          print("version=" + hashlib.sha256(identity).hexdigest())
-          PYTHON
-
-      # Cache build outputs, never target/titan runtime captures or discovery data.
-      # Copied games retain their own target directories and still build and run.
-      - name: Cache Cargo downloads and Rust builds
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore workload cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/src
-            ~/.cargo/git/db
-            target/debug
-            target/macos-bundle-smoke/debug
-            games/arena/target/debug
-          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ steps.rust-cache.outputs.version }}-
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+          restore-keys: ${{ steps.setup.outputs.restore-prefix }}
 
       - name: Build and run relocated bundles from copied games
+        if: matrix.workload == 'bundles'
         run: python3 scripts/test-macos-bundles.py
 
       - name: Verify native 3D shaders and offscreen readback
+        if: matrix.workload == 'workspace'
         env:
           TITAN_3D_EVIDENCE_DIR: ${{ runner.temp }}/titan-3d-evidence
           TITAN_COMPOSITION_EVIDENCE_DIR: ${{ runner.temp }}/titan-composition-evidence
@@ -404,7 +369,7 @@ jobs:
           cargo test --locked -p titan-render-wgpu --lib aborted_backend_map -- --ignored
 
       - name: Retain native 3D GPU comparison evidence
-        if: always()
+        if: always() && matrix.workload == 'workspace'
         uses: actions/upload-artifact@v4
         with:
           name: three-d-gpu-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -415,37 +380,44 @@ jobs:
           if-no-files-found: ignore
 
       - name: Inspect and replay the actual native adventure player
+        if: matrix.workload == 'adventure'
         run: python3 games/adventure/scripts/test-player.py
 
       - name: Exercise native factory construction player
+        if: matrix.workload == 'factory'
         run: |
           cargo test --locked --manifest-path games/factory/Cargo.toml --test render -- --ignored
           cargo run --locked --manifest-path games/factory/Cargo.toml --bin play -- --test-construction
 
       - name: Inspect and replay the actual native arena player
+        if: matrix.workload == 'arena'
         run: python3 games/arena/scripts/test-live-player.py
 
       - name: Exercise native RPG recording playback
+        if: matrix.workload == 'workspace'
         run: |
           python3 scripts/test-rpg-replay.py --gpu
           python3 scripts/test-rpg-assets.py --gpu
 
       - name: Verify bounded acceptance failure evidence
+        if: matrix.workload == 'arena'
         run: python3 scripts/test-acceptance-evidence.py
 
       - name: Exercise native RPG and arena control with failure evidence
+        if: matrix.workload == 'arena'
         run: |
           python3 scripts/test-control-loop.py
           python3 games/arena/scripts/test-control.py
 
       - name: Verify real acceptance failure retention and cleanup
+        if: matrix.workload == 'arena'
         run: python3 scripts/test-acceptance-failure-integration.py
 
       - name: Upload sanitized native acceptance failures
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: acceptance-failures-${{ github.job }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: acceptance-failures-${{ github.job }}-${{ matrix.workload }}-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             target/acceptance-failures/*/context.json
             target/acceptance-failures/*/commands.log
@@ -457,3 +429,57 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
           include-hidden-files: false
+
+      # Immutable keys refresh daily; successful main runs warm PR/queue fallbacks.
+      # A miss never skips a command. Failed workloads never publish a cache.
+      - name: Save workload cache
+        if: success() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.setup.outputs.paths }}
+          key: ${{ steps.setup.outputs.key }}
+
+  native:
+    name: Native checks
+    needs: [native-workloads]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every workload to succeed
+        # Matrix needs.result is success only when all expanded jobs succeeded.
+        # No checkout or upstream output is needed, including after setup failure.
+        shell: bash
+        env:
+          WORKLOAD_RESULT: ${{ needs.native-workloads.result }}
+        run: test "$WORKLOAD_RESULT" = success
+
+  wasm:
+    name: WebAssembly core check
+    needs: [wasm-workloads]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every workload to succeed
+        # Matrix needs.result is success only when all expanded jobs succeeded.
+        # No checkout or upstream output is needed, including after setup failure.
+        shell: bash
+        env:
+          WORKLOAD_RESULT: ${{ needs.wasm-workloads.result }}
+        run: test "$WORKLOAD_RESULT" = success
+
+  macos-bundles:
+    name: macOS development app bundles
+    needs: [macos-bundles-workloads]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every workload to succeed
+        # Matrix needs.result is success only when all expanded jobs succeeded.
+        # No checkout or upstream output is needed, including after setup failure.
+        shell: bash
+        env:
+          WORKLOAD_RESULT: ${{ needs.macos-bundles-workloads.result }}
+        run: test "$WORKLOAD_RESULT" = success

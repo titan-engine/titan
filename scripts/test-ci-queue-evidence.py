@@ -14,24 +14,32 @@ import ci_queue_evidence as evidence
 
 SHA = 'a' * 40
 REPOSITORY = 'titan-engine/titan'
-WORKFLOW = b'''name: CI
-jobs:
-  native:
-    name: Native checks
-    steps:
-      - name: Test native
-        run: cargo test
-  wasm:
-    name: WebAssembly core check
-    steps:
-      - name: Test wasm
-        run: cargo check
-  macos-bundles:
-    name: macOS development app bundles
-    steps:
-      - name: Test macos
-        run: python3 test.py
-'''
+def fixture_workflow():
+    lines = ['name: CI', 'jobs:', '  revision:', '    name: CI revision']
+    for job, platform, label, workloads in (
+        ('native', 'native', 'Native checks', 'workspace, starter, collection-room, adventure, arena, factory'),
+        ('wasm', 'wasm', 'WebAssembly core check', 'workspace, starter, collection-room, adventure, arena, factory'),
+        ('macos-bundles', 'macos', 'macOS development app bundles', 'workspace, bundles, adventure, arena, factory'),
+    ):
+        lines.extend([
+            '  ' + job + '-workloads:', '    name: ' + platform + ' / ${{ matrix.workload }}',
+            '    strategy:', '      fail-fast: false', '      matrix:',
+            '        workload: [' + workloads + ']', '    steps:',
+            '      - name: Test common', '        run: cargo test',
+        ])
+        for workload in workloads.split(', '):
+            lines.extend(['      - name: Test ' + workload,
+                          "        if: matrix.workload == '" + workload + "'",
+                          '        run: cargo check'])
+        lines.extend([
+            '  ' + job + ':', '    name: ' + label, '    needs: [' + job + '-workloads]',
+            '    if: always()', '    steps:', '      - name: Require every workload to succeed',
+            '        run: test "$WORKLOAD_RESULT" = success',
+        ])
+    return ('\n'.join(lines) + '\n').encode()
+
+
+WORKFLOW = fixture_workflow()
 
 
 class FakeAPI:
@@ -139,7 +147,7 @@ class EvidenceTests(unittest.TestCase):
             self.match(api)
 
     def test_required_gates_and_substantive_steps(self):
-        for index in range(4):
+        for index in range(21):
             for change in ('missing', 'duplicate', 'failed', 'skipped-step', 'missing-step', 'wrong-sha'):
                 with self.subTest(index=index, change=change):
                     api = FakeAPI()
@@ -198,14 +206,37 @@ class EvidenceTests(unittest.TestCase):
             WORKFLOW.replace(b'cargo test', b'echo $GITHUB_EVENT_NAME'),
             WORKFLOW.replace(b'cargo test', b'echo ${{ github.ref }}'),
             WORKFLOW.replace(b'  native:', b'  native-aggregate:'),
+            WORKFLOW.replace(b'    if: always()', b'    if: success()'),
+            WORKFLOW.replace(b'      fail-fast: false', b'      fail-fast: true'),
+            WORKFLOW.replace(b'        workload: [', b'        include: ['),
+            WORKFLOW.replace(b'        workload: [', b'        other: [one]\n        workload: ['),
+            WORKFLOW.replace(b"matrix.workload == 'workspace'", b"matrix.workload != 'workspace'"),
+            WORKFLOW.replace(b'        run: cargo test', b'        continue-on-error: true\n        run: cargo test'),
+            b'env:\n  MODE: ${{ github.event_name }}\n' + WORKFLOW,
+            b'defaults:\n  run:\n    shell: ${{ github.ref }}\n' + WORKFLOW,
+            b'env:\n  MODE: ${{ github["event_name"] }}\n' + WORKFLOW,
+            b'env:\n  MODE: $GITHUB_BASE_REF\n' + WORKFLOW,
         ):
             with self.subTest(workflow=workflow):
                 with self.assertRaises(evidence.EvidenceUnavailable):
                     evidence.required_steps(workflow)
 
+    def test_matrix_step_selection_and_inactive_steps(self):
+        contract = evidence.required_steps(WORKFLOW)
+        self.assertEqual(contract['native / workspace'], ['Test common', 'Test workspace'])
+        self.assertEqual(contract['macos / bundles'], ['Test common', 'Test bundles'])
+        self.assertEqual(len(contract), 20)
+        api = FakeAPI()
+        for job in api.jobs:
+            job['steps'].append({'name': 'Inactive workload step', 'status': 'completed',
+                                 'conclusion': 'skipped'})
+        self.assertEqual(self.match(api)['reuse'], 'true')
+
     def test_actual_workflow_has_all_contracts(self):
         workflow = Path(__file__).resolve().parents[1].joinpath(evidence.WORKFLOW_PATH).read_bytes()
-        self.assertEqual(set(evidence.required_steps(workflow)), set(evidence.REQUIRED_JOBS.values()))
+        contract = evidence.required_steps(workflow)
+        self.assertEqual(len(contract), 20)
+        self.assertTrue(set(evidence.REQUIRED_JOBS.values()) <= set(contract))
 
     def test_cli_defaults_to_full_ci_without_credentials(self):
         with tempfile.TemporaryDirectory() as directory:

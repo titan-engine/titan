@@ -64,47 +64,134 @@ def pages(api, path, key, **params):
     raise EvidenceUnavailable('Evidence pagination limit reached')
 
 
-def required_steps(workflow):
-    """Read only the deliberately narrow, block-style gate layout we support.
+# Changing the matrix inventory or aggregate layout requires updating this
+# contract deliberately, alongside its negative tests.
+WORKLOADS = {
+    'native': ('native', ['workspace', 'starter', 'collection-room', 'adventure', 'arena', 'factory']),
+    'wasm': ('wasm', ['workspace', 'starter', 'collection-room', 'adventure', 'arena', 'factory']),
+    'macos-bundles': ('macos', ['workspace', 'bundles', 'adventure', 'arena', 'factory']),
+}
+CONCURRENCY_EVENT_LINES = {
+    '  group: ci-suite-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}',
+    "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+}
 
-    This is not a YAML parser. Changed layouts (including reusable workflows or
-    aggregate gates) must update the evidence contract; unknown layouts fall back.
-    All named run steps must have executed, preventing a skipped heavy workload
-    from being accepted behind a successful job conclusion.
+
+def required_steps(workflow):
+    """Extract the supported block-style matrix contract, without parsing YAML.
+
+    This intentionally recognizes one explicit layout. Unsupported matrices,
+    conditions, aliases or job shapes select full CI rather than infer coverage.
+    Every named run step applicable to a workload must execute successfully.
     """
-    steps = {job: [] for job in REQUIRED_JOBS}
+    lines = workflow.decode('utf-8').splitlines()
+    section = None
+    jobs = {}
     current = None
-    name = None
-    conditional = False
-    for line in workflow.decode('utf-8').splitlines():
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        top = re.match(r'^([a-zA-Z_-]+):', line)
+        if top:
+            section = top[1]
+        event_dependent = re.search(
+            r"github\s*(?:\.\s*|\[\s*['\"])(?:event|ref|head_ref|base_ref)"
+            r'|GITHUB_(?:EVENT|REF|HEAD_REF|BASE_REF)', line)
+        require(not event_dependent or
+                (section == 'concurrency' and line in CONCURRENCY_EVENT_LINES),
+                'Event-dependent required verification is unsupported')
+        require(not re.search(r'\bcontinue-on-error\s*:', line),
+                'Tolerated verification failures are unsupported')
+        if section != 'jobs':
+            continue
         match = re.fullmatch(r'  ([a-zA-Z0-9_-]+):', line)
         if match:
-            current = match[1] if match[1] in steps else None
-            name = None
-        if current is None:
-            continue
-        require(not line.startswith('    if:'), 'Conditional required gate is unsupported')
-        require(not re.search(r'github\.(event|ref)|GITHUB_(EVENT|REF)', line),
-                'Event-dependent required verification is unsupported')
-        match = re.fullmatch(r'      - name: ([^\'"{}]+)', line)
-        if match:
-            name = match[1]
-            conditional = False
-        elif line.startswith('      - '):
-            name = None
-            conditional = False
-        elif line.startswith('        if:'):
-            require(name not in steps[current], 'Conditional verification step is unsupported')
-            conditional = True
-        elif line.startswith('        run:'):
-            require(name is not None, 'Unsupported unnamed verification step')
-            require(not conditional, 'Conditional verification step is unsupported')
-            steps[current].append(name)
-    require(all(steps.values()), 'Unsupported required-gate workflow layout')
-    require(all(len(names) == len(set(names)) for names in steps.values()),
+            current = match[1]
+            require(current not in jobs, 'Duplicate workflow job')
+            jobs[current] = []
+        elif line != 'jobs:':
+            require(current is not None and line.startswith('    '),
+                    'Unsupported workflow job layout')
+            jobs[current].append(line)
+    expected = set(REQUIRED_JOBS) | {job + '-workloads' for job in REQUIRED_JOBS}
+    require(set(jobs) == expected | {'revision'}, 'Unsupported required-gate job inventory')
+    result = {}
+    for job_id in expected:
+        body = jobs[job_id]
+        require(body.count('    steps:') == 1, 'Unsupported verification steps layout')
+        split = body.index('    steps:')
+        header, body = body[:split], body[split + 1:]
+        header_keys = []
+        for line in header:
+            if line.startswith('    ') and not line.startswith('     '):
+                match = re.fullmatch(r'    ([a-z-]+):(?: .*)?', line)
+                require(match is not None, 'Unsupported job property layout')
+                header_keys.append(match[1])
+        require(len(header_keys) == len(set(header_keys)), 'Duplicate job properties')
+        aggregate = job_id in REQUIRED_JOBS
+        if aggregate:
+            require(set(header_keys) <= {'name', 'needs', 'if', 'runs-on', 'timeout-minutes'},
+                    'Unsupported aggregate job properties')
+            require('    name: ' + REQUIRED_JOBS[job_id] in header
+                    and '    needs: [' + job_id + '-workloads]' in header
+                    and '    if: always()' in header,
+                    'Unsupported aggregate gate contract')
+            names = {None: REQUIRED_JOBS[job_id]}
+        else:
+            base = job_id.removesuffix('-workloads')
+            platform, workloads = WORKLOADS[base]
+            require(set(header_keys) <= {'name', 'runs-on', 'timeout-minutes', 'strategy'},
+                    'Unsupported workload job properties')
+            require('    name: ' + platform + ' / ${{ matrix.workload }}' in header,
+                    'Unsupported workload job name')
+            require('    strategy:' in header, 'Missing workload matrix')
+            start = header.index('    strategy:')
+            end = next((i for i in range(start + 1, len(header))
+                        if header[i].startswith('    ') and not header[i].startswith('     ')),
+                       len(header))
+            require(header[start:end] == [
+                '    strategy:', '      fail-fast: false', '      matrix:',
+                '        workload: [' + ', '.join(workloads) + ']'],
+                'Unsupported workload matrix')
+            names = {workload: platform + ' / ' + workload for workload in workloads}
+        for name in names.values():
+            result[name] = []
+        blocks = []
+        for line in body:
+            if line.startswith('      - '):
+                require(re.fullmatch(r'      - name: [^\'"{}]+', line),
+                        'Unsupported verification step name/layout')
+                blocks.append([line])
+            else:
+                require(blocks and line.startswith('        '), 'Unsupported step properties')
+                blocks[-1].append(line)
+        for block in blocks:
+            step_name = block[0].removeprefix('      - name: ')
+            properties = {}
+            for line in block[1:]:
+                if line.startswith('        ') and not line.startswith('         '):
+                    match = re.fullmatch(r'        ([a-z-]+):(?: (.*))?', line)
+                    require(match and match[1] not in properties, 'Unsupported step property layout')
+                    properties[match[1]] = match[2] or ''
+            require(set(properties) <= {'id', 'if', 'run', 'uses', 'env', 'with', 'shell',
+                                         'working-directory', 'timeout-minutes'},
+                    'Unsupported step properties')
+            require(('run' in properties) != ('uses' in properties), 'Unsupported step execution')
+            if 'run' not in properties:
+                continue
+            condition = properties.get('if')
+            selected = names
+            if condition is not None:
+                match = re.fullmatch(r"matrix\.workload == '([a-z-]+)'", condition)
+                require(not aggregate and match and match[1] in names,
+                        'Unsupported conditional verification step')
+                selected = {match[1]: names[match[1]]}
+            for name in selected.values():
+                result[name].append(step_name)
+        require(all(result[name] for name in names.values()), 'Missing workload verification steps')
+    require(all(len(names) == len(set(names)) for names in result.values()),
             'Ambiguous verification step names')
-    return {REQUIRED_JOBS[job]: names for job, names in steps.items()}
-
+    return result
 
 def find_evidence(api, repository, sha, workflow):
     require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository),
