@@ -184,3 +184,79 @@ fn populated_factory_gpu_matches_software_after_pan_and_zoom() {
         }
     });
 }
+
+#[test]
+#[ignore = "requires a native GPU adapter; run explicitly on a graphics host"]
+fn transport_gpu_positions_match_each_simulation_tick() {
+    pollster::block_on(async {
+        let instance = wgpu::Instance::default();
+        let adapter = instance.request_adapter(&Default::default()).await.unwrap();
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let mut app = game::build_transport_fixture("cycle_partial").unwrap();
+        app.update_schedule(titan::Startup);
+        let mut previous = None;
+        let mut initial = None;
+        for tick in 0..=4 {
+            let before = game::status(&app);
+            let reference = game::render_image(app.world()).unwrap();
+            let checksum = game::image_checksum(&reference);
+            assert_ne!(
+                previous,
+                Some(checksum),
+                "each transfer must visibly move the item"
+            );
+            if tick == 0 {
+                initial = Some(checksum);
+            }
+            if tick == 4 {
+                assert_eq!(
+                    Some(checksum),
+                    initial,
+                    "one circuit restores item position"
+                );
+            }
+            previous = Some(checksum);
+            for format in [
+                wgpu::TextureFormat::Rgba8Unorm,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+            ] {
+                let mut renderer = GpuRenderer::new(device.clone(), queue.clone(), format);
+                renderer
+                    .prepare(
+                        app.extracted::<RenderFrame>().unwrap(),
+                        app.world().resource::<ImageAssets>().unwrap(),
+                    )
+                    .unwrap();
+                let actual = pixels(
+                    &device,
+                    &queue,
+                    &renderer,
+                    game::WIDTH as u32,
+                    game::HEIGHT as u32,
+                    format,
+                );
+                let maximum_error = actual
+                    .iter()
+                    .zip(reference.pixels())
+                    .map(|(a, b)| a.abs_diff(*b))
+                    .max()
+                    .unwrap();
+                assert!(
+                    maximum_error <= 1,
+                    "tick {tick} {format:?}: channel error {maximum_error}"
+                );
+                eprintln!(
+                    "transport GPU tick {tick} {format:?}: checksum {checksum:016x}, maximum channel error {maximum_error}"
+                );
+            }
+            assert_eq!(game::status(&app), before, "rendering is read-only");
+            game::player_command(&mut app, r#"{"op":"advance","ticks":1}"#).unwrap();
+        }
+    });
+}

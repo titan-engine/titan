@@ -1,4 +1,5 @@
-//! Factory construction state. No transport or production runs in this increment.
+//! Factory construction and deterministic bounded transport. Production is not enabled.
+mod transport;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -11,10 +12,12 @@ use titan::inspection::{InspectionConfig, Inspector};
 use titan::render::{
     Color, Image, ImageAssets, ImageId, RenderFrame, SoftwareRenderer, SpriteDraw,
 };
-use titan::{App, Component, FixedTime, FixedUpdate, Name, ResMut, World};
+use titan::{App, Component, FixedTime, FixedUpdate, Name, World};
 use titan_protocol::{
     CaptureResult, CommandMetadata, ErrorCode, FieldMetadata, ProtocolError, QueryMetadata,
 };
+pub use transport::build_transport_fixture;
+use transport::{Item, Slots};
 
 pub const WIDTH: i32 = 384;
 pub const HEIGHT: i32 = 256;
@@ -54,6 +57,8 @@ struct Structure {
     y: i32,
     kind: Kind,
     facing: Facing,
+    slots: Slots,
+    last_transfer_reason: Option<&'static str>,
 }
 impl Structure {
     fn inputs(&self) -> Vec<Facing> {
@@ -70,7 +75,7 @@ impl Structure {
         (self.kind != Kind::Delivery).then_some(self.facing)
     }
     fn value(&self) -> Value {
-        json!({"x":self.x,"y":self.y,"kind":self.kind,"facing":self.facing,"inputs":self.inputs(),"output":self.output()})
+        json!({"x":self.x,"y":self.y,"kind":self.kind,"facing":self.facing,"inputs":self.inputs(),"output":self.output(),"slots":self.slots,"item_positions":transport::item_positions(self),"last_transfer_reason":self.last_transfer_reason})
     }
 }
 #[derive(Component)]
@@ -97,6 +102,12 @@ struct Selection {
 }
 struct State {
     tick: u64,
+    seeded: u64,
+    extracted: u64,
+    delivered: u64,
+    discarded_ore: u64,
+    discarded_plate: u64,
+    completion_tick: Option<u64>,
     camera: Camera,
     selection: Selection,
     hover: Option<(i32, i32)>,
@@ -105,6 +116,12 @@ impl Default for State {
     fn default() -> Self {
         Self {
             tick: 0,
+            seeded: 0,
+            extracted: 0,
+            delivered: 0,
+            discarded_ore: 0,
+            discarded_plate: 0,
+            completion_tick: None,
             camera: Camera::default(),
             selection: Selection {
                 kind: Kind::Conveyor,
@@ -176,9 +193,7 @@ pub fn build_game() -> App {
     app.world_mut().insert_resource(Recording::default());
     app.world_mut().insert_resource(Epoch::default());
     reset_world(app.world_mut());
-    app.add_systems(FixedUpdate, |mut state: ResMut<State>| {
-        state.tick = state.tick.checked_add(1).expect("factory tick overflow");
-    });
+    app.add_systems(FixedUpdate, transport::tick);
     app.add_extractor(render_frame);
     app.refresh_extracted();
     app
@@ -204,6 +219,8 @@ fn reset_world(world: &mut World) {
             y: 3,
             kind: Kind::Delivery,
             facing: Facing::E,
+            slots: Slots::default(),
+            last_transfer_reason: None,
         },
         Name::new("delivery"),
     ));
@@ -229,9 +246,25 @@ fn at(world: &World, x: i32, y: i32) -> Option<titan::Entity> {
         .map(|(e, _)| e)
 }
 fn inspect_tile(world: &World, x: i32, y: i32) -> Value {
-    json!({"x":x,"y":y,"terrain":if (x,y)==(1,3){"ore_deposit"}else{"ground"},"structure":at(world,x,y).map(|e|world.get::<Structure>(e).unwrap().value())})
+    json!({"x":x,"y":y,"terrain":if (x,y)==(1,3){"ore_deposit"}else{"ground"},"structure":at(world,x,y).map(|e|transport::structure_value(world, world.get::<Structure>(e).unwrap()))})
 }
 fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
+    if app
+        .world()
+        .resource::<State>()
+        .unwrap()
+        .completion_tick
+        .is_some()
+        && matches!(
+            op,
+            Operation::Place { .. }
+                | Operation::Rotate { .. }
+                | Operation::Remove { .. }
+                | Operation::Select { .. }
+        )
+    {
+        return Err("COMPLETE: restart before construction".into());
+    }
     match op {
         Operation::Place { kind, x, y, facing } => {
             tile(x, y)?;
@@ -250,7 +283,14 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
                 );
             }
             app.world_mut().spawn_with((
-                Structure { x, y, kind, facing },
+                Structure {
+                    x,
+                    y,
+                    kind,
+                    facing,
+                    slots: Slots::default(),
+                    last_transfer_reason: None,
+                },
                 Name::new(format!("{kind:?} ({x},{y})")),
             ));
             Ok(inspect_tile(app.world(), x, y))
@@ -263,7 +303,24 @@ fn apply(app: &mut App, op: Operation) -> Result<Value, String> {
                 return Err("FIXED_DELIVERY: delivery cannot be rotated or removed".into());
             }
             if matches!(op, Operation::Remove { .. }) {
+                let slots = app.world().get::<Structure>(entity).unwrap().slots;
+                let ore = slots.items().filter(|item| *item == Item::Ore).count() as u64;
+                let plate = slots.items().filter(|item| *item == Item::Plate).count() as u64;
+                let state = app.world_mut().resource_mut::<State>().unwrap();
+                let discarded_ore = state
+                    .discarded_ore
+                    .checked_add(ore)
+                    .ok_or("COUNTER_OVERFLOW: discarded ore")?;
+                let discarded_plate = state
+                    .discarded_plate
+                    .checked_add(plate)
+                    .ok_or("COUNTER_OVERFLOW: discarded plate")?;
+                state.discarded_ore = discarded_ore;
+                state.discarded_plate = discarded_plate;
                 app.world_mut().despawn(entity);
+                return Ok(
+                    json!({"x":x,"y":y,"structure":null,"discarded_ore":ore,"discarded_plate":plate}),
+                );
             } else {
                 let s = app.world_mut().get_mut::<Structure>(entity).unwrap();
                 s.facing = s.facing.clockwise();
@@ -376,7 +433,7 @@ fn state_value(app: &App) -> Value {
     let state = app.world().resource::<State>().unwrap();
     let mut structures: Vec<_> = app.world().iter::<Structure>().map(|(_, s)| s).collect();
     structures.sort_by_key(|s| (s.y, s.x));
-    json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|s.value()).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"delivered":0,"outcome":"Running","objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Construction foundation: production and transport are not implemented."})
+    json!({"frame":app.world().resource::<FixedTime>().unwrap().tick(),"tick":state.tick,"width":12,"height":8,"selection":state.selection,"camera":state.camera,"hover":state.hover.map(|(x,y)|json!({"x":x,"y":y})),"structures":structures.iter().map(|s|transport::structure_value(app.world(), s)).collect::<Vec<_>>(),"deposit":{"x":1,"y":3},"seeded":state.seeded,"extracted":state.extracted,"delivered":state.delivered,"discarded_ore":state.discarded_ore,"discarded_plate":state.discarded_plate,"completion_tick":state.completion_tick,"conserved":transport::conserved(app.world()),"outcome":if state.completion_tick.is_some(){"Complete"}else{"Running"},"objective":"Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Transport enabled; production is not implemented."})
 }
 pub fn status(app: &App) -> String {
     state_value(app).to_string()
@@ -642,6 +699,19 @@ fn render_frame(world: &World) -> RenderFrame {
                 3.,
                 Color::rgb(255, 233, 141),
             );
+        }
+    }
+    for (_, s) in world.iter::<Structure>() {
+        for position in transport::item_positions(s) {
+            let color = if position["item"] == "ore" {
+                Color::rgb(255, 125, 52)
+            } else {
+                Color::rgb(213, 236, 255)
+            };
+            let x = position["x"].as_f64().unwrap();
+            let y = position["y"].as_f64().unwrap();
+            rect(x - 4., y - 4., 8., 8., Color::rgb(16, 22, 28));
+            rect(x - 3., y - 3., 6., 6., color);
         }
     }
     if let Some((x, y)) = state.hover {

@@ -4,7 +4,20 @@ use titan::{Startup, inspection::InspectionConfig};
 use titan_factory::game::{self, build_game, configured_inspector};
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let arguments: Vec<_> = std::env::args().skip(1).collect();
+    let mut arguments: Vec<_> = std::env::args().skip(1).collect();
+    let fixture = if arguments
+        .first()
+        .is_some_and(|arg| arg == "--transport-fixture")
+    {
+        if arguments.len() != 4 || arguments[2] != "--sequence" {
+            return Err("--transport-fixture NAME requires --sequence FILE".into());
+        }
+        let name = arguments.remove(1);
+        arguments.remove(0);
+        Some(name)
+    } else {
+        None
+    };
     if arguments.first().is_some_and(|arg| arg == "--sequence") {
         if arguments.len() != 2 {
             return Err("--sequence requires one JSON file".into());
@@ -21,12 +34,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if operations.len() > 4096 {
             return Err("sequence exceeds 4096 operations".into());
         }
-        let mut app = build_game();
+        let mut app = match fixture {
+            Some(name) => game::build_transport_fixture(&name)?,
+            None => build_game(),
+        };
         app.update_schedule(Startup);
         let outcomes: Vec<_> = operations.iter().map(|operation| {
             match game::player_command(&mut app, &operation.to_string()) {
-                Ok(result) => serde_json::json!({"operation": operation, "result": serde_json::from_str::<serde_json::Value>(&result).expect("game result JSON")}),
-                Err(error) => serde_json::json!({"operation": operation, "error": error}),
+                Ok(result) => serde_json::json!({"operation": operation, "result": serde_json::from_str::<serde_json::Value>(&result).expect("game result JSON"), "state": serde_json::from_str::<serde_json::Value>(&game::status(&app)).expect("state JSON")}),
+                Err(error) => serde_json::json!({"operation": operation, "error": error, "state": serde_json::from_str::<serde_json::Value>(&game::status(&app)).expect("state JSON")}),
             }
         }).collect();
         println!(
@@ -110,7 +126,7 @@ fn run_native_mode() -> Result<bool, Box<dyn std::error::Error>> {
             }
             "--help" | "-h" => {
                 println!(
-                    "titan-factory [--sequence FILE] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, renders the initial scene and writes target/titan/capture.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
+                    "titan-factory [--transport-fixture NAME --sequence FILE | --sequence FILE] [--serve [--project DIR] [--instance ID] [--run-for-ms MS] [--diagnostics on-failure|always|never] [--allow-mutation]]\nWithout --serve, renders the initial scene and writes target/titan/capture.ppm.\nServe mode starts paused at frame 0; use the titan CLI to inspect and drive it.\nCtrl-C or SIGTERM stops the server and removes its discovery registration."
                 );
                 return Ok(true);
             }

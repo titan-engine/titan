@@ -1,10 +1,12 @@
-# Titan factory construction
+# Titan factory
 
 A standalone 12×8 factory construction game using public Titan crates. Native,
 headless and WASM players share `src/game.rs`. This implements the construction
-foundation of [#89](https://github.com/titan-engine/titan/issues/89) and the
-[approved factory rules](../../docs/factory-slice.md). Transport and production
-are not implemented here: advancing time creates no items or deliveries.
+foundation of [#89](https://github.com/titan-engine/titan/issues/89) and deterministic
+transport in [#90](https://github.com/titan-engine/titan/issues/90), following the
+[approved factory rules](../../docs/factory-slice.md). Production is not implemented:
+normal runs start empty and advancing time creates no items. Explicitly seeded
+test fixtures exercise transport without adding an item-injection player action.
 
 ## Build and play
 
@@ -87,6 +89,40 @@ The `sequence` protocol command accepts at most 256 operations per request;
 Each operation is limited to 4096 JSON bytes. `query tile --arguments '{"x":2,"y":3}'`
 returns terrain and structure ports without mutation.
 
+## Conveyor transport
+
+Each conveyor holds at most one ore or plate and sends toward its facing neighbor.
+It accepts inputs on its other three faces, allowing corners and competing feeds.
+Head-on outputs do not connect. Processor inputs accept ore from their rear;
+delivery accepts plates from the west. Extractors have no input. Machine slots
+participate in transport, but extraction and processing do not run in this increment.
+
+Each 60 Hz tick reads a snapshot of slots and ports. Only snapshot-empty receiving
+slots have room, even when their old item leaves that tick. Eligible transfers
+reserve destinations in source tile `(y,x)` order and commit together. A received
+item moves no more than one tile per tick. A packed cycle stays jammed; a partly
+occupied cycle can circulate. Fixed priority can starve a competing source.
+
+Inspection distinguishes empty outputs from missing neighbors, incompatible input
+faces, rejected item types, full destinations and contention, in that precedence
+order. Item markers occupy their reported tile/slot positions; rendering never
+advances transport. Rotating preserves contents and changes the next connection.
+Removing an occupied structure explicitly counts its contents as discarded.
+Restart starts a fresh empty accounting epoch. Tests check seeded items equal
+remaining items plus deliveries and explicit discards at every boundary.
+
+Transport acceptance uses named, bounded fixture constructors, separate from
+normal construction commands. Run the native player with
+`cargo run --bin play -- --test-transport`; it holds each loop position for 30
+presented frames. After building and serving WASM, open
+[transport acceptance](http://localhost:8080/play/test-transport.html) to compare
+four GPU canvases at exact ticks with their inspected positions. The actual-WASM
+harness also compares complete native and WASM states after each fixture operation.
+For headless fixture inspection, use
+`cargo run --bin titan-factory -- --transport-fixture cycle_partial --sequence FILE`,
+where FILE contains the same ordered operation array shown above. Restart in a
+fixture returns to the normal empty challenge.
+
 ## Native control
 
 From the repository root, build `cargo build -p titan-cli`. From this directory:
@@ -117,11 +153,15 @@ use sanitized CLI output as evidence. SIGTERM/Ctrl-C removes registration.
 ## Source and checks
 
 - `src/game.rs`: authoritative validation, ECS construction, camera mapping,
-  fixed ticks, rendering, inspection and ordered operation records.
+  rendering, inspection and ordered operation records.
+- `src/game/transport.rs`: fixed-tick snapshot transport, slots, item accounting,
+  stall reasons and named test fixtures.
 - `src/main.rs`: headless sequence execution and native control server.
 - `src/bin/play.rs`: native window/pointer/keyboard adapter.
 - `src/browser.rs`, `web/play/`: actual-WASM player and browser controls.
 - `tests/construction.json`: shared native/WASM construction fixture.
+- `scripts/transport-acceptance.mjs`: independent transport traces and full
+  native/actual-WASM parity, called by `scripts/test-browser.mjs`.
 
 Run from the repository root:
 

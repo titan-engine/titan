@@ -45,14 +45,17 @@ mod native {
         error: Option<String>,
         cursor: Option<(f64, f64)>,
         feedback: String,
+        test_transport: bool,
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut limit = None;
         let mut test_construction = false;
+        let mut test_transport = false;
         while let Some(arg) = args.next() {
             match arg.as_str() {
+                "--test-transport" => test_transport = true,
                 "--test-construction" => {
                     test_construction = true;
                 }
@@ -68,18 +71,28 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--frames N] [--test-construction] \nWASD/arrows pan; wheel zoom; 1/2/3 conveyor/extractor/processor; Q facing; E rotate; X remove; click place; right click inspect; R restart; Escape exits.\n--frames exits after N presented GPU frames."
+                        "play [--frames N] [--test-construction | --test-transport] \nWASD/arrows pan; wheel zoom; 1/2/3 conveyor/extractor/processor; Q facing; E rotate; X remove; click place; right click inspect; R restart; Escape exits.\n--frames exits after N presented GPU frames."
                     );
                     return Ok(());
                 }
                 _ => return Err(format!("unknown argument: {arg}").into()),
             }
         }
-        let mut app = game::build_game();
+        if test_transport && test_construction {
+            return Err("choose one acceptance fixture".into());
+        }
+        let mut app = if test_transport {
+            game::build_transport_fixture("cycle_partial")?
+        } else {
+            game::build_game()
+        };
         app.update_schedule(Startup);
         if test_construction {
             construction_acceptance(&mut app)?;
             limit = limit.or(Some(2));
+        }
+        if test_transport {
+            limit = limit.or(Some(240));
         }
         let input = game::InteractiveInput::for_app(&app);
         let mut player = Player {
@@ -95,6 +108,7 @@ mod native {
             error: None,
             cursor: None,
             feedback: String::new(),
+            test_transport,
         };
         EventLoop::new()?.run_app(&mut player)?;
         if let Some(error) = player.error {
@@ -252,6 +266,11 @@ mod native {
                         .min(Duration::from_millis(250));
                     self.previous = now;
                     let tick = Duration::from_nanos(16_666_667);
+                    if self.test_transport {
+                        // Deliberately hold each state for 30 presented frames so a
+                        // reviewer can inspect movement around all four corners.
+                        self.accumulated = Duration::ZERO;
+                    }
                     while self.accumulated >= tick {
                         self.input.tick(&mut self.app);
                         self.accumulated -= tick;
@@ -278,7 +297,21 @@ mod native {
                             .ok_or("game image assets unavailable")?;
                         self.renderer.as_mut().unwrap().render(frame, assets)
                     })() {
-                        Ok(true) => self.rendered += 1,
+                        Ok(true) => {
+                            if self.test_transport && self.rendered.is_multiple_of(30) {
+                                println!(
+                                    "{}",
+                                    serde_json::json!({"native_transport_presented": true, "state": serde_json::from_str::<serde_json::Value>(&game::status(&self.app)).unwrap()})
+                                );
+                            }
+                            self.rendered += 1;
+                            if self.test_transport
+                                && self.rendered.is_multiple_of(30)
+                                && self.limit.is_none_or(|limit| self.rendered < limit)
+                            {
+                                self.input.tick(&mut self.app);
+                            }
+                        }
                         Ok(false) => {}
                         Err(error) => {
                             self.error = Some(error);
@@ -328,6 +361,19 @@ mod native {
         };
         if let Some(structure) = value.get("structure") {
             if structure.is_null() {
+                if let (Some(ore), Some(plate)) = (
+                    value
+                        .get("discarded_ore")
+                        .and_then(serde_json::Value::as_u64),
+                    value
+                        .get("discarded_plate")
+                        .and_then(serde_json::Value::as_u64),
+                ) {
+                    return format!(
+                        "Removed tile ({},{}); discarded {ore} ore, {plate} plate",
+                        value["x"], value["y"]
+                    );
+                }
                 return format!("Tile ({},{}) empty", value["x"], value["y"]);
             }
             return format!(
@@ -445,6 +491,40 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn removal_feedback_reports_item_discards_and_distinguishes_empty_inspection() {
+            let mut app = game::build_transport_fixture("disconnected").unwrap();
+            for (x, y, expected) in [
+                (0, 0, "Removed tile (0,0); discarded 1 ore, 0 plate"),
+                (6, 5, "Removed tile (6,5); discarded 0 ore, 1 plate"),
+            ] {
+                let result = game::player_command(
+                    &mut app,
+                    &serde_json::json!({"op":"remove","x":x,"y":y}).to_string(),
+                );
+                assert_eq!(feedback(result), expected);
+            }
+            game::player_command(
+                &mut app,
+                r#"{"op":"place","kind":"conveyor","x":0,"y":0,"facing":"E"}"#,
+            )
+            .unwrap();
+            assert_eq!(
+                feedback(game::player_command(
+                    &mut app,
+                    r#"{"op":"remove","x":0,"y":0}"#
+                )),
+                "Removed tile (0,0); discarded 0 ore, 0 plate"
+            );
+            assert_eq!(
+                feedback(game::player_command(
+                    &mut app,
+                    r#"{"op":"inspect","x":0,"y":0}"#
+                )),
+                "Tile (0,0) empty"
+            );
+        }
 
         #[test]
         fn pointer_mapping_handles_resize_and_retina_without_rounding_tiles() {
