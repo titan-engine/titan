@@ -604,8 +604,10 @@ fn plates_require_grounded_centers_at_support_height_and_include_boundaries() {
         (2000, 1000, false, false),
     ] {
         let mut puzzle = puzzle::PuzzleState::default();
-        let mut movement = Movement::default();
-        movement.grounded = grounded;
+        let movement = Movement {
+            grounded,
+            ..Movement::default()
+        };
         puzzle.sample([
             (Position { x, y, z: 2000 }, movement),
             (initial_position(1), Movement::default()),
@@ -663,8 +665,10 @@ fn either_plate_holds_door_and_positive_airborne_obstruction_is_safe() {
         );
     }
     for (x, expected) in [(6800, false), (6801, true), (8200, false), (8199, true)] {
-        let mut airborne = Movement::default();
-        airborne.grounded = false;
+        let airborne = Movement {
+            grounded: false,
+            ..Movement::default()
+        };
         puzzle.sample([
             (
                 Position {
@@ -768,8 +772,10 @@ fn exit_requires_both_full_grounded_footprints_and_completion_freezes_until_rest
         ),
         (inside.0, false),
     ] {
-        let mut m = Movement::default();
-        m.grounded = grounded;
+        let m = Movement {
+            grounded,
+            ..Movement::default()
+        };
         puzzle.sample([inside, (p, m)]);
         assert!(puzzle.exit.jumper);
         assert!(!puzzle.complete);
