@@ -250,9 +250,7 @@ fn textured_quads_match_software_reference_and_resize() {
 }
 
 // Exercise the same renderer-neutral game extraction used by both real players.
-#[allow(dead_code)]
-#[path = "../../../examples/support/procedural_rpg.rs"]
-mod game;
+use titan_rpg as game;
 
 #[test]
 #[ignore = "requires a native GPU adapter; exercised manually or in GPU-enabled CI"]

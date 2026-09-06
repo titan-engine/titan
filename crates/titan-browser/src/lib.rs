@@ -10,8 +10,7 @@ use titan::{
 use titan_protocol::{CaptureResult, ProtocolError};
 use wasm_bindgen::prelude::*;
 
-#[path = "../../../examples/support/procedural_rpg.rs"]
-pub mod game;
+pub use titan_rpg as game;
 
 /// An isolated, paused game instance. Controls require an explicit `true`.
 #[wasm_bindgen]
@@ -53,7 +52,8 @@ impl BrowserRuntime {
     fn from_app(mut app: App, enable_control: bool) -> Self {
         app.update_schedule(Startup);
         let config = InspectionConfig::controlled("procedural-rpg-browser", "procedural-rpg");
-        let inspector = game::inspector_with_capture(config, capture);
+        let mut inspector = game::inspector_with_capture(config, capture);
+        game::register_legacy_component_names(&mut inspector, "titan_browser::game");
         Self {
             session: BrowserSession::new(app, inspector, enable_control),
         }
@@ -235,7 +235,8 @@ fn live_session_from_app(mut app: App) -> game::live::RpgSession {
     app.update_schedule(Startup);
     let mut config = InspectionConfig::controlled("rpg-live-browser", "procedural-rpg");
     config.run_mode = titan_protocol::RunMode::Browser;
-    let inspector = game::inspector_with_capture(config, capture);
+    let mut inspector = game::inspector_with_capture(config, capture);
+    game::register_legacy_component_names(&mut inspector, "titan_browser::game");
     game::live::RpgSession::new(app, inspector, false)
 }
 

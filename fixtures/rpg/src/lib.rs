@@ -1,11 +1,13 @@
-#[path = "rpg_assets.rs"]
+//! Shared RPG demo and regression fixture, independent of native/browser/GPU hosts.
+//! See the package README for ownership and inspection-name compatibility.
+
 pub mod assets;
-#[path = "rpg_journal.rs"]
 pub mod journal;
-#[path = "rpg_live.rs"]
 pub mod live;
-#[path = "rpg_snapshot.rs"]
 pub mod snapshot;
+
+#[cfg(test)]
+mod compatibility_tests;
 
 use std::collections::BTreeMap;
 #[cfg(not(target_arch = "wasm32"))]
@@ -151,6 +153,35 @@ pub fn build_game_with_images(images: RpgImages) -> App {
     app.add_systems(FixedUpdate, live::finish_tick);
     app.add_extractor(render_frame);
     app
+}
+
+/// Retains the inspected component names of a former source-including host.
+///
+/// Call before exposing the inspector. `module` is the old defining module,
+/// such as `procedural_rpg::game` or `titan_browser::game`. Rust type identities
+/// stay owned by this fixture; only the inspector's public component keys change.
+pub fn register_legacy_component_names(inspector: &mut Inspector, module: &str) {
+    inspector
+        .register_component_alias::<Position>(format!("{module}::Position"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<Player>(format!("{module}::Player"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<Shard>(format!("{module}::Shard"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<Shrine>(format!("{module}::Shrine"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<ActiveShrine>(format!("{module}::ActiveShrine"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<QuestHud>(format!("{module}::QuestHud"))
+        .expect("unique RPG component alias");
+    inspector
+        .register_component_alias::<journal::JournalNode>(format!("{module}::journal::JournalNode"))
+        .expect("unique RPG component alias");
 }
 
 // Registration is independent of transport: callers execute requests between ticks.

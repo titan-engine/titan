@@ -60,6 +60,8 @@ For a headless replay and reference capture:
 cargo run --locked --example procedural_rpg
 ```
 
+The shared game implementation lives in the internal [RPG fixture package](fixtures/rpg/README.md).
+
 This writes `target/titan/procedural-rpg.ppm`. The reference run completes after
 11 ticks with three collected shards, an active shrine, and RGBA checksum
 `f7a298f62ad75c1c`.

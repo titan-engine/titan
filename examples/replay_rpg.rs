@@ -1,6 +1,5 @@
 //! Verify a snapshot-backed RPG recording without a window or GPU.
-#[path = "support/procedural_rpg.rs"]
-pub mod game;
+pub use titan_rpg as game;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
