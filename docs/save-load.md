@@ -8,9 +8,12 @@ checks final pixels, so it requires matching art.
 Early save/load and serialization design is an agreed requirement
 ([R1.47](design-requirements.md)); making every inspectable type serializable is
 still undecided ([R2.25](design-requirements.md)). This document establishes the
-boundary for that work. [Arena snapshots](arena-save-load.md) now exercise it with
-a game-owned format and validated load operation. Titan does not yet implement a
-general save-file format, world serializer or engine-wide persistence API.
+boundary for that work. [Arena snapshots](arena-save-load.md) and the
+[RPG v1 snapshot](rpg-replay.md#snapshot-behavior) exercise it with separate,
+game-owned formats and validated load operations. The RPG format is implemented
+in [`fixtures/rpg/src/snapshot.rs`](../fixtures/rpg/src/snapshot.rs). Titan does
+not implement a general save-file format, world serializer or engine-wide
+persistence API.
 
 Games should define the state needed to resume gameplay. Engine inspection
 metadata, render output and a dump of all ECS components are not automatically
@@ -26,10 +29,12 @@ That includes remaining dash ticks, dash cooldown, locked direction and last
 movement direction. The initial random seed alone cannot resume an advanced run.
 The cooldown values are gameplay state even though the HUD displays them.
 
-For the RPG, the corresponding boundary is the generated-world description or
-seed plus changes to that world, player progress, collected items and any other
-state that affects subsequent gameplay. The exact save-data types should be
-chosen when an actual save/resume scenario is implemented in each game.
+The RPG's bounded JSON v1 snapshot stores its format version and game seed;
+player and shrine positions; the names and positions of remaining shards; the
+collected-shard count; and shrine activation. It rejects unsupported identity,
+out-of-map coordinates, inconsistent quest state, empty or overlong shard names,
+more than 256 remaining shards and encoded input over 64 KiB. Its game-owned
+Rust types deliberately do not form a general engine persistence API.
 
 | Persist when needed to resume gameplay | Reconstruct or reset on load |
 | --- | --- |
@@ -50,19 +55,21 @@ asset handles are identities within a particular running world, not a promised
 on-disk identity scheme. This does not require universal textual identifiers for
 every object; games can introduce persistent identifiers only where needed.
 
-## Loading and execution boundaries
+## Shipped loading and execution boundaries
 
-A future loader should decode and validate bounded input before replacing live
-game state. Reconstruct entities, resolve references and rebuild derived assets
-and UI at an exclusive simulation safe point. Validate game invariants, required
-content and supported format/version before installing the result. These are
-requirements for future implementation, not guarantees supplied by the current
-nontransactional game-command API.
+The RPG and arena loaders decode and validate bounded input before replacing live
+game state. They validate the initialized target and game invariants before
+installation, reconstruct game-owned state, and rebuild derived presentation.
+The RPG recreates remaining shard entities, updates player and shrine positions,
+restores shrine activation and quest progress, rebuilds quest text, and resets
+its transient journal. Its loaded world retains startup image assets rather than
+serializing their bytes. These guarantees belong to the documented game formats,
+not to the current nontransactional command API or a general Titan loader.
 
-Clear held keys, buffered taps, pointer gestures, pending injected inputs and
-wall-clock accumulation when a load is installed. A button held before loading
-must not unexpectedly activate in the restored game. Host pause policy should be
-explicit; it is not part of a portable game save.
+The RPG clears scheduled and current input plus movement-repeat state when a load
+is installed; the arena similarly clears stale live input. A button held before
+loading therefore does not unexpectedly activate in the restored game. Host
+pause policy is explicit and is not part of either portable game save.
 
 Loading into the same live session should preserve its protocol request history,
 monotonic host frame and state-revision identity. Restore gameplay-relative time
@@ -76,17 +83,17 @@ in a fresh game and support [interactive playback](arena-replay.md). Historical
 v1 recordings retain their restart origin. Exact rollback snapshots are a
 separate capability and should not dictate the persistent save-file layout.
 
-## First implementation proof and choices still open
+## Implemented proofs and choices still open
 
-The arena now proves the first game-owned mid-run round trip before introducing
-a general serializer. The intended proof is:
-save during a dash or contact cooldown, construct a fresh world from the save,
-then feed identical subsequent fixed-tick inputs to both worlds. Compare semantic
-state and relevant rendered output. Also verify that rebuilt UI reflects restored
-values, malformed or unsupported saves do not disturb the current game, stale
-input is cleared, and inspection remains correlated after an in-session load.
+The arena proves a game-owned mid-run round trip during dash/contact state. The
+RPG proof saves after collecting one shard, finishes the quest, restores that
+snapshot, and repeats the remaining route to the same complete state and exact
+software pixels. Both verify semantic state and derived presentation; malformed
+or unsupported saves leave the live game unchanged. See [arena save/load](arena-save-load.md)
+and [RPG snapshot and replay acceptance](rpg-replay.md#acceptance) for commands
+and format-specific guarantees.
 
-Beyond the arena's initial bounded JSON format, general storage location,
+Beyond the games' bounded JSON formats, general storage location,
 encoding, schema/version policy, asset-content identity and persistence of large
 generated worlds remain to be selected.
 Backward compatibility is not currently required. Reject unsupported formats
