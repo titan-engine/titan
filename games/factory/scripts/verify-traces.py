@@ -98,7 +98,7 @@ def main():
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     metadata = processes.run(
-        ['cargo', 'metadata', '--no-deps', '--format-version', '1',
+        ['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1',
          '--manifest-path', str(GAME / 'Cargo.toml')], cwd=REPO,
         capture_output=True, text=True, check=True)
     binary = Path(json.loads(metadata.stdout)['target_directory']) / 'debug/titan-factory'

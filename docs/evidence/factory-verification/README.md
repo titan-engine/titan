@@ -86,7 +86,7 @@ beside themselves. Keep new outputs in ignored storage.
 The maintained native repair regression can run against HEAD:
 
 ```sh
-CARGO_BUILD_JOBS=4 cargo build --manifest-path games/factory/Cargo.toml --bin titan-factory
+CARGO_BUILD_JOBS=4 cargo build --locked --manifest-path games/factory/Cargo.toml --bin titan-factory
 python3 games/factory/scripts/verify-traces.py --output-dir target/evidence/factory-repair
 ```
 

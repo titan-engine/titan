@@ -291,7 +291,7 @@ and compares seven checkpoints with the browser states recorded at
 with original evidence provenance and host/UI exclusions. From the repository root:
 
 ```sh
-CARGO_BUILD_JOBS=4 cargo build --manifest-path games/factory/Cargo.toml --bin titan-factory
+CARGO_BUILD_JOBS=4 cargo build --locked --manifest-path games/factory/Cargo.toml --bin titan-factory
 python3 games/factory/scripts/verify-traces.py --output-dir target/evidence/factory-repair
 python3 games/factory/scripts/test-verify-traces.py
 ```

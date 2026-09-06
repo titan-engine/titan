@@ -24,7 +24,7 @@ if (values.help) {
 }
 const output = resolve(values.output);
 
-const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--no-deps', '--format-version', '1'], { cwd: repo, encoding: 'utf8', timeout: 60000 }));
+const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], { cwd: repo, encoding: 'utf8', timeout: 60000 }));
 const require = createRequire(import.meta.url);
 const { BrowserRuntime, BrowserLiveRuntime } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 const evidence = [];
