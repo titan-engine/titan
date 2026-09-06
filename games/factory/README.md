@@ -288,3 +288,6 @@ The native harness uses bounded build/runtime processes and retains sanitized
 failure diagnostics under the repository's `target/acceptance-failures`.
 Node executes real compiled WASM for simulation and protocol checks; it does not
 prove browser GPU rendering. Player verification is documented with its [runtime evidence](evidence/README.md). Existing RPG and arena reference images/checksums are unchanged.
+
+Fresh independent finished-slice playtesting, larger-fixture measurements and the
+disposable authoring variation are documented in the [#93 verification report](../../docs/evidence/factory-verification/README.md).

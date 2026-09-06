@@ -1,0 +1,862 @@
+{
+  "revision": "e4800939606889669e8a9b04650cda4bce6df37d",
+  "capture": "native-known-repaired.png",
+  "state": {
+    "camera": {
+      "x": 0.0,
+      "y": 0.0,
+      "zoom": 1.0
+    },
+    "completion_tick": null,
+    "conserved": true,
+    "delivered": 0,
+    "deposit": {
+      "x": 1,
+      "y": 3
+    },
+    "diagnostic": null,
+    "discarded_ore": 0,
+    "discarded_plate": 0,
+    "extracted": 1,
+    "frame": 1336,
+    "height": 8,
+    "hover": null,
+    "inspected": {
+      "structure": {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (5,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 5,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (4,2). Build an upstream output here. Input S: no source at (4,4). Build an upstream output here. Input W: connected from (3,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (4,2). Build an upstream output here.",
+            "face": "N",
+            "x": 4,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (4,4). Build an upstream output here.",
+            "face": "S",
+            "x": 4,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (3,3); inspect that source for supply.",
+            "face": "W",
+            "x": 3,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "transferred",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 5,
+            "y": 3
+          }
+        },
+        "x": 4,
+        "y": 3
+      },
+      "terrain": "ground",
+      "x": 4,
+      "y": 3
+    },
+    "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3).",
+    "outcome": "Running",
+    "preview": null,
+    "production_enabled": true,
+    "seeded": 0,
+    "selection": {
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    "structures": [
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (2,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 2,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "Extracting one ore every 60 eligible ticks.",
+          "label": "Working",
+          "remedy": "Keep the output clear so extraction can continue.",
+          "status": "working"
+        },
+        "facing": "E",
+        "input_connections": [],
+        "inputs": [],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "extractor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "extracting",
+        "output": "E",
+        "progress": 6,
+        "recipe": {
+          "elapsed": 6,
+          "label": "Deposit to 1 ore / 60 eligible ticks",
+          "total": 60
+        },
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 2,
+            "y": 3
+          }
+        },
+        "x": 1,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (3,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 3,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (2,2). Build an upstream output here. Input S: no source at (2,4). Build an upstream output here. Input W: connected from (1,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (2,2). Build an upstream output here.",
+            "face": "N",
+            "x": 2,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (2,4). Build an upstream output here.",
+            "face": "S",
+            "x": 2,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (1,3); inspect that source for supply.",
+            "face": "W",
+            "x": 1,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 3,
+            "y": 3
+          }
+        },
+        "x": 2,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (4,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 4,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (3,2). Build an upstream output here. Input S: no source at (3,4). Build an upstream output here. Input W: connected from (2,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (3,2). Build an upstream output here.",
+            "face": "N",
+            "x": 3,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (3,4). Build an upstream output here.",
+            "face": "S",
+            "x": 3,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (2,3); inspect that source for supply.",
+            "face": "W",
+            "x": 2,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 4,
+            "y": 3
+          }
+        },
+        "x": 3,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (5,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 5,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (4,2). Build an upstream output here. Input S: no source at (4,4). Build an upstream output here. Input W: connected from (3,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (4,2). Build an upstream output here.",
+            "face": "N",
+            "x": 4,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (4,4). Build an upstream output here.",
+            "face": "S",
+            "x": 4,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (3,3); inspect that source for supply.",
+            "face": "W",
+            "x": 3,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "transferred",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 5,
+            "y": 3
+          }
+        },
+        "x": 4,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (6,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 6,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "Converting one ore into one plate in 120 work ticks.",
+          "label": "Working",
+          "remedy": "Follow the work progress and output connection.",
+          "status": "working"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": true,
+            "detail": "Input W: connected from (4,3); inspect that source for supply.",
+            "face": "W",
+            "x": 4,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "input"
+          },
+          {
+            "capacity": 1,
+            "count": 1,
+            "item": "ore",
+            "slot": "in_process"
+          },
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [
+          {
+            "item": "ore",
+            "slot": "in_process",
+            "x": 176.0,
+            "y": 112.0
+          }
+        ],
+        "kind": "processor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "processing",
+        "output": "E",
+        "progress": 0,
+        "recipe": {
+          "elapsed": 0,
+          "label": "1 ore to 1 plate / 120 work ticks",
+          "total": 120
+        },
+        "remaining": 120,
+        "slots": {
+          "in_process": "ore",
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 6,
+            "y": 3
+          }
+        },
+        "x": 5,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (7,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 7,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (6,2). Build an upstream output here. Input S: no source at (6,4). Build an upstream output here. Input W: connected from (5,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (6,2). Build an upstream output here.",
+            "face": "N",
+            "x": 6,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (6,4). Build an upstream output here.",
+            "face": "S",
+            "x": 6,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (5,3); inspect that source for supply.",
+            "face": "W",
+            "x": 5,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 7,
+            "y": 3
+          }
+        },
+        "x": 6,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (8,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 8,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (7,2). Build an upstream output here. Input S: no source at (7,4). Build an upstream output here. Input W: connected from (6,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (7,2). Build an upstream output here.",
+            "face": "N",
+            "x": 7,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (7,4). Build an upstream output here.",
+            "face": "S",
+            "x": 7,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (6,3); inspect that source for supply.",
+            "face": "W",
+            "x": 6,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 8,
+            "y": 3
+          }
+        },
+        "x": 7,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (9,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 9,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (8,2). Build an upstream output here. Input S: no source at (8,4). Build an upstream output here. Input W: connected from (7,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (8,2). Build an upstream output here.",
+            "face": "N",
+            "x": 8,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (8,4). Build an upstream output here.",
+            "face": "S",
+            "x": 8,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (7,3); inspect that source for supply.",
+            "face": "W",
+            "x": 7,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 9,
+            "y": 3
+          }
+        },
+        "x": 8,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "empty",
+          "contenders": [],
+          "detail": "Output connects to (10,3); this source has no outgoing item.",
+          "label": "Connected; waiting for item",
+          "remedy": "Check the upstream supply or machine work progress.",
+          "target": {
+            "x": 10,
+            "y": 3
+          }
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input N: no source at (9,2). Build an upstream output here. Input S: no source at (9,4). Build an upstream output here. Input W: connected from (8,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": false,
+            "detail": "Input N: no source at (9,2). Build an upstream output here.",
+            "face": "N",
+            "x": 9,
+            "y": 2
+          },
+          {
+            "connected": false,
+            "detail": "Input S: no source at (9,4). Build an upstream output here.",
+            "face": "S",
+            "x": 9,
+            "y": 4
+          },
+          {
+            "connected": true,
+            "detail": "Input W: connected from (8,3); inspect that source for supply.",
+            "face": "W",
+            "x": 8,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "N",
+          "S",
+          "W"
+        ],
+        "inventory": [
+          {
+            "capacity": 1,
+            "count": 0,
+            "item": null,
+            "slot": "output"
+          }
+        ],
+        "item_positions": [],
+        "kind": "conveyor",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "transport",
+        "output": "E",
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": {
+            "x": 10,
+            "y": 3
+          }
+        },
+        "x": 9,
+        "y": 3
+      },
+      {
+        "connection": {
+          "code": "no_output",
+          "contenders": [],
+          "detail": "Accepts plates from the west; no output or buffer.",
+          "label": "Delivery input only",
+          "remedy": "Connect a plate route to the west input.",
+          "target": null
+        },
+        "explanation": {
+          "detail": "No incoming item is available.",
+          "label": "Waiting for supply",
+          "remedy": "Input W: connected from (9,3); inspect that source for supply.",
+          "status": "starved"
+        },
+        "facing": "E",
+        "input_connections": [
+          {
+            "connected": true,
+            "detail": "Input W: connected from (9,3); inspect that source for supply.",
+            "face": "W",
+            "x": 9,
+            "y": 3
+          }
+        ],
+        "inputs": [
+          "W"
+        ],
+        "inventory": [],
+        "item_positions": [],
+        "kind": "delivery",
+        "last_transfer_reason": "empty_source",
+        "machine_status": "receiving",
+        "output": null,
+        "progress": 0,
+        "recipe": null,
+        "remaining": 0,
+        "slots": {
+          "in_process": null,
+          "input": null,
+          "output": null
+        },
+        "transport": {
+          "reason": "empty_source",
+          "target": null
+        },
+        "x": 10,
+        "y": 3
+      }
+    ],
+    "tick": 66,
+    "ui": {
+      "legend": "Green: working. Amber: waiting for supply. Red: blocked output. Blue marks: inputs. Yellow arrows: output.",
+      "objective": "Deliver plates: 0/10",
+      "onboarding": "Build an extractor on (1,3). Connect its output to a processor's rear input, then carry plates to the west input of delivery (10,3). Blue marks accept items; yellow arrows send them. Inspect a tile to diagnose it."
+    },
+    "width": 12
+  }
+}
