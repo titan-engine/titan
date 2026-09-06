@@ -54,5 +54,5 @@ system-error name translation. Snapshots and recordings serialize explicit game
 fields, never these Rust identifiers, so their payloads and formats are unchanged.
 
 The exact eleven-tick reference remains `f7a298f62ad75c1c`; reference images and
-the committed README preview are unchanged. See the [quality gates](../../docs/implementation-plan.md)
+the committed README preview are unchanged. See the [quality gates](../../docs/verification.md)
 for native/WASM, replay, asset and opt-in GPU checks.
