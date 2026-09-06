@@ -6,8 +6,11 @@ own game. It imports public Titan crates; it does not import RPG support code.
 
 ## Copy and configure
 
-Install stable Rust and Python 3.9 or newer. Node.js is needed only for the
-browser checks. Native windows/discovery are currently supported on macOS and
+Install rustup and Python 3.12.3; use Node.js 22.23.2 for browser checks.
+The included `rust-toolchain.toml` selects Rust 1.98.1 with rustfmt, Clippy and
+the WASM target even after copying outside Titan. Keep this file in your game;
+rustup installs its toolchain when you first run Cargo. These are the verified
+versions, not claims about minimum supported versions. Native windows/discovery are currently supported on macOS and
 Linux. Browser graphics require WebGPU or WebGL2 with floating-point color
 attachments. Titan is a local path dependency: crates.io publishing is disabled.
 
