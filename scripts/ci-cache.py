@@ -32,6 +32,9 @@ def cache_paths(platform, workload):
             paths.extend(f'{root}/{profile}' for profile in [
                 'release', 'wasm32-unknown-unknown/debug',
                 'wasm32-unknown-unknown/release', 'titan/tools'])
+    if platform == 'native' and workload == 'workspace':
+        # trybuild uses its own target root and an explicit host target triple.
+        paths.extend(['target/tests/trybuild/debug', 'target/tests/trybuild/*/debug'])
     return paths
 
 

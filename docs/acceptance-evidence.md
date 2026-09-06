@@ -116,10 +116,10 @@ rejects metadata/trailing payloads. This is a bounded collector for these known
 acceptance fixtures, not a general-purpose sanitizer for arbitrary application
 secrets or screenshots.
 
-In GitHub Actions, the Native checks and macOS development app bundles jobs run
-these core acceptance checks. On failure, the workflow uploads only the seven
+In GitHub Actions, the native and macOS workload shards run these core
+acceptance checks; the three required check names are aggregate gates. On failure, the workflow uploads only the seven
 explicit paths above. Find the download in the workflow run's Artifacts section:
-`acceptance-failures-<job>-<OS>-<run-id>-<attempt>`. Retention is seven days. A job
+`acceptance-failures-<job>-<workload>-<OS>-<run-id>-<attempt>`. Retention is seven days. A job
 failure before either harness collects evidence has no package to upload.
 
 Run the collector's security/limit regressions and the real controlled-failure

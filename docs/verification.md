@@ -163,6 +163,46 @@ supersession cancels only the same PR; main, manual and merge-group runs remain
 independent. Sanitized failure uploads retain the same file allowlist and
 seven-day lifetime, with shard-specific names. GPU evidence remains unconditional.
 
+### Cache boundaries and refresh
+
+`scripts/ci-cache.py` enumerates output profiles per platform and workload. Each
+cache contains Cargo index/download archives and Git databases, root host outputs
+needed by CLI/fixtures, and only that workload's game or copied-project outputs.
+Native caches use `debug`; native workspace also retains the separate trybuild
+host and target-triple `debug` outputs under `target/tests/trybuild` (excluding
+its generated consumer project). WASM also includes host `release`, target-triple
+`debug` and `release`, and the version-checked `titan/tools` bindgen installation.
+The copied starter retains `target/starter-smoke`; relocated macOS bundle tests
+retain `target/macos-bundle-smoke`. Neither is redirected into the source game's
+build directory. Games keep their independent lockfiles and builds. This repeats
+some shared dependencies across runners in exchange for concurrent execution.
+
+Cache paths exclude runtime captures, discovery registrations, packaged apps,
+Node output and downloaded registry source trees. Cargo re-extracts sources from
+its archives. CI disables incremental compilation and debug symbols in dev/test
+profiles to reduce retained artifact size; debug assertions and acceptance remain
+enabled. Workloads still run every command after an exact cache hit.
+
+Keys include cache schema, OS/architecture, native/WASM/macOS workload, full
+compiler identity, runner image family, build-profile settings, all committed
+Cargo manifest/lockfile hashes and UTC date. A dependency or toolchain change
+starts cold. A new day restores only the same workload/graph prefix, then saves
+one immutable daily generation after success. Later same-day runs restore that
+generation without uploading again. Source changes still rebuild through Cargo;
+a daily generation can therefore rebuild newer sources until the next refresh.
+Do not widen fallback prefixes across toolchains or workloads to hide misses.
+Changing path/profile policy requires a cache-schema bump. Daily generations
+and old graphs can be evicted by GitHub; correctness never depends on retention.
+
+Successful main push runs deliberately warm the default-branch scope for later
+PR and merge-queue runs. PR caches belong to their merge ref and can be restored
+by reruns of that PR, but cannot warm main or unrelated PRs. An exact inherited
+main cache needs no redundant PR upload. Before the workflow first lands, its
+new namespace has no main cache; pre-merge warm measurements prove only PR
+rerun reuse. The same-day immutable policy bounds uploads, not the repository's
+total cache storage. Inspect actual size and eviction behavior during measurement.
+See GitHub's [cache matching and scope documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching).
+
 ### Measuring a change
 
 Use completed attempts only; do not compare an incomplete or superseded run.

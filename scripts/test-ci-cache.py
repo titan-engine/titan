@@ -30,6 +30,13 @@ class CacheTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cache.cache_paths('native', 'typo')
 
+    def test_compiler_fixtures_have_bounded_output_paths(self):
+        paths = cache.cache_paths('native', 'workspace')
+        self.assertIn('target/tests/trybuild/debug', paths)
+        self.assertIn('target/tests/trybuild/*/debug', paths)
+        self.assertNotIn('target/tests/trybuild', paths)
+        self.assertFalse(any('trybuild' in p for p in cache.cache_paths('native', 'arena')))
+
     def test_generation_and_graph_boundaries(self):
         env = dict(RUNNER_OS='Linux', RUNNER_ARCH='X64', CI_PLATFORM='native', CI_WORKLOAD='arena', CI_MANIFESTS='manifest', ImageOS='ubuntu24', CARGO_INCREMENTAL='0', CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
         day = datetime.date(2026, 9, 6)
