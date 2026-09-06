@@ -310,4 +310,4 @@ Node executes real compiled WASM for simulation and protocol checks; it does not
 prove browser GPU rendering. Player verification is documented with its [runtime evidence](evidence/README.md). Existing RPG and arena reference images/checksums are unchanged.
 
 Fresh independent finished-slice playtesting, larger-fixture measurements and the
-disposable authoring variation are documented in the [#93 verification report](../../docs/evidence/factory-verification/README.md).
+disposable authoring variation are documented in the [historical #93 verification report](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/README.md).

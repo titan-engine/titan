@@ -8,10 +8,10 @@ complete. This page preserves the original milestone brief and acceptance
 evidence; use the [verification guide](verification.md) for current checks and the
 [development board](https://github.com/orgs/titan-engine/projects/1) for current
 status. Start with the [arena play instructions](../games/arena/README.md).
-The [starter verification](starter-verification.md),
-[independent build and failed-attempt diagnosis](arena-exercise.md),
-[fresh arena verification](arena-verification.md), and
-[verification summary](milestone-2/verification.json) record the evidence.
+The [starter verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/starter-verification.md),
+[independent build and failed-attempt diagnosis](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-exercise.md),
+[fresh arena verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-verification.md), and
+[verification summary](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/milestone-2/verification.json) record the evidence.
 The reusable macOS bundle step also makes the native window accessible to
 Computer Use. CI now covers copied bundles, starter setup and both games' native/WASM control loops; the
 accepted commit is pushed on main and v0.2.0, with CI passing on the tagged commit.

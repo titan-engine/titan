@@ -6,9 +6,9 @@ Use the board for priority, ownership and dependencies; update this reference wh
 a decision is made. Recording a question does not approve implementation.
 
 Milestone 2's authoring, inspection, diagnosis and standalone setup questions are
-answered by the accepted [arena exercise](arena-exercise.md),
-[starter verification](starter-verification.md) and
-[fresh arena verification](arena-verification.md). Movement, pursuit, collision,
+answered by the accepted [arena exercise](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-exercise.md),
+[starter verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/starter-verification.md) and
+[fresh arena verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-verification.md). Movement, pursuit, collision,
 health and outcome presentation needed no engine changes. Existing request
 history and diagnostics were sufficient to diagnose the failed route. No shared
 collision helper or reflection expansion was justified.
@@ -16,9 +16,9 @@ collision helper or reflection expansion was justified.
 Host setup consolidation is complete, including remote CI. The arena dash,
 input cancellation consolidation and live-player inspection are implemented.
 Difficulty settings remain a future possibility. See the
-[live-player evidence](live-player.md).
+[live-player evidence](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/live-player.md).
 The [verification guide](verification.md) defines quality gates; the
-[host setup audit](host-setup-audit.md) records completed consolidation evidence.
+[host setup audit](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/host-setup-audit.md) records completed consolidation evidence.
 The [first entity-based UI slice](ui.md) now covers both games and pointer-driven
 restart. The [quest journal](journal.md) now exercises column layout, bounded bitmap text
 and scoped focus; broader layout/typography remain future work;
@@ -31,7 +31,7 @@ Remaining questions require evidence from future game iteration:
 - Does full native lifecycle ownership become a repeated customization burden,
   beyond the small surface and input responsibilities now identified?
 - Will larger games make build latency a practical constraint? The [dash
-  measurements](arena-dash.md) put browser packaging/rebuild first among measured
+  measurements](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-dash.md) put browser packaging/rebuild first among measured
   stages (1.227s with cached dependencies), with inspection around 6ms. This small
   workload does not establish clean-build costs or justify engine optimization.
 - Will a second game need different live-host customization? Arena now proves

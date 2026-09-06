@@ -23,7 +23,7 @@ failures; a transport timeout does not cancel an executing system.
 The RPG/starter/arena synchronous inspection adapters use software captures and
 keep the paused browser inspection instance separate from the playable instance.
 Live-player inspection and owned asynchronous GPU capture are distinct contracts:
-see [live-player inspection](live-player.md) and
+see [live-player inspection](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/live-player.md) and
 [asynchronous capture](inspection.md#asynchronous-capture-contract). Consult each
 game README for its actual player, restart, input and capture semantics.
 
@@ -90,12 +90,6 @@ The external-copy checks cover actual compilation and loader resolution;
 macOS checks additionally rename/relocate both games' bundles and run their
 embedded binaries. These checks run in CI.
 
-Before extraction, the root browser script and the two games' browser/bundle
-scripts totaled 292 physical lines. The same five entrypoints plus the shared
-helper and two copied loaders total 209 lines, an 83-line reduction (28%).
-Within each copied game, build setup drops from 129 to 38 lines (71%), counting
-its loader. Counts include comments and blank lines, exclude tests/docs, and
-compare the accepted milestone-2 source against this extraction. No compile or
-iteration speed improvement is claimed. The same Cargo targets and release
-profile are built; full dependency metadata for macOS bundling adds a small
-resolution step in exchange for locating dependency-owned tooling.
+The [historical host consolidation report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/host-setup-audit.md)
+records the original setup-line reductions and their counting boundaries. Those
+counts describe a completed extraction, not current code size or build latency.

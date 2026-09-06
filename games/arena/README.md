@@ -188,8 +188,8 @@ are also checked in focused Rust tests.
 
 Art is generated in `src/game.rs` (pixel sprites, arena grid and tiny bitmap HUD
 font). Hosts share this module; no RPG source or assets are imported. See
-`../../docs/arena-exercise.md` for the independent exercise and diagnosed failure,
-and [dash verification](../../docs/arena-dash.md) for dash acceptance, reviewed
+[historical independent exercise](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-exercise.md) for the independent exercise and diagnosed failure,
+and [dash verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-dash.md) for dash acceptance, reviewed
 images and measured iteration timings.
 
 ## macOS application bundle

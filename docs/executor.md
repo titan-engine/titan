@@ -60,9 +60,6 @@ Swarm checks both policies against a closed-form oracle and historical checksums
 The [mixed-schedule fixture](executor-overhead.md) separates compatible systems,
 uneven costs, conflicts, and command barriers across several thread limits.
 
-Local verification on 2026-09-05 passed workspace tests and strict Clippy,
-formatting, procedural-only core and WASM core checks. Native and actual-WASM
-RPG control, snapshot/replay and two-sprite asset checks preserved canonical
-state/pixels. Browser inspector/shared/play unit tests and measurement-runner
-checks also passed. The required PR and queued integration CI retain coverage
-for both games, the copied starter and macOS app bundles.
+Use the [verification guide](verification.md) for current checks. The
+[historical executor report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/executor.md#verification-evidence)
+records the original integration run.

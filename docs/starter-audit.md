@@ -3,7 +3,7 @@
 The RPG remains the accepted regression game. The starter is a separate Cargo
 package under `starters/minimal`, with a replaceable `src/game.rs`.
 Milestone 2 needed no engine changes. The subsequent
-[host setup audit](host-setup-audit.md) extracts demonstrated host responsibilities
+[host setup audit](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/host-setup-audit.md) extracts demonstrated host responsibilities
 without introducing a generator or game framework.
 
 | Current piece | Shared responsibility | Game-owned responsibility |

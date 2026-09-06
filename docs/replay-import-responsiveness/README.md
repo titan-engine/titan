@@ -67,8 +67,8 @@ Recorded on 2026-09-05 on an otherwise idle Apple M5 Pro with 64 GiB RAM,
 macOS 27.0 (26A5425), arm64. Native used Rust 1.98.1 optimized binaries. Browser
 used the optimized WASM build in Chromium 152 through the Codex in-app browser.
 The evidence revision and exact per-sample values are recorded in
-[native-output.json](native-output.json) and
-[browser-output.json](browser-output.json).
+[native-output.json](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/replay-import-responsiveness/native-output.json) and
+[browser-output.json](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/replay-import-responsiveness/browser-output.json).
 
 Values below are median milliseconds with the observed seven-sample range in
 parentheses. Native file time includes process launch; native control time

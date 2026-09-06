@@ -26,7 +26,7 @@ GitHub prerequisites #88–93 and shared baseline #95 were CLOSED when reviewed 
 finished-game observations themselves are pinned to
 `e4800939606889669e8a9b04650cda4bce6df37d`; merging its evidence did not change
 production source. See the [final independent integration review](https://github.com/titan-engine/titan/pull/114#issuecomment-5558667704)
-and [verification report](evidence/factory-verification/README.md).
+and [verification report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/README.md).
 
 | Preceding work | Reviewed outcome and implication |
 | --- | --- |
@@ -38,13 +38,13 @@ and [verification report](evidence/factory-verification/README.md).
 | [#93](https://github.com/titan-engine/titan/issues/93), [PR #114](https://github.com/titan-engine/titan/pull/114) | Independent finished-slice native/browser construction, diagnosis, edits, completion and reset; unfamiliar variation and bounded larger fixtures. Findings below constrain this recommendation. |
 | [#95](https://github.com/titan-engine/titan/issues/95), [PR #109](https://github.com/titan-engine/titan/pull/109) | [Shared procedure](agent-iteration.md) records revisions, attempts, timing boundaries and cleanup. Its construction-skeleton measurements are historical, not final production measurements. |
 
-The [player exercise](evidence/factory-verification/player/README.md) repaired a
+The [player exercise](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/player/README.md) repaired a
 wrong-facing line in both actual players. Its separate wrong-item exercise first
 failed because installing a processor left ore queued downstream. Explicitly
 clearing the four downstream belts and replacement tile discarded five ore;
 later removing an occupied processor discarded two more. The recovered browser
 run completed at 1926 with 22 extracted, seven discarded and five resident items.
-[Native parity](evidence/factory-verification/player/native-browser-traces.json)
+[Native parity](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/player/native-browser-traces.json)
 checks 3,767 conserved boundaries and seven matching semantic checkpoints. This
 is evidence for clearer cleanup instructions, not automatic item conversion.
 
@@ -56,7 +56,7 @@ The evaluator knew the documentation and acceptance source: this was independent
 engineering playtesting, not blinded human usability or a screen-reader study.
 No silent loss or simulation defect was found in the bounded exercised scenarios.
 
-The [unfamiliar-agent variation](evidence/factory-verification/variation/README.md)
+The [unfamiliar-agent variation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/variation/README.md)
 changed processor work from 120 to 90 ticks in five source lines across simulation,
 metadata and interface. It verified first delivery 159, completion 969, 978
 conserved boundaries, exact replay and captures. Source search exposed duplicated
@@ -67,8 +67,8 @@ variant. Its full receipt-to-result timer is unavailable; the 324.015-second
 partial wall interval excludes the first read and final cleanup and is not a
 speedup benchmark. A failed host-frame freeze assertion was an evaluator error.
 
-[Scaling results](evidence/factory-verification/scaling/results.json) and the
-[measurement boundaries](evidence/factory-verification/scaling/README.md) cover
+[Scaling results](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/scaling/results.json) and the
+[measurement boundaries](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/factory-verification/scaling/README.md) cover
 three repeats per fixture, all within the same 96-cell world:
 
 | Fixture | Structures / connections | Resident items start → end | Seconds for 600 public one-tick calls (range of three) |

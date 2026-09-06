@@ -84,7 +84,7 @@ power. Normal interactive desktop, UI, and media-analysis work remained active;
 load averages moved from 5.30/5.78/5.92 to 6.05/5.91/5.96, so the ranges below
 matter and the results are not an isolated-machine benchmark.
 
-The [raw report](evidence/executor-mixed.json) records clean revision
+The [raw report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/executor-mixed.json) records clean revision
 `d16a700f0801661c20eeedf3ab94294217f3a179`, five fresh child processes per
 count/policy and two fresh worlds per scenario in each child. Every expected-state
 check passed, repeat checksums agreed, and checksums matched across policies.

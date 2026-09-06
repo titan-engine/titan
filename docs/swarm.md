@@ -71,7 +71,7 @@ from these baselines. The opt-in executor comparison below is scoped to issue #6
 
 Measured 2026-09-05T09:56:08.655556+00:00 on macOS-27.0-arm64-arm-64bit with 18 logical CPUs,
 Rust rustc 1.98.1 (48a229cea 2026-09-01), release profile, 120 steps.
-The [raw report](evidence/swarm-baseline.json) records the clean measured
+The [raw report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/swarm-baseline.json) records the clean measured
 implementation revision `f96d98590089a75f6bfbb132a242490404b19f8e`.
 Three fresh processes per size each execute two simulations. The table takes
 the median of six simulation durations and the range of three peak RSS values;
@@ -102,7 +102,7 @@ and refactoring overhead from parallel dispatch cost.
 
 
 Measured 2026-09-05 on the same macOS arm64 machine with 18 logical CPUs and
-rustc 1.98.1, release profile, 120 steps. The [raw comparison](evidence/swarm-executor.json)
+rustc 1.98.1, release profile, 120 steps. The [raw comparison](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/swarm-executor.json)
 records clean revision `c8e93686668ca90af0b8522fc091da825a1fbff3`.
 Three fresh processes per size/policy each execute two simulations; medians use
 all six simulation durations and RSS ranges use three whole-process peaks.
