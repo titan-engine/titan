@@ -28,8 +28,14 @@ Once discussion yields concrete work, create a well-specified issue recording:
 - The intended outcome and problem it addresses.
 - Acceptance criteria and how to verify them.
 - Scope boundaries, including what is excluded.
-- Actual dependencies, or an explicit statement that none are known.
 - The approval state: pending maintainer decision or recorded maintainer agreement.
+
+Triage actual prerequisites using native GitHub blocking relationships, and use
+native parent/sub-issue relationships for decomposition. These relationships are
+authoritative: do not duplicate their lists or titles in issue bodies. Add prerequisite
+rationale in prose only when it explains something beyond the native relationships;
+no body list or "none known" declaration is required. Maintainers handle relationship
+updates for contributors without access.
 
 Link public source discussions or accepted requirements when relevant. A complete
 specification may still be **Proposed** and unapproved; only recorded maintainer
@@ -41,14 +47,15 @@ checklists within their owning issue.
 Ordinary bug reports do not require this completed specification: report observed
 behavior, reproduction details and environment as available. Ask usage or contributor
 questions in Discussions. Reporters need not design a fix or perform maintainer
-triage; maintainers fill in missing criteria, boundaries, dependencies and approval
-before work becomes Ready.
+triage; maintainers fill in missing criteria and boundaries, triage native dependency
+relationships and record approval before work becomes Ready.
 
 For example, explore possible rendering features in a local conversation; discuss
 a wider API proposal in Discussions; document an accepted rendering architecture
 and its rationale in repository docs. Submit a crash report as a bug even without
 a proposed fix. Turn a selected implementation or bounded investigation into an
-issue with the outcome, checks, boundaries, dependencies and approval state above.
+issue with the outcome, checks, boundaries and approval state above, and triage
+its dependencies through native GitHub relationships.
 
 ## Approval and ownership
 

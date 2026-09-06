@@ -31,7 +31,11 @@ An issue's priority does not mean it is approved.
 Keep brainstorming and planning in local conversations or GitHub Discussions;
 do not commit plans, speculative roadmaps or task journals in any tracked format.
 Once discussion yields concrete work, use an issue with an outcome,
-acceptance/verification criteria, boundaries, dependencies and approval state.
+acceptance/verification criteria, boundaries and approval state. Maintainers triage
+prerequisites through native GitHub blocking relationships and use native
+parent/sub-issue relationships for decomposition. Do not duplicate relationship
+lists or titles in issue bodies; add prerequisite rationale only when useful beyond
+those relationships.
 The [planning and issue intake policy](docs/workflow.md#planning-and-issue-intake)
 explains the handoff and what belongs in accepted repository documentation.
 

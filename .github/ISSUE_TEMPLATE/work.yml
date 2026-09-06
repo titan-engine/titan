@@ -29,12 +29,10 @@ body:
     validations:
       required: true
   - type: textarea
-    id: dependencies
+    id: prerequisite-context
     attributes:
-      label: Dependencies
-      description: Identify actual prerequisites, or state that none are known. Maintainers manage GitHub blocking relationships.
-    validations:
-      required: true
+      label: Prerequisite context (optional)
+      description: Native GitHub blocking and parent/sub-issue relationships are authoritative; maintainers handle relationship triage. Do not duplicate their lists or titles here. Add prerequisite rationale only if it explains something beyond those relationships.
   - type: textarea
     id: approval
     attributes:
