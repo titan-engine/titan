@@ -361,6 +361,19 @@ mod native {
         };
         if let Some(structure) = value.get("structure") {
             if structure.is_null() {
+                if let (Some(ore), Some(plate)) = (
+                    value
+                        .get("discarded_ore")
+                        .and_then(serde_json::Value::as_u64),
+                    value
+                        .get("discarded_plate")
+                        .and_then(serde_json::Value::as_u64),
+                ) {
+                    return format!(
+                        "Removed tile ({},{}); discarded {ore} ore, {plate} plate",
+                        value["x"], value["y"]
+                    );
+                }
                 return format!("Tile ({},{}) empty", value["x"], value["y"]);
             }
             return format!(
@@ -478,6 +491,40 @@ mod native {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn removal_feedback_reports_item_discards_and_distinguishes_empty_inspection() {
+            let mut app = game::build_transport_fixture("disconnected").unwrap();
+            for (x, y, expected) in [
+                (0, 0, "Removed tile (0,0); discarded 1 ore, 0 plate"),
+                (6, 5, "Removed tile (6,5); discarded 0 ore, 1 plate"),
+            ] {
+                let result = game::player_command(
+                    &mut app,
+                    &serde_json::json!({"op":"remove","x":x,"y":y}).to_string(),
+                );
+                assert_eq!(feedback(result), expected);
+            }
+            game::player_command(
+                &mut app,
+                r#"{"op":"place","kind":"conveyor","x":0,"y":0,"facing":"E"}"#,
+            )
+            .unwrap();
+            assert_eq!(
+                feedback(game::player_command(
+                    &mut app,
+                    r#"{"op":"remove","x":0,"y":0}"#
+                )),
+                "Removed tile (0,0); discarded 0 ore, 0 plate"
+            );
+            assert_eq!(
+                feedback(game::player_command(
+                    &mut app,
+                    r#"{"op":"inspect","x":0,"y":0}"#
+                )),
+                "Tile (0,0) empty"
+            );
+        }
 
         #[test]
         fn pointer_mapping_handles_resize_and_retina_without_rounding_tiles() {
