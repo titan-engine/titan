@@ -34,8 +34,9 @@ Start with what you want to do. Titan is early in development; the
   foundation and selected puzzle design.
 - [First conveyor factory slice](factory-slice.md) — selected challenge, construction,
   deterministic transport/production rules, and expected verification traces;
-  [construction foundation](../games/factory/README.md) is implemented; transport
-  and production are subsequent increments.
+  [playable factory](../games/factory/README.md) includes construction, transport,
+  production and diagnosis. See the [next-milestone proposal](factory-next-milestone.md)
+  for maintainer selection; further gameplay is not approved.
 - [First sound exercise proposal](audio-exercise.md) — pickup cue, playback lifetime
   and device-free verification; audio is not implemented.
 - [Parallel ECS executor](executor.md), [swarm measurements](swarm.md),
@@ -59,6 +60,8 @@ Start with what you want to do. Titan is early in development; the
 These reports explain how particular changes were checked. Use the guides above
 for current instructions; measurements and environments describe specific runs.
 
+- [Finished factory verification](evidence/factory-verification/README.md) — independent
+  player exercises, unfamiliar-author variation and bounded scaling evidence.
 - [Shared agent iteration procedure](agent-iteration.md) and
   [initial skeleton measurements](evidence/agent-iteration/README.md).
 - [Starter milestone](second-milestone.md), [starter verification](starter-verification.md),
@@ -70,5 +73,3 @@ for current instructions; measurements and environments describe specific runs.
 - [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
 
 - [Inspection failure repair evidence](inspection-repair/README.md).
-
-The [factory construction package](../games/factory/README.md) implements the initial grid-building foundation of the [factory slice](factory-slice.md).
