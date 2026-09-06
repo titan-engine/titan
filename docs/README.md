@@ -35,16 +35,12 @@ own pending work and approval status. Historical observations describe only the 
 - [Design requirements](design-requirements.md) — stable requirement IDs,
   commitments, preferences, and unresolved choices.
 - [Open design questions](open-questions.md) — decisions that need evidence.
-- [Two-character adventure](../games/adventure/README.md) — native/browser control
-  foundation and selected puzzle design; [next-milestone proposal](adventure-next-milestone.md)
-  awaits maintainer selection, with no further gameplay approved.
+- [Two-character adventure](../games/adventure/README.md) and its
+  [selected puzzle rules](../games/adventure/design.md).
 - [First conveyor factory slice](factory-slice.md) — selected challenge, construction,
   deterministic transport/production rules, and expected verification traces;
   [playable factory](../games/factory/README.md) includes construction, transport,
-  production and diagnosis. See the [next-milestone proposal](factory-next-milestone.md)
-  for maintainer selection; further gameplay is not approved.
-- [First sound exercise proposal](audio-exercise.md) — pickup cue, playback lifetime
-  and device-free verification; audio is not implemented.
+  production and diagnosis.
 - [Parallel ECS executor](executor.md), [swarm measurements](swarm.md),
   [sparse component retention](sparse-churn.md), and
   [mixed-schedule overhead measurements](executor-overhead.md).

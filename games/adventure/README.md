@@ -13,8 +13,6 @@ until Continue or Enter starts room 2 with Jumper and fresh puzzle state. Room 2
 adds a heavy block and a higher ledge requiring both abilities. Slice completion
 offers Restart room and Play again; Play again starts room 1. R always restores
 the displayed room. The [first-slice design](design.md) specifies the rules.
-The [next-milestone proposal](../../docs/adventure-next-milestone.md) awaits
-maintainer selection; further gameplay and engine work are not approved.
 
 ## Play locally
 
@@ -244,9 +242,8 @@ captures and verifies interactive replay on the inspected player.
 
 With the browser server running, visit `/play/test.html?backend=webgpu` and
 `?backend=webgl2`. Each must independently report a pass; Node WASM execution
-alone establishes no browser GPU behavior. See [verification evidence](verification.md)
-for the exercised environment and limitations. Build outputs and runtime
-diagnostics are ignored, and no external RPG support module is imported.
+alone establishes no browser GPU behavior. Historical platform observations and
+their limitations are recorded below. Build outputs and runtime diagnostics are ignored, and no external RPG support module is imported.
 
 ## Bounded source variations
 
@@ -255,7 +252,49 @@ in [game/puzzle.rs](src/game/puzzle.rs) define plate bounds; room-specific
 solids are in [game.rs](src/game.rs). Inspect `state.puzzle_geometry` to confirm
 the compiled bounds. Work in a disposable copy for an experiment, rebuild the
 game, adapt ordinary input routes, and verify both completion and replay.
-The [independent plate variation](evidence/playtest-86/variation-notes.md)
-retains an exact patch, route and reproduction command. The
-[iteration procedure](../../docs/agent-iteration.md) defines measurement and
+The historical plate variation below retains an immutable patch, route and
+reproduction command. The [iteration procedure](../../docs/agent-iteration.md) defines measurement and
 diagnostic reporting; this example adds no runtime editing or new mechanics.
+
+## Historical exercise provenance
+
+The [independent #86 evaluation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md)
+measured source `02272893a0d91af2b1ac6b5159644b70ab46108c` on macOS / Apple M5 Pro.
+The linked report preserves independent native Metal and actual WebGPU/WebGL2
+observations, perturbed routes and semantic checkpoint replays. These bounded
+agent checks found no gameplay defect; they do not establish current GUI behavior,
+human discoverability or portable pixel identity. The fixed view and held-switch
+release gesture were observed limitations.
+
+Current reruns use the commands above. The native playtest runner adds excursions,
+waits, recovery and transition probes to existing solution routes, writing ignored
+`games/adventure/target/playtest-86/semantic.json`. Native GPU captures use root
+`target/adventure-gpu-evidence/`; save browser downloads with their capture identities
+under ignored root `target/evidence/adventure/`. Check custom destinations with
+`git check-ignore` before running.
+
+The [unfamiliar plate variation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/variation-notes.md)
+measured the same source with the original patch below, completing an adapted
+ordinary-input route with final-state replay, invalid-recording rejection and
+room-2 preservation. This CPU-only sample supports #97's assessment; full-task
+timing was missed and cache warmth was uncertain. Its historical harness, patch
+and route remain reproducible outside the checkout:
+
+```sh
+scratch=$(mktemp -d)
+evidence_root=$(mktemp -d)
+git archive 3e584a023d346805c23c2bf11162c87dee5042ed games/adventure/evidence/playtest-86 | tar -x -C "$evidence_root"
+evidence="$evidence_root/games/adventure/evidence/playtest-86"
+git archive 02272893a0d91af2b1ac6b5159644b70ab46108c | tar -x -C "$scratch"
+patch -d "$scratch" -p1 < "$evidence/variation.patch"
+CARGO_BUILD_JOBS=4 python3 "$evidence/variation-reproduce.py" "$scratch" "$scratch/results"
+```
+
+The [#124 human playtest provenance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/push-124/human-result.json)
+and [platform verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/verification.md#contact-pushing-correction-124)
+preserve ordinary-keyboard room-2 completion on native Metal / Apple M5 Pro,
+plus separate actual WebGPU/WebGL2 checks. Implementation source was
+`bf9835541d5acfe789f20d8a37cfc28aef6ca743`; the human build used its gameplay code
+before a HUD wording fix and focused tests. This was one maintainer playtest with
+read-only inspection, not a broader usability study. Original recordings and
+reproduction context remain at the linked evidence revision.
