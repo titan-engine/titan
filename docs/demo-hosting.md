@@ -51,6 +51,35 @@ Packaging checks reject symlinked source files or parent directories and verify
 that failed packaging preserves the previous output. The build job is bounded
 to 45 minutes and the deployment job to 10 minutes.
 
+## Build caches
+
+The Browser demos workflow caches Cargo downloads and the host `target/release`
+and `target/wasm32-unknown-unknown/release` directories for the root RPG, arena
+and collection room. These are the directories used by the shared browser build
+helper. Cache identity includes the runner OS/architecture, Rust compiler and
+runner image identity, release/WASM profile, and Cargo manifests, lockfiles,
+configuration and toolchain file. A UTC date suffix allows at most one new immutable snapshot per day and
+branch/dependency set, limiting storage churn while periodically refreshing build
+outputs. Later revisions restore only snapshots with matching dependency inputs.
+Same-day source changes rebuild against the saved snapshot without replacing it. A change
+to those inputs starts a cold compilation cache. This cache is separate from
+engine CI, and GitHub's branch visibility and eviction rules can also cause misses.
+
+Matching `wasm-bindgen` installations under each project's `target/titan/tools`
+have a separate platform/toolchain/lockfile cache. Before reuse, the helper checks
+the executable version against resolved Cargo metadata, installing the exact
+version when needed. Standalone games can reuse the root engine's matching CLI.
+
+Every run still invokes Cargo with `--locked`, regenerates browser and Node
+bindings, stages the allowlisted site from scratch and executes packaging and all
+three compiled-game checks. Cargo checks source changes after restoration; a
+cache hit never skips building or testing. Generated web packages, `target/pages`,
+Node bindings, captures and runtime/private data are outside the cached paths.
+Only the freshly verified site is uploaded, so restoring a cache does not restore
+a previously published package. Cache upload/download costs and eviction mean
+the speedup depends on cache availability and dependency stability; compare the
+build step together with cache restore/save time when measuring it.
+
 ## GitHub Pages administration
 
 A maintainer selects **Settings → Pages → Build and deployment → Source → GitHub
