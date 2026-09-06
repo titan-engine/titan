@@ -17,6 +17,18 @@ assert.deepEqual(ok(readonly,{type:'capabilities'}).operations,['inspect','query
 for(const request of [{type:'step',frames:1},{type:'invoke',name:'place',arguments:{kind:'conveyor',x:2,y:3,facing:'E'}}]) {
   assert.equal(raw(readonly,request).error.code,'mutation_disabled');
 }
+const readonlyBefore = state(readonly);
+const readonlyStatus = ok(readonly,{type:'status'});
+const readonlyRecording = ok(readonly,{type:'query',name:'recording',arguments:{}});
+for (let read=0; read<3; read++) {
+  const ui = ok(readonly,{type:'query',name:'interface',arguments:{}}).value;
+  assert.deepEqual(ui.structures, readonlyBefore.structures);
+  const preview = ok(readonly,{type:'query',name:'preview',arguments:{x:2,y:3,action:'place'}}).value;
+  assert.equal(preview.valid,true);
+  assert.deepEqual(state(readonly),readonlyBefore);
+}
+assert.deepEqual(ok(readonly,{type:'status'}),readonlyStatus);
+assert.deepEqual(ok(readonly,{type:'query',name:'recording',arguments:{}}),readonlyRecording);
 readonly.free();
 const game = new BrowserRuntime(true);
 const initial = state(game);
@@ -50,3 +62,5 @@ const {transportAcceptance}=await import('./transport-acceptance.mjs');
 await transportAcceptance({BrowserRuntime,root,target:metadata.target_directory,raw,ok,state});
 const {productionAcceptance}=await import('./production-acceptance.mjs');
 await productionAcceptance({BrowserRuntime,root,target:metadata.target_directory,raw,state});
+const {interfaceAcceptance}=await import('./interface-acceptance.mjs');
+interfaceAcceptance({BrowserRuntime,ok,state});

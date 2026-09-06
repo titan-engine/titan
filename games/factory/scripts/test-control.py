@@ -67,6 +67,19 @@ def main(failures, log):
             time.sleep(.05)
         initial = state()
         assert len(initial['structures']) == 1
+        # UI and protocol consume one immutable explanation model. Repeated
+        # reads and prospective edits must not record commands or tick the world.
+        before_status = call('status')['response']
+        before_recording = call('query', 'recording')['response']['value']
+        for _ in range(3):
+            interface = call('query', 'interface')['response']['value']
+            assert interface['structures'] == initial['structures']
+            preview = call('query', 'preview', '--arguments', json.dumps(
+                {'x': 2, 'y': 3, 'action': 'place'}))['response']['value']
+            assert preview['valid'] is True, preview
+            assert state() == initial
+        assert call('status')['response'] == before_status
+        assert call('query', 'recording')['response']['value'] == before_recording
         initial_capture = call('capture')['response']
         operations = json.loads((GAME / 'tests/construction.json').read_text())
         invoke('sequence', {'operations': operations})

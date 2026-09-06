@@ -1,0 +1,62 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Factory interface acceptance</title><style>body{background:#10191e;color:#e8f0f1;font:14px system-ui}iframe{width:1350px;height:1250px;border:0}pre{white-space:pre-wrap}</style><h1>Factory interface — actual WASM / GPU / DOM</h1><pre id="result">Running…</pre><iframe src="./?test=1"></iframe><script type="module">
+const frame=document.querySelector('iframe'),result=document.querySelector('#result');
+const assert=(v,m)=>{if(!v)throw Error(m);};const delay=ms=>new Promise(r=>setTimeout(r,ms));
+try{
+await new Promise(r=>frame.addEventListener('load',r,{once:true}));
+const win=frame.contentWindow,doc=win.document;doc.querySelector('#start').click();
+for(let i=0;i<300&&!win.titanPlayerTest?.status();i++)await delay(100);
+const api=win.titanPlayerTest;assert(api?.status(),'player started');api.step(0);doc.querySelector('#restart').click();
+const canvas=doc.querySelector('canvas');const click=(x,y,button=0)=>{const r=canvas.getBoundingClientRect();canvas.dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true,button,clientX:r.left+x/384*r.width,clientY:r.top+y/256*r.height}));};
+const hover=(x,y)=>{const r=canvas.getBoundingClientRect();canvas.dispatchEvent(new win.PointerEvent('pointermove',{clientX:r.left+x/384*r.width,clientY:r.top+y/256*r.height}));};
+const key=(k,repeat=false)=>canvas.dispatchEvent(new win.KeyboardEvent('keydown',{key:k,code:k==='ArrowRight'?'ArrowRight':`Key${k.toUpperCase()}`,bubbles:true,repeat}));
+const checks=[];
+doc.querySelector('[data-kind="extractor"]').click();assert(api.status().structures.length===1,'palette cannot build in world');hover(48,112);assert(api.status().preview.valid,'deposit preview valid');assert(doc.querySelector('#preview').textContent.includes(api.status().preview.label),'preview readable');click(48,112);click(48,112,2);
+assert(doc.querySelector('#details').textContent.includes('extractor'),'pinned details');
+const tick=api.status().tick;doc.querySelector('#step').click();assert(api.status().tick===tick+1,'exact one tick');doc.querySelector('#step-second').click();assert(api.status().tick===tick+61,'exact sixty ticks');
+assert(doc.querySelector('#details').textContent.includes('ore'),'live inventory');
+for(let i=0;i<5;i++){api.status();api.pointer(48,112,'hover');api.resize();}assert(api.status().tick===tick+61,'read/render/preview do not advance');
+doc.querySelector('[data-mode="remove"]').click();hover(48,112);assert(api.status().preview.discarded_ore===1,'removal preview exact');click(48,112);assert(doc.querySelector('#result').textContent.includes('1 ore'),'removal feedback');
+key('q',true);assert(api.status().selection.facing==='E','repeat rotation ignored');
+key('ArrowRight');const camera=api.status().camera;assert(camera.x!==0,'paused keyboard pan');assert(api.status().tick===tick+61,'pan does not advance');
+// A physical hold emits repeated keydowns after host state resets. They must
+// neither move the paused camera nor resurrect running shared input.
+const release=()=>canvas.dispatchEvent(new win.KeyboardEvent('keyup',{key:'ArrowRight',code:'ArrowRight',bubbles:true}));
+doc.querySelector('#restart').click();const resetCamera=JSON.stringify(api.status().camera);
+key('ArrowRight',true);assert(JSON.stringify(api.status().camera)===resetCamera,'held repeat after restart stays cleared');
+release();key('ArrowRight');assert(JSON.stringify(api.status().camera)!==resetCamera,'fresh press after release pans');release();
+doc.querySelector('#pause').click();key('ArrowRight');doc.querySelector('#pause').click();
+const pausedCamera=JSON.stringify(api.status().camera);key('ArrowRight',true);
+assert(JSON.stringify(api.status().camera)===pausedCamera,'held repeat after pause stays cleared');
+doc.querySelector('#pause').click();key('ArrowRight',true);await delay(120);
+assert(JSON.stringify(api.status().camera)===pausedCamera,'held repeat after resume cannot resurrect running input');
+release();key('ArrowRight');await delay(120);assert(JSON.stringify(api.status().camera)!==pausedCamera,'fresh running press pans');release();
+doc.querySelector('#pause').click();
+checks.push('movement repeats after restart/pause/resume stay cleared','fresh movement press recovers');
+checks.push('palette isolation','preview validity','pinned inventory','exact steps','read-only redraw','explicit removal','repeat suppression','paused keyboard pan');
+const diagnoses=[];
+for(const [fixture,x,y] of [['disconnected',6,5],['ports',2,0],['ports',5,0],['cycle_full',2,2],['contention',2,3]]){
+ await api.fixture(fixture);api.pointer(x*32+16,y*32+16,'inspect');const s=api.status(),tile=s.structures.find(t=>t.x===x&&t.y===y),text=doc.querySelector('#details').textContent;
+ assert(tile.connection?.detail&&text.includes(tile.connection.detail),`${fixture}: authoritative route detail visible`);
+ assert(tile.connection.remedy&&text.includes(tile.connection.remedy),`${fixture}: actionable repair visible`);
+ diagnoses.push({fixture,tile:[x,y],connection:tile.connection});
+ if(fixture==='disconnected'){api.command({op:'place',kind:'conveyor',x:7,y:5,facing:'E'});api.step(1);assert(api.status().structures.find(t=>t.x===7&&t.y===5).slots.output==='plate','repair disconnected');}
+ if(fixture==='ports'&&x===2){api.command({op:'rotate',x:3,y:0});api.step(1);assert(api.status().structures.find(t=>t.x===3&&t.y===0).slots.output==='ore','repair facing');}
+ if(fixture==='ports'&&x===5){api.command({op:'remove',x:6,y:0});api.command({op:'place',kind:'conveyor',x:6,y:0,facing:'E'});api.step(1);assert(api.status().structures.find(t=>t.x===6&&t.y===0).slots.output==='plate','repair type');}
+ if(fixture==='cycle_full'){api.command({op:'remove',x:3,y:2});api.command({op:'place',kind:'conveyor',x:3,y:2,facing:'S'});api.step(1);assert(api.status().structures.find(t=>t.x===2&&t.y===2).slots.output===null,'repair full cycle');}
+ if(fixture==='contention'){api.command({op:'rotate',x:3,y:2});api.step(1);assert(api.status().structures.find(t=>t.x===3&&t.y===3).slots.output==='plate','repair contention');}
+}
+checks.push('disconnected/facing/type/full/contention visible causes and repairs');
+// Focusing a partially visible canvas must not scroll it between the physical
+// pointer event and coordinate conversion (the normal page can also be tall).
+doc.querySelector('#restart').click();doc.body.style.paddingTop='600px';canvas.style.height='1400px';win.scrollTo(0,500);
+doc.querySelector('[data-kind="extractor"]').click();doc.querySelector('[data-kind="extractor"]').focus({preventScroll:true});
+const scrollBefore=win.scrollY;click(48,112);
+assert(win.scrollY===scrollBefore,'canvas focus preserves page scroll');
+assert(api.status().structures.some(t=>t.kind==='extractor'&&t.x===1&&t.y===3),'scrolled focused pointer places at actual deposit');
+doc.body.style.paddingTop='';canvas.style.height='';win.scrollTo(0,0);checks.push('scrolled canvas focus preserves pointer mapping');
+
+doc.querySelector('#restart').click();const initial=api.status();const route=[{op:'place',kind:'extractor',x:1,y:3,facing:'E'},...Array.from({length:8},(_,i)=>({op:'place',kind:i===3?'processor':'conveyor',x:i+2,y:3,facing:'E'}))];route.forEach(api.command);api.step(600);api.step(600);api.step(69);assert(api.status().outcome==='Complete','complete route');const end=api.status();assert(doc.querySelector('#objective').textContent.includes('10 / 10'),'visible complete objective');assert(doc.querySelector('#step').disabled,'complete disables stepping');key('ArrowRight');doc.querySelector('#restart').click();key('ArrowRight',true);assert(JSON.stringify(api.status().camera)===JSON.stringify(initial.camera),'completed hold repeat cannot leak after restart');api.step(1);assert(JSON.stringify(api.status().camera)===JSON.stringify(initial.camera),'restart cancels completed input');
+checks.push('objective completion','complete controls','restart resets input');
+result.textContent=JSON.stringify({ok:true,checks,diagnoses,completed:end,state:api.status()},null,2);document.title='PASS — Factory interface';
+}catch(error){result.textContent=error.stack??String(error);document.title='FAIL — Factory interface';}
+</script></html>

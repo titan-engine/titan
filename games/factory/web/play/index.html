@@ -1,22 +1,23 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Titan · Conveyor Factory</title>
-<style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#101519;color:#e6edf0}*{box-sizing:border-box}body{max-width:1040px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;gap:24px;align-items:center}h1{margin:8px 0;font-size:clamp(24px,4vw,36px)}.eyebrow{letter-spacing:.16em;font-size:11px;color:#9cdac2}p{color:#aebec2;line-height:1.5}a{color:#9cdac2}button{font:inherit;border:1px solid #51676c;background:#243c43;color:#edf8f5;border-radius:6px;padding:10px 18px;cursor:pointer}button:hover{background:#36545b}button:focus-visible,a:focus-visible{outline:3px solid #8de4b3;outline-offset:3px}button:disabled{opacity:.45;cursor:default}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:24px 0 16px}.status{margin-left:auto;font-variant-numeric:tabular-nums;color:#bae5c8}.scene{position:relative;background:#0b1011;border:1px solid #354c4f;border-radius:10px;overflow:hidden}canvas{display:block;width:100%;aspect-ratio:3/2;image-rendering:pixelated;outline:none}canvas:focus-visible{outline:3px solid #8de4b3;outline-offset:-4px}.hint{padding:12px 16px;margin:0;border-top:1px solid #354c4f}.directions{display:flex;gap:8px;justify-content:center;margin:20px 0;touch-action:none}.error{background:#431f23;color:#ffd3d3;padding:16px;border-radius:8px;white-space:pre-wrap}.error[hidden]{display:none}footer{font-size:13px;color:#8fa7ac;line-height:1.6}#result{color:#ade7c3;min-height:1.6em}
-</style>
-</head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Titan · Conveyor Factory</title><link rel="stylesheet" href="play.css"></head>
 <body>
-<header><div><div class="eyebrow">TITAN / FACTORY</div><h1>Build a conveyor factory.</h1></div><a href="../inspector/">Open inspector</a></header>
-<p>Extract ore at (1,3), process ore into plates, and deliver 10 plates to (10,3). Build a connected route to complete the challenge; restart to try again.</p>
-<div class="toolbar"><button id="start">Play</button><button id="pause" disabled>Pause</button><button id="restart" disabled>Restart</button><span class="status" id="status" role="status">Ready</span></div>
-<div class="toolbar"><button data-kind="conveyor" disabled>1 Conveyor</button><button data-kind="extractor" disabled>2 Extractor</button><button data-kind="processor" disabled>3 Processor</button><button id="facing" disabled>Q Facing E</button><button data-mode="rotate" disabled>Rotate tile</button><button data-mode="remove" disabled>Remove tile</button><button data-mode="inspect" disabled>Inspect tile</button><button id="zoom-in" disabled>Zoom +</button><button id="zoom-out" disabled>Zoom −</button></div>
-<div id="error" class="error" role="alert" hidden></div>
-<div class="scene"><canvas id="game" width="1152" height="768" tabindex="0" aria-label="Factory grid. Click to place, right click to inspect. WASD pan."></canvas><p class="hint">Click to place · right click to inspect · 1/2/3 tools · Q facing · E rotate hovered · X remove hovered · WASD/arrows pan · wheel zoom · R restart.</p></div>
-<div class="directions" aria-label="Camera controls"><button data-action="left" aria-label="Pan left" disabled>←</button><button data-action="up" aria-label="Pan up" disabled>↑</button><button data-action="down" aria-label="Pan down" disabled>↓</button><button data-action="right" aria-label="Pan right" disabled>→</button></div>
-<p id="result" role="status"></p>
-<footer>60 fixed ticks per second · GPU sprite rendering · Same game as the headless and browser inspection tests.</footer>
-<script type="module" src="play.js"></script>
-</body>
-</html>
+<header><div><div class="eyebrow">TITAN / FACTORY</div><h1>Ore in. Plates out.</h1></div><a href="../inspector/">Separate inspector</a></header>
+<p class="intro">Build an extractor on the gold deposit (1,3). Connect its output to the rear of a processor, then carry plates to the delivery station (10,3). Deliver 10 plates to finish.</p>
+<div class="toolbar"><button id="start">Play</button><button id="pause" disabled>Pause</button><button id="step" disabled>Step 1 tick</button><button id="step-second" disabled>Step 60 ticks</button><button id="restart" disabled>Restart</button><span id="status" role="status">Ready to build</span></div>
+<div class="objective"><strong id="objective">0 / 10 plates delivered</strong><progress id="objective-progress" max="10" value="0"></progress><span id="accounting">Discarded: 0 ore · 0 plates</span></div>
+<div id="error" role="alert" hidden></div>
+<main>
+<section class="workspace">
+<div class="palette" aria-label="Build palette"><button data-kind="conveyor" disabled><b>1 Conveyor</b><small>1 item · accepts sides and rear</small></button><button data-kind="extractor" disabled><b>2 Extractor</b><small>Deposit only · 1 ore / 60 ticks</small></button><button data-kind="processor" disabled><b>3 Processor</b><small>1 ore → 1 plate / 120 ticks</small></button></div>
+<div class="toolbar tools"><button id="facing" disabled>Q Facing E →</button><button data-mode="inspect" disabled>Inspect</button><button data-mode="rotate" disabled>Rotate</button><button data-mode="remove" disabled>Remove & discard</button></div>
+<div class="scene"><canvas id="game" width="1152" height="768" tabindex="0" aria-label="Factory grid. Click uses selected tool. Right click inspects. Arrow keys pan."></canvas></div>
+<div class="camera"><span>Pan</span><button data-action="left" aria-label="Pan left" disabled>←</button><button data-action="up" aria-label="Pan up" disabled>↑</button><button data-action="down" aria-label="Pan down" disabled>↓</button><button data-action="right" aria-label="Pan right" disabled>→</button><button id="zoom-out" disabled>Zoom −</button><button id="zoom-in" disabled>Zoom +</button></div>
+<p class="hint">Click uses the selected tool · right click inspects · Q changes facing · E rotates hovered tile · X removes hovered tile · WASD / arrows pan · wheel zooms · Space pauses · . steps · R restarts</p>
+<p id="result" role="status">Construction works while paused. Hover before clicking to check placement or discarded contents.</p>
+</section>
+<aside>
+<section class="card"><h2>Tool preview</h2><div id="preview">Choose a structure, then hover over the grid. Arrows show output direction.</div></section>
+<section class="card"><h2>Selected tile</h2><div id="details">Right click any machine or conveyor to inspect its contents and connection. Selection stays visible as production runs.</div></section>
+<section class="card guide"><h2>Build, inspect, repair</h2><ol><li>Place an east-facing extractor on (1,3).</li><li>Run conveyors toward a processor. Its input is opposite its output arrow.</li><li>Run plate conveyors into delivery’s west side.</li><li>Inspect a stalled tile. Follow its connection and repair the displayed cause.</li></ol><p>Ore is gold; plates are pale blue. Each slot holds one item. Transfers use space available at the start of a tick; full belts cannot shift together. Competing feeds use top-to-bottom, then left-to-right priority.</p><p>Removing a structure discards its contents; the preview shows the exact counts. Rotation preserves items. Restart clears the whole run.</p></section>
+</aside>
+</main><script type="module" src="play.js"></script></body></html>

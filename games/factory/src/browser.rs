@@ -156,6 +156,7 @@ mod player {
         /// Cancel held actions and buffered taps on focus loss or pause.
         pub fn clear_input(&mut self) {
             self.input = game::InteractiveInput::for_app(&self.app);
+            self.accumulated_ms = 0.0;
         }
 
         /// Cancel one interrupted gesture without dropping other buffered actions.
@@ -211,6 +212,22 @@ mod player {
 
         pub fn camera(&mut self, dx: f64, dy: f64, zoom: f64) -> Result<(), JsValue> {
             game::camera(&mut self.app, dx, dy, zoom).map_err(js_error)
+        }
+
+        /// Exact user-requested ticks, independent of the animation accumulator.
+        pub fn step(&mut self, ticks: u32) -> Result<(), JsValue> {
+            if ticks > 600 {
+                return Err(js_error("step accepts at most 600 ticks"));
+            }
+            self.clear_input();
+            for _ in 0..ticks {
+                self.input.tick(&mut self.app);
+            }
+            self.frame(0.0)
+        }
+
+        pub fn preview_action(&mut self, action: &str) -> Result<(), JsValue> {
+            game::set_preview_action(&mut self.app, action).map_err(js_error)
         }
 
         pub fn status(&self) -> String {
