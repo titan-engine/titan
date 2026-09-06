@@ -1,0 +1,104 @@
+name: Main verification
+
+on:
+  push:
+    branches: [main]
+  # Refresh default-branch caches even when all recent pushes reused queue CI.
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: main-verification-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    name: Select exact-main verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      reuse: ${{ steps.evidence.outputs.reuse }}
+      run_url: ${{ steps.evidence.outputs.run_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - name: Select full verification for cache input changes
+        id: warming
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python3 - <<'PYTHON'
+          import os, re, subprocess
+          from pathlib import PurePosixPath
+          before = os.environ.get('BEFORE_SHA', '')
+          warm = os.environ['GITHUB_EVENT_NAME'] != 'push'
+          if not warm:
+              if not re.fullmatch(r'[0-9a-f]{40}', before) or before == '0' * 40:
+                  warm = True
+              else:
+                  changed = subprocess.check_output([
+                      'git', 'diff', '--name-only', before, os.environ['GITHUB_SHA']
+                  ], text=True).splitlines()
+                  warm = any(
+                      PurePosixPath(path).name in {
+                          'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+                          '.python-version', '.node-version',
+                      } or path.startswith(('.github/workflows/', '.github/actions/'))
+                      or path == 'scripts/ci-cache.py'
+                      for path in changed
+                  )
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'full={str(warm).lower()}', file=output)
+          if warm:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  print('Full CI selected: manual/scheduled cache warming or changed cache inputs.', file=summary)
+          PYTHON
+      - name: Find trusted exact-SHA queue evidence
+        id: evidence
+        if: steps.warming.outputs.full == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_queue_evidence.py
+
+  full:
+    name: Full main verification
+    needs: decide
+    # A broken decision job must run the full suite, never silently skip it.
+    if: always() && !cancelled() && (needs.decide.result != 'success' || needs.decide.outputs.reuse != 'true')
+    uses: ./.github/workflows/ci.yml
+
+  verified:
+    name: Exact main revision verified
+    needs: [decide, full]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record accepted evidence or fail
+        env:
+          DECISION_RESULT: ${{ needs.decide.result }}
+          REUSE: ${{ needs.decide.outputs.reuse }}
+          QUEUE_RUN: ${{ needs.decide.outputs.run_url }}
+          FULL_RESULT: ${{ needs.full.result }}
+        run: |
+          if [ "$FULL_RESULT" = success ]; then
+            evidence="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            kind='Full main CI'
+          elif [ "$DECISION_RESULT" = success ] && [ "$REUSE" = true ] && [ "$FULL_RESULT" = skipped ] && [ -n "$QUEUE_RUN" ]; then
+            evidence="$QUEUE_RUN"
+            kind='Trusted merge-queue CI'
+          else
+            echo 'No accepted exact-revision verification succeeded.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          printf '%s verified `%s`: %s\n' "$kind" "$GITHUB_SHA" "$evidence" >> "$GITHUB_STEP_SUMMARY"

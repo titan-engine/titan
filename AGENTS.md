@@ -21,7 +21,9 @@ and green PR CI; the required merge queue validates integration before merging.
 Do not refresh branches solely because main advanced. Review carry-forward and
 conflict handling follow docs/workflow.md; scope changes and releases require maintainer input.
 Honor explicit review-before-merge requests instead of enqueueing autonomously. Verify the exact
-merged main revision's CI before reporting completion.
+merged main revision before reporting completion: link its full SHA and accepted full-CI
+or exact-SHA queue run under docs/workflow.md. PR-head success alone is insufficient;
+accepted queue evidence needs no second full main run.
 
 Agent review comments are authorized and must clearly say they are agent reviews,
 including a public reviewer/task label, actual model name (or unavailable), UTC date/time,

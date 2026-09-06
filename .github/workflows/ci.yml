@@ -1,17 +1,16 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
+  workflow_call:
 
 # Only superseded runs of the same PR cancel each other. Main and manual runs
 # and merge-group runs have unique groups so independent integrations never cancel each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-suite-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -29,6 +28,20 @@ defaults:
     shell: python3 scripts/ci-deadline.py {0}
 
 jobs:
+  revision:
+    name: CI revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify CI workflow revision ${{ github.workflow_sha }}
+        shell: bash
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          test "$WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
   native-workloads:
     name: native / ${{ matrix.workload }}
     # Each runner retains the 45-minute command budget and evidence headroom.
@@ -62,6 +75,8 @@ jobs:
         run: |
           python3 scripts/test-acceptance-process.py
           python3 scripts/test-ci-deadline.py
+          python3 scripts/test-ci-queue-evidence.py
+          python3 scripts/test-main-verification.py
           python3 scripts/test-ci-measurement.py
           python3 scripts/test-ci-cache.py
           node --test scripts/acceptance_process.test.mjs

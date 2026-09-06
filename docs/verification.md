@@ -194,8 +194,10 @@ Do not widen fallback prefixes across toolchains or workloads to hide misses.
 Changing path/profile policy requires a cache-schema bump. Daily generations
 and old graphs can be evicted by GitHub; correctness never depends on retention.
 
-Successful main push runs deliberately warm the default-branch scope for later
-PR and merge-queue runs. PR caches belong to their merge ref and can be restored
+Full main verification deliberately warms the default-branch scope for later
+PR and merge-queue runs. Main pushes may instead reuse exact-SHA queue evidence;
+cache-input changes, weekly scheduled runs and manual full runs retain warming
+under the [main verification policy](workflow.md#exact-main-verification-and-cache-warming). PR caches belong to their merge ref and can be restored
 by reruns of that PR, but cannot warm main or unrelated PRs. An exact inherited
 main cache needs no redundant PR upload. Before the workflow first lands, its
 new namespace has no main cache; pre-merge warm measurements prove only PR
