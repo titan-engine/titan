@@ -7,7 +7,7 @@ are sufficient to discover the RPG's clock recovery, but the error does not name
 those reads. Permission output does not expose the host-specific opt-in route;
 ambiguity output does not name the CLI discovery command or selector.
 
-This is evidence and a bounded recommendation, not implemented repair guidance.
+This report records findings and evidence, not implemented repair guidance.
 No engine, protocol, permissions, or automatic repair behavior changes here.
 
 ## Reproduce
