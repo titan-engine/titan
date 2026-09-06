@@ -446,6 +446,9 @@ impl PlayerSession {
         }
         if game::status(&self.app)["session_generation"] != generation
             && !matches!(&request.request, Request::Invoke {name,..} if name == "load_replay")
+            // A recorded restart reconstructs the game, not its playback owner.
+            // Keep the cursor and remaining frames exactly as tick()/step() do.
+            && !(matches!(&request.request, Request::Step { .. }) && self.replay_active())
         {
             clear(self.app.world_mut());
             let control = self.app.world_mut().resource_mut::<Control>().unwrap();
@@ -689,5 +692,121 @@ mod tests {
             game::status(&replay)["active_character"],
             live["active_character"]
         );
+    }
+    #[test]
+    fn remote_steps_preserve_replay_across_recorded_restart() {
+        use titan_protocol::ResponseOutcome;
+        let mut live = session();
+        live.resume();
+        live.set_key("KeyR", true, false);
+        live.tick();
+        live.set_key("KeyR", false, false);
+        live.set_key("KeyD", true, false);
+        live.tick();
+        live.tick();
+        live.set_key("KeyD", false, false);
+        live.set_key("KeyQ", true, false);
+        live.tick();
+        let expected = state(&live);
+        let recording = game::recording(live.app()).unwrap();
+        assert_eq!(recording.frames.len(), 4);
+        for live_ticks in [false, true] {
+            let mut ordinary = session();
+            ordinary
+                .load_replay(game::recording(live.app()).unwrap())
+                .unwrap();
+            if live_ticks {
+                ordinary.resume();
+            }
+            for _ in 0..4 {
+                if live_ticks {
+                    ordinary.tick();
+                } else {
+                    ordinary.step().unwrap();
+                }
+            }
+            for key in ["characters", "active_character", "session_tick"] {
+                assert_eq!(state(&ordinary)[key], expected[key]);
+            }
+            assert_eq!(ordinary.replay_status()["position"], 4);
+        }
+        let mut replay = session();
+        replay.load_replay(recording).unwrap();
+        use std::sync::{Arc, Mutex};
+        let recorded_hold = Arc::new(Mutex::new(None));
+        let recorded_out = recorded_hold.clone();
+        replay.register_capture(move |_, _, done| {
+            *recorded_out.lock().unwrap() = Some(done);
+            Ok(())
+        });
+        let Dispatch::Pending(mut recorded_pending) = replay.dispatch(&RequestEnvelope::new(
+            "before-recorded-reset",
+            Request::Capture,
+        )) else {
+            panic!("pending")
+        };
+        let Dispatch::Ready(first) = replay.dispatch(&RequestEnvelope::new(
+            "restart-frame",
+            Request::Step { frames: 1 },
+        )) else {
+            panic!("ready")
+        };
+        assert!(matches!(first.outcome, ResponseOutcome::Success { .. }));
+        assert!(matches!(
+            recorded_pending.poll(Duration::ZERO).unwrap().outcome,
+            ResponseOutcome::Failure { .. }
+        ));
+        assert!(
+            recorded_hold
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_cancelled()
+        );
+        assert!(replay.replay_active());
+        assert_eq!(replay.replay_status()["position"], 1);
+        let Dispatch::Ready(rest) = replay.dispatch(&RequestEnvelope::new(
+            "remainder",
+            Request::Step { frames: 3 },
+        )) else {
+            panic!("ready")
+        };
+        assert!(matches!(rest.outcome, ResponseOutcome::Success { .. }));
+        for key in ["characters", "active_character", "session_tick"] {
+            assert_eq!(state(&replay)[key], expected[key]);
+        }
+        assert_eq!(replay.replay_status()["position"], 4);
+        assert_eq!(replay.replay_status()["complete"], true);
+        assert!(replay.step().is_err());
+        // Explicit host restart still exits playback and cancels owned captures.
+        let hold = Arc::new(Mutex::new(None));
+        let out = hold.clone();
+        replay.register_capture(move |_, _, done| {
+            *out.lock().unwrap() = Some(done);
+            Ok(())
+        });
+        let Dispatch::Pending(mut pending) =
+            replay.dispatch(&RequestEnvelope::new("capture", Request::Capture))
+        else {
+            panic!("pending")
+        };
+        let Dispatch::Ready(reset) = replay.dispatch(&RequestEnvelope::new(
+            "reset",
+            Request::Invoke {
+                name: "restart".into(),
+                arguments: Default::default(),
+            },
+        )) else {
+            panic!("ready")
+        };
+        assert!(matches!(reset.outcome, ResponseOutcome::Success { .. }));
+        assert!(!replay.replay_active());
+        assert_eq!(state(&replay)["session_tick"], 0);
+        assert!(matches!(
+            pending.poll(Duration::ZERO).unwrap().outcome,
+            ResponseOutcome::Failure { .. }
+        ));
+        assert!(hold.lock().unwrap().as_ref().unwrap().is_cancelled());
     }
 }
