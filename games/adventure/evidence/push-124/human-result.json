@@ -1,0 +1,74 @@
+{
+  "date": "2026-09-06",
+  "environment": "macOS / Apple M5 Pro / native Metal release",
+  "implementation_commit": "bf9835541d5acfe789f20d8a37cfc28aef6ca743",
+  "build_note": "Human build used the same gameplay code before the HUD plus-sign was replaced with AND and focused tests were added.",
+  "human_feedback": "feels exactly the way it should feel now, great!",
+  "control": "Human keyboard; inspector read-only, no injected input or mutation",
+  "recorded_frames": 1165,
+  "recording_sha256": "48755f2f514f21ada75a100ef98106cced022f3ad2f36b66ff92260c09532081",
+  "final_state": {
+    "phase": "slice_complete",
+    "room": 2,
+    "session_tick": 1042,
+    "block": {
+      "last_rejection": null,
+      "moves": 2,
+      "socket": 2
+    },
+    "characters": {
+      "jumper": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 11444,
+        "y": 0,
+        "z": 2354
+      },
+      "strong": {
+        "collisions": {
+          "ceiling": null,
+          "landed": null,
+          "x": null,
+          "z": null
+        },
+        "grounded": true,
+        "support": "floor",
+        "velocity_y": 0,
+        "x": 10550,
+        "y": 0,
+        "z": 2764
+      }
+    },
+    "puzzle": {
+      "complete": true,
+      "door": {
+        "open": false,
+        "state": "closed"
+      },
+      "exit": {
+        "jumper": true,
+        "strong": true
+      },
+      "plates": [
+        {
+          "id": "A",
+          "occupants": [],
+          "pressed": false
+        },
+        {
+          "id": "B",
+          "occupants": [],
+          "pressed": false
+        }
+      ]
+    }
+  },
+  "replay": "Final semantic fields match native headless and actual WASM replay exactly."
+}
