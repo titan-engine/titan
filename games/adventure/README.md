@@ -89,7 +89,8 @@ to the `play` binary. Omit `--allow-control` for read-only inspection and GPU
 captures. The browser player exposes `window.adventure.dispatch(json)` on the
 played instance; await its schema-2 response Promise. The visible control
 checkbox defaults off and gates injected input, stepping and commands. The
-separate `/inspector/` page is a paused CPU instance, not the played window.
+`BrowserRuntime` adapter used by the Node acceptance script is a separate paused
+CPU instance; this package provides no separate inspector webpage.
 CPU-only hosts intentionally report capture unsupported. Native/player captures
 freeze fresh scene and HUD data with frame/revision/reset identity and require
 no simulation tick. See [inspection](../../docs/inspection.md) for the protocol.
