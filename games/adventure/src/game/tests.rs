@@ -168,3 +168,41 @@ fn consecutive_switch_commands_are_recorded_as_distinct_edges() {
     assert_eq!(status(&a)["active_character"], "jumper");
     assert_eq!(status(&a)["session_tick"], 2);
 }
+
+#[test]
+fn fresh_press_unlocks_only_released_action_and_replays_exactly() {
+    let mut a = app();
+    let mut tracker = InputTracker::default();
+    tick_with(&mut a, &mut tracker, &[Action::Right, Action::Up]);
+    tick_with(
+        &mut a,
+        &mut tracker,
+        &[Action::Right, Action::Up, Action::Switch],
+    );
+    let input = RecordedButtons {
+        active: vec!["right".into(), "up".into(), "switch".into()],
+        pressed: vec!["right".into()],
+        released: vec![],
+    }
+    .decode(&SCHEMA)
+    .unwrap();
+    a.world_mut().insert_resource(input);
+    a.advance_fixed(1);
+    assert_eq!(pos(&a, "strong"), Position { x: 3560, z: 6500 });
+    let before = status(&a);
+    assert_eq!(
+        before["blocked_actions"],
+        serde_json::json!(["up", "switch"])
+    );
+    let recording = recording(&a).unwrap();
+    replay(&mut a, recording).unwrap();
+    let after = status(&a);
+    for key in [
+        "characters",
+        "active_character",
+        "blocked_actions",
+        "consumed_input",
+    ] {
+        assert_eq!(before[key], after[key], "{key}");
+    }
+}

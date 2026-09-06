@@ -66,7 +66,6 @@ struct Session {
     truncated: bool,
     active: usize,
     blocked: BTreeSet<Action>,
-    previous: BTreeSet<Action>,
     consumed: InputFrame<Action>,
     effective_tracker: InputTracker<Action>,
 }
@@ -79,7 +78,6 @@ impl Session {
             truncated: false,
             active: 0,
             blocked: BTreeSet::new(),
-            previous: BTreeSet::new(),
             consumed: InputFrame::default(),
             effective_tracker: InputTracker::default(),
         }
@@ -266,19 +264,28 @@ fn tick(world: &mut World) {
     }
     let mut input = world.resource::<InputFrame<Action>>().unwrap().clone();
     if world.remove_resource::<PendingSwitch>().is_some() {
-        let mut values: Vec<_> = input.active_actions().map(|(a, v)| (*a, v)).collect();
-        values.push((Action::Switch, ActionValue::PRESSED));
-        input = InputTracker::default().sample(values);
+        let mut buttons = RecordedButtons::capture(&input, &SCHEMA).unwrap();
+        if !buttons.active.iter().any(|a| a == "switch") {
+            buttons.active.push("switch".into());
+        }
+        if !buttons.pressed.iter().any(|a| a == "switch") {
+            buttons.pressed.push("switch".into());
+        }
+        buttons.released.retain(|a| a != "switch");
+        input = buttons.decode(&SCHEMA).unwrap();
     }
     let active: BTreeSet<_> = input.active_actions().map(|(a, _)| *a).collect();
-    let session = world.resource::<Session>().unwrap();
-    let reset = active.contains(&Action::Restart) && !session.previous.contains(&Action::Restart);
+    let reset = input.just_pressed(&Action::Restart);
     let switch = input.just_pressed(&Action::Switch);
     if reset {
         reset_world(world);
     }
     let session = world.resource_mut::<Session>().unwrap();
-    session.blocked.retain(|a| active.contains(a));
+    // A fresh press also proves release/repress between fixed ticks. Preserve
+    // this edge in the raw recording so replay makes the same decision.
+    session
+        .blocked
+        .retain(|a| active.contains(a) && !input.just_pressed(a));
     if reset || switch {
         if !reset {
             session.active = 1 - session.active;
@@ -296,7 +303,6 @@ fn tick(world: &mut World) {
     let dz = i32::from(session.consumed.is_active(&Action::Down))
         - i32::from(session.consumed.is_active(&Action::Up));
     let target = session.active;
-    session.previous = active;
     session.tick += 1;
     if session.recording.len() < MAX_RECORDING_TICKS {
         session.recording.push(input);
