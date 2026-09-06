@@ -56,7 +56,9 @@ Software images are exact references; GPU comparisons are integration evidence.
 Commit small coherent increments, keep current examples compiling, and document
 material API migrations alongside the affected usage guide.
 
-The core native RPG/arena acceptance harnesses retain bounded failure evidence;
+Follow the [evidence lifecycle](acceptance-evidence.md) for source retention,
+ignored reruns and durable claims. The core native RPG/arena acceptance harnesses
+retain bounded failure evidence;
 see [local retrieval, CI artifacts and controlled-failure verification](acceptance-evidence.md).
 
 Standalone and tooling gates:

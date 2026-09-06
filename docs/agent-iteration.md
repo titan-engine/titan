@@ -115,8 +115,11 @@ unexercised path as unmeasured, and unsupported paths as unsupported.
 Copy [the record template](evidence/agent-iteration/template.json) once per task
 or phase. It is an example format, not a new runtime protocol. Use null for an
 unmeasured duration, never zero; report failures even if the final attempt passes.
-Keep the raw bounded command results locally and publish a sanitized result
-summary plus small fixtures/patches/images needed to audit the assertions.
+Write the raw bounded command results and complete run record to ignored output
+or an external temporary directory. Publish a compact sanitized outcome and
+limitations summary; retain or attach fixtures/patches/images according to the
+[evidence lifecycle](acceptance-evidence.md). Capture failures and corrections in
+the run bundle, not chronological task logs in repository docs.
 
 The [initial measurements](evidence/agent-iteration/README.md) are observations
 at one pinned revision. They establish a starting point, not portable performance

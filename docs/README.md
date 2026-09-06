@@ -58,7 +58,7 @@ the revisions they verified.
 - [Ask questions](https://github.com/titan-engine/titan/discussions).
 - [Find starter issues](https://github.com/titan-engine/titan/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
   or browse the [development board](https://github.com/orgs/titan-engine/projects/1).
-- [Quality gates](verification.md) and [acceptance failure evidence](acceptance-evidence.md).
+- [Quality gates](verification.md) and [evidence lifecycle and failure artifacts](acceptance-evidence.md).
 - [Maintainer and agent workflow](workflow.md) and
   [agent runtime skill](../.agents/skills/titan-workflow/SKILL.md).
 

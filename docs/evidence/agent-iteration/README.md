@@ -28,7 +28,8 @@ Detailed headless results and reproduction instructions are in the
 scratch change, expected assertions and measured phases. To reproduce the historical source, create a disposable checkout at the recorded
 revision, then copy this PR's `docs/evidence/agent-iteration/` directory into the
 same relative location there (the scripts were not present in that old commit).
-Run the copied scripts from that checkout; existing `scripts/acceptance_process.py`
+Run the copied scripts from that checkout and copy results to ignored output in
+the maintained checkout under the [evidence lifecycle](../../acceptance-evidence.md); existing `scripts/acceptance_process.py`
 is available at the baseline revision. Scripts intentionally measure committed
 HEAD and ignore uncommitted source, so later revisions require new evidence and
 may require adapting fixture assumptions.

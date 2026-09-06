@@ -9,15 +9,59 @@ The maintainer coordinates those steps for them.
 [Titan Development](https://github.com/orgs/titan-engine/projects/1) is the shared
 backlog and execution board. [Issues](https://github.com/titan-engine/titan/issues)
 own pending work; repository docs own durable requirements, architecture, usage
-and verification. Do not maintain a second TODO backlog in Markdown. Capture new
-ideas and discovered follow-up work as issues, linking source requirements.
-Small implementation steps may remain checklists within their owning issue.
+and verification. The planning and intake policy below governs the handoff
+from discussion to issues; do not maintain a second TODO backlog in repository files.
+
+## Planning and issue intake
+
+Keep brainstorming and planning in local conversations with the maintainer and
+agents, or in [GitHub Discussions](https://github.com/titan-engine/titan/discussions)
+when wider collaborators are involved. Agents must not save plans to tracked
+Markdown or any other tracked format. Repository docs may record accepted durable
+requirements, architecture, usage, verification procedures and decision rationale.
+They must not contain scratch plans, candidate issue specifications, speculative
+roadmaps, task journals or alternate backlogs. Do not publish private conversations
+as part of the handoff.
+
+Once discussion yields concrete work, create a well-specified issue recording:
+
+- The intended outcome and problem it addresses.
+- Acceptance criteria and how to verify them.
+- Scope boundaries, including what is excluded.
+- The approval state: pending maintainer decision or recorded maintainer agreement.
+
+Triage actual prerequisites using native GitHub blocking relationships, and use
+native parent/sub-issue relationships for decomposition. These relationships are
+authoritative: do not duplicate their lists or titles in issue bodies. Add prerequisite
+rationale in prose only when it explains something beyond the native relationships;
+no body list or "none known" declaration is required. Maintainers handle relationship
+updates for contributors without access.
+
+Link public source discussions or accepted requirements when relevant. A complete
+specification may still be **Proposed** and unapproved; only recorded maintainer
+approval makes it eligible for **Ready**. Blank issues and CLI-created issues follow
+the same handoff, rather than serving as quick idea capture. Concrete discovered
+follow-up work follows this policy too. Small implementation steps may remain
+checklists within their owning issue.
+
+Ordinary bug reports do not require this completed specification: report observed
+behavior, reproduction details and environment as available. Ask usage or contributor
+questions in Discussions. Reporters need not design a fix or perform maintainer
+triage; maintainers fill in missing criteria and boundaries, triage native dependency
+relationships and record approval before work becomes Ready.
+
+For example, explore possible rendering features in a local conversation; discuss
+a wider API proposal in Discussions; document an accepted rendering architecture
+and its rationale in repository docs. Submit a crash report as a bug even without
+a proposed fix. Turn a selected implementation or bounded investigation into an
+issue with the outcome, checks, boundaries and approval state above, and triage
+its dependencies through native GitHub relationships.
 
 ## Approval and ownership
 
 | Status | Meaning |
 | --- | --- |
-| Proposed | Captured idea or bug; implementation is not approved. |
+| Proposed | Concrete proposal awaiting approval, or a report awaiting triage; implementation is not approved. |
 | Ready | Maintainer-approved scope with concrete acceptance criteria. Check dependencies before claiming. |
 | In progress | One owner has claimed the approved issue and started work. |
 | In review | Implementation is ready for independent review and required CI. |
@@ -28,10 +72,8 @@ Ready view excludes issues GitHub marks blocked. Priority does not grant approva
 Record the maintainer-approved scope and decision in the issue before moving
 it to Ready. A broad requirement or historical design discussion does not authorize its
 implementation. Split broad proposals into bounded sub-issues when selected.
-Blank issues and CLI-created issues are allowed for quick idea capture. Before
-moving either to Ready, add the outcome, acceptance/verification criteria, scope
-boundaries, dependencies and recorded maintainer agreement. Reporters do not need
-to supply a complete implementation plan; maintainers add these details during triage.
+Apply the [planning and issue intake policy](#planning-and-issue-intake) before
+creating implementation issues and during report triage.
 
 Use Priority (P0 urgent, P1 high, P2 normal, P3 later), Area and Owner fields.
 Assignees identify contributors. Owner is optional coordination metadata for

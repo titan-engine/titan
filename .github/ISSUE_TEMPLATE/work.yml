@@ -1,29 +1,47 @@
 name: Feature or investigation
-description: Suggest an improvement or a question worth exploring.
+description: Specify concrete work after discussion.
 labels: [investigation]
 body:
   - type: markdown
     attributes:
-      value: "Ideas are welcome. New issues enter Proposed so we can discuss scope before implementation. You do not need a complete design; maintainers help define acceptance criteria and dependencies. For usage questions, visit GitHub Discussions."
+      value: |
+        Brainstorm in local conversations or [GitHub Discussions](https://github.com/titan-engine/titan/discussions), then specify concrete work here. Do not commit planning files. Follow the [planning and issue intake policy](https://github.com/titan-engine/titan/blob/main/docs/workflow.md#planning-and-issue-intake).
+        A well-specified issue enters Proposed and is not implementation approval. Maintainers record approval before Ready and help with triage. For a bug, use Bug report; for usage or contributor questions, use Discussions.
   - type: textarea
     id: outcome
     attributes:
-      label: Problem or question
-      description: What are you trying to do, and what is missing or difficult?
+      label: Outcome and problem
+      description: What concrete result is needed, and what problem does it address? Link a public discussion or accepted requirement if relevant; do not publish private conversations.
     validations:
       required: true
   - type: textarea
-    id: evidence
+    id: acceptance
     attributes:
-      label: Suggested outcome (optional)
-      description: What would a useful result look like? Examples or alternatives are welcome.
+      label: Acceptance and verification
+      description: What observable criteria establish success, and how will they be checked?
+    validations:
+      required: true
   - type: textarea
     id: boundaries
     attributes:
+      label: Scope boundaries
+      description: What is included and excluded from this work?
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisite-context
+    attributes:
+      label: Prerequisite context (optional)
+      description: Native GitHub blocking and parent/sub-issue relationships are authoritative; maintainers handle relationship triage. Do not duplicate their lists or titles here. Add prerequisite rationale only if it explains something beyond those relationships.
+  - type: textarea
+    id: approval
+    attributes:
+      label: Approval state
+      description: State that maintainer approval is pending, or link the recorded maintainer agreement. Filing this issue does not authorize implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: contribution
+    attributes:
       label: Contribution interest (optional)
       description: Would you like to help investigate or implement this? Tell us if you need a starting point.
-  - type: textarea
-    id: relationships
-    attributes:
-      label: Related work (optional)
-      description: Link relevant issues, examples, or docs if you know of any. Maintainers manage board status and blocking relationships.
