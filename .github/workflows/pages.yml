@@ -42,6 +42,47 @@ jobs:
           cargo --version
           python3 --version
           node --version
+      - name: Identify Rust build cache
+        id: rust-cache
+        run: |
+          python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+          import datetime, hashlib, os, subprocess
+          identity = subprocess.check_output(["rustc", "-vV"]) + os.environ.get("ImageOS", "").encode()
+          print("version=" + hashlib.sha256(identity).hexdigest())
+          print("day=" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"))
+          PYTHON
+      # Each browser builder uses its own Cargo target directory. Restrict the
+      # cache to release compilation and downloads; never cache staged packages,
+      # generated bindings, captures or runtime discovery data.
+      - name: Cache browser demo release builds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            target/release
+            target/wasm32-unknown-unknown/release
+            games/arena/target/release
+            games/arena/target/wasm32-unknown-unknown/release
+            games/collection-room/target/release
+            games/collection-room/target/wasm32-unknown-unknown/release
+          # Refresh immutable snapshots at most daily per branch/dependency set,
+          # restoring only the same toolchain and dependency inputs.
+          key: pages-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-wasm32-unknown-unknown-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/.cargo/config.toml', 'rust-toolchain.toml') }}-${{ steps.rust-cache.outputs.day }}
+          restore-keys: |
+            pages-rust-v1-${{ runner.os }}-${{ runner.arch }}-release-wasm32-unknown-unknown-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/.cargo/config.toml', 'rust-toolchain.toml') }}-
+      # Helpers validate the exact CLI version against Cargo metadata before
+      # reuse. Games can use the engine CLI or install their own matching one.
+      - name: Cache matching browser demo wasm-bindgen CLIs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            target/titan/tools
+            games/arena/target/titan/tools
+            games/collection-room/target/titan/tools
+          key: pages-bindgen-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build allowlisted static site
         run: |
           python3 scripts/test-pages.py
