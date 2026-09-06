@@ -127,3 +127,5 @@ python3 games/adventure/scripts/test-player.py # desktop GPU/window required
 Serve `games/adventure/web/` and open `/play/test.html?backend=webgpu`
 and `?backend=webgl2` for actual browser GPU/control verification. The Node
 WASM test compares the full state against a fresh native trace at every tick.
+
+Factory construction package gates and player checks are documented in its [README](../games/factory/README.md#source-and-checks). Run them for factory changes alongside the workspace gates above.

@@ -84,8 +84,50 @@ def main(failures):
         failures.checkpoint('capture')
         return value
 
+    log_path = Path(directory) / 'player.log'
+    startup_log_path = Path(directory) / 'startup.log'
     try:
-        log_path = Path(directory) / 'player.log'
+        # An ordinary read-only launch must tick on its own. Never repair this
+        # probe with resume: a background/unfocused desktop must fail clearly.
+        with startup_log_path.open('w') as log:
+            process = processes.Popen([str(binary), '--trace-focus', '--inspect',
+                                       '--project', str(GAME), '--instance', instance,
+                                       '--run-for-ms', '20000'], project=GAME, instance=instance,
+                                      cwd=GAME, stdout=log, stderr=log)
+            failures.record_process(process)
+            try:
+                deadline = time.monotonic() + 15
+                while not call('instances')['instances']:
+                    assert process.poll() is None, startup_log_path.read_text()
+                    assert time.monotonic() < deadline, 'ordinary player discovery timed out'
+                    time.sleep(.05)
+                assert not call('capabilities')['response']['mutation_enabled']
+                initial_tick = state()['session_tick']
+                startup_state = state()
+                while startup_state['session_tick'] <= initial_tick:
+                    assert process.poll() is None, startup_log_path.read_text()
+                    assert time.monotonic() < deadline, (
+                        'ordinary player did not start automatically; requires a focused desktop window. '
+                        + startup_log_path.read_text())
+                    time.sleep(.05)
+                    startup_state = state()
+                assert not playback()['paused'], 'ordinary player lost focus during startup probe'
+                failures.checkpoint('automatic-startup')
+            finally:
+                processes.terminate(process)
+                log.flush()
+                print(startup_log_path.read_text(), flush=True)
+        startup_output = startup_log_path.read_text()
+        assert 'startup focus:' in startup_output, startup_output
+        assert 'native GPU adapter:' in startup_output, startup_output
+        assert 'GPU frames;' in startup_output, 'ordinary player did not finish GPU presentation normally'
+        startup_rendered = int(startup_output.split('rendered ')[-1].split(' GPU frames;')[0])
+        assert startup_rendered > 0, startup_output
+        startup_evidence = {'launch': 'direct binary, --trace-focus --inspect (read-only)',
+                            'initial_tick': initial_tick, 'later_tick': startup_state['session_tick'],
+                            'gpu_frames': startup_rendered, 'resume_requested': False,
+                            'focus_trace': [line for line in startup_output.splitlines()
+                                            if line.startswith('startup focus:')]}
         with log_path.open('w') as log:
             process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
@@ -182,15 +224,16 @@ def main(failures):
                 assert capture('readonly')['checksum'] == initial_capture['checksum']
             finally:
                 processes.terminate(process)
-        summary = {'native_gpu_frames': rendered, 'replay_ticks': 44,
+        summary = {'automatic_startup': startup_evidence, 'native_gpu_frames': rendered, 'replay_ticks': 44,
                           'semantic_equivalence': True, 'completed_state': actual, 'capture_registered': True, 'readonly_capture': True, 'surface_lifecycle_verified': True, 'captures': captures}
         (Path(directory) / 'evidence.json').write_text(json.dumps(sanitize(summary), indent=2))
         print(json.dumps({**summary, 'evidence_directory': directory}))
     finally:
         # Retain only bounded sanitized text and known PNGs, never discovery data.
-        if log_path.exists():
-            log_path.write_text(sanitize(log_path.read_text()[-128 * 1024:]))
-            log_path.chmod(0o600)
+        for path in [log_path, startup_log_path]:
+            if path.exists():
+                path.write_text(sanitize(path.read_text()[-128 * 1024:]))
+                path.chmod(0o600)
 
 
 if __name__ == '__main__':
