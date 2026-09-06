@@ -237,6 +237,41 @@ try {
    player.restart();
    check(state().room===2&&!state().puzzle.complete,`${routeName}: restart keeps room 2`);
  }
+ // #124: exercise held physical keys through the real GPU player's keyboard
+ // adapter. No inspector movement or fixture teleport positions these pushes.
+ for(const order of ['direction-first-contact','interact-first-approach']){
+   for(const key of Object.values(sequenceBindings))player.set_key(key,false,false);
+   player.select_room(2);player.resume();
+   player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+   player.set_key('ArrowRight',true,false);for(let i=0;i<33;i++)tick();player.set_key('ArrowRight',false,false);
+   check(state().characters.strong.x===5480,`${order}: keyboard alignment near block centre`);
+   if(order==='direction-first-contact'){
+     player.set_key('ArrowUp',true,false);for(let i=0;i<30;i++)tick();
+     check(state().characters.strong.z===6150&&state().block.moves===0,'held Up settles at natural face contact before E');
+     player.set_key('KeyE',true,false);tick();
+     check(state().block.moves===1,'tapping E while Up remains held pushes from contact');
+   }else{
+     player.set_key('ArrowDown',true,false);for(let i=0;i<20;i++)tick();player.set_key('ArrowDown',false,false);
+     player.set_key('KeyE',true,false);for(let i=0;i<5;i++)tick();
+     check(state().characters.strong.z===7700&&state().block.moves===0,'E first waits beyond push range');
+     player.set_key('ArrowUp',true,false);for(let i=0;i<60;i++)tick();
+     check(state().block.moves===1,'holding E before Up approaches and pushes without a timed E edge');
+   }
+   for(let i=0;i<40;i++)tick();
+   check(state().characters.strong.z===5150&&state().block.moves===1,`${order}: continued E and Up reaches next contact without repeating`);
+   player.set_key('ArrowUp',false,false);tick();player.set_key('ArrowUp',true,false);tick();
+   check(state().block.moves===1,`${order}: direction release alone does not repeat`);
+   // A complete physical E release/repress between simulation ticks must rearm.
+   player.set_key('KeyE',false,false);player.set_key('KeyE',true,false);tick();
+   check(state().block.socket===2&&state().block.moves===2,`${order}: fresh E repeats at the next face`);
+   player.set_key('KeyE',false,false);player.set_key('ArrowUp',false,false);tick();
+   const pushed=state(),pushRecording=player.recording();
+   await capture(`block-${order}`);
+   player.load_recording(pushRecording);player.resume();
+   for(let i=0;i<JSON.parse(pushRecording).frames.length;i++)tick();
+   check(JSON.stringify(state().characters)===JSON.stringify(pushed.characters)&&JSON.stringify(state().block)===JSON.stringify(pushed.block),`${order}: recorded keyboard push policy replays exactly`);
+ }
+ player.restart();
  await capture('block-reset'); player.pause();
  let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
  if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
