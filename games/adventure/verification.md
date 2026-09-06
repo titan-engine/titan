@@ -216,7 +216,10 @@ An initial concurrent native/WASM control run exposed a pre-existing harness
 race: its discovery wait accepted another live GPU instance before its own
 headless host registered. The adventure harnesses now wait for their own
 instance ID and check only their own registration on cleanup. This changes
-acceptance orchestration, not game or discovery behavior.
+acceptance orchestration, not game or discovery behavior. The first macOS CI run
+hit the generic 60-second owned-host deadline partway through the second route.
+The GPU harness now defaults to a bounded 240-second runtime budget, preserving
+explicit environment overrides and normal owned-process cleanup.
 
 Room 1's versioned recording and all movement/puzzle checks remain intact.
 Workspace gates and existing native/actual-WASM RPG control, replay and asset

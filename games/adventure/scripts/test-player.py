@@ -20,6 +20,9 @@ from acceptance_evidence import FailureEvidence, sanitize, _png, _read_regular, 
 
 
 def main(failures):
+    # Two room routes plus replay/captures outlive the generic 60-second host
+    # limit on CI. Preserve an explicit caller limit and owned-process cleanup.
+    os.environ.setdefault("TITAN_RUNTIME_TIMEOUT_SECONDS", "240")
     processes.run(['cargo', 'build', '--manifest-path', str(GAME / 'Cargo.toml'),
                    '--features', 'player', '--bin', 'play'], phase='build', check=True)
     processes.run(['cargo', 'build', '-p', 'titan-cli'], cwd=REPO, phase='build', check=True)
