@@ -27,3 +27,12 @@ test('focus loss pauses; Q, R and Space use gameplay input',()=>{
  assert.deepEqual(calls,[['KeyQ',true,false],['KeyR',true,false],['KeyE',true,false],['Space',true,false]]);
  document.emit('focusin',{target:{}});assert.deepEqual(calls.slice(-2),['clear','pause']);
 });
+
+test('Enter aliases retain complete presses and releases across focus loss',()=>{
+ const window=new Events(),document=new Events(),canvas={},calls=[];
+ bindKeys({canvas,window,document,key:(...a)=>calls.push(a),clear:()=>calls.push('clear'),pause:()=>{},shortcut:()=>false});
+ for(const code of ['Enter','NumpadEnter']) window.emit('keydown',{target:canvas,code,repeat:false});
+ window.emit('blur');
+ for(const code of ['Enter','NumpadEnter']) window.emit('keyup',{target:{},code,repeat:false});
+ assert.deepEqual(calls,[['Enter',true,false],['NumpadEnter',true,false],'clear',['Enter',false,false],['NumpadEnter',false,false]]);
+});

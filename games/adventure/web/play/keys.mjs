@@ -1,4 +1,4 @@
-const gameplay = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyR','KeyE','Space']);
+const gameplay = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyR','KeyE','Space','Enter','NumpadEnter']);
 /** Physical codes preserve aliases; blur/focus cancellation discards buffered taps. */
 export function bindKeys({canvas,key,clear,pause=()=>{},shortcut,window=globalThis.window,document=globalThis.document}) {
   const held = new Set();

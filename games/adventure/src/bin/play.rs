@@ -31,7 +31,7 @@ mod native {
     use winit::{
         application::ApplicationHandler,
         dpi::{LogicalSize, PhysicalSize},
-        event::{ElementState, WindowEvent},
+        event::{ElementState, MouseButton, WindowEvent},
         event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
         window::{Window, WindowId},
@@ -51,6 +51,8 @@ mod native {
         previous: Instant,
         accumulated: Duration,
         epoch: u64,
+        cursor: Option<(f64, f64)>,
+        pointer_down: bool,
         error: Option<String>,
         verify_surface_lifecycle: bool,
         lifecycle_resize_observed: bool,
@@ -59,7 +61,7 @@ mod native {
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut verify_surface_lifecycle = false;
-        let mut room = 1;
+        let mut room = None;
         let (mut limit, mut duration, mut recording) = (None, None, None);
         let (mut inspect, mut allow_control, mut configured, mut start_paused) =
             (false, false, false, false);
@@ -80,8 +82,8 @@ mod native {
                     recording = Some(args.next().ok_or("--recording requires a JSON path")?);
                 }
                 "--room" => {
-                    room = args.next().ok_or("--room requires 1 or 2")?.parse::<u8>()?;
-                    if !matches!(room, 1 | 2) {
+                    room = Some(args.next().ok_or("--room requires 1 or 2")?.parse::<u8>()?);
+                    if !matches!(room, Some(1 | 2)) {
                         return Err("--room requires 1 or 2".into());
                     }
                 }
@@ -102,7 +104,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--room 1|2] [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; Space jump; E + direction push; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--room 1|2] [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nEnter starts/continues/plays again; WASD/arrows move; Space jump; E + direction push; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -130,7 +132,7 @@ mod native {
             RunMode::Interactive,
             allow_control,
         );
-        if room != 1 {
+        if let Some(room) = room {
             session.select_room(room).map_err(|e| e.message)?;
         }
         if let Some(path) = recording {
@@ -177,6 +179,8 @@ mod native {
             previous: Instant::now(),
             accumulated: Duration::ZERO,
             epoch,
+            cursor: None,
+            pointer_down: false,
             error: None,
             verify_surface_lifecycle,
             lifecycle_resize_observed: false,
@@ -411,6 +415,33 @@ mod native {
         fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
             match event {
                 WindowEvent::CloseRequested => event_loop.exit(),
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.cursor = Some((position.x, position.y));
+                }
+                WindowEvent::CursorLeft { .. } => {
+                    self.cursor = None;
+                }
+                WindowEvent::MouseInput {
+                    state,
+                    button: MouseButton::Left,
+                    ..
+                } => {
+                    let pressed = state == ElementState::Pressed;
+                    if pressed || self.pointer_down {
+                        self.pointer_down = pressed;
+                        let size = self.window.as_ref().unwrap().inner_size();
+                        let position = self.cursor.and_then(|(x, y)| {
+                            titan_adventure::player::overlay_point(
+                                x,
+                                y,
+                                f64::from(size.width),
+                                f64::from(size.height),
+                            )
+                        });
+                        self.session.pointer(position, pressed);
+                        self.sync_clock();
+                    }
+                }
                 WindowEvent::Resized(size) => {
                     if self.verify_surface_lifecycle && size.width == 800 && size.height == 500 {
                         self.lifecycle_resize_observed = true;
@@ -419,9 +450,11 @@ mod native {
                         renderer.resize(size.width, size.height);
                     }
                     self.session.clear_input();
+                    self.pointer_down = false;
                     self.reset_clock();
                 }
                 WindowEvent::Focused(false) => {
+                    self.pointer_down = false;
                     self.session.pause();
                     self.reset_clock();
                 }

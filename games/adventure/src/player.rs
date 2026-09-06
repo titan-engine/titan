@@ -19,6 +19,21 @@ use titan_protocol::{
 pub const CAPTURE_CLEAR: titan::render::three_d::BaseColor =
     titan::render::three_d::BaseColor::rgb(17, 28, 41);
 
+/// Map a centered 16:9 surface to the shared 320x180 ECS overlay.
+pub fn overlay_point(x: f64, y: f64, width: f64, height: f64) -> Option<(i32, i32)> {
+    if ![x, y, width, height].into_iter().all(f64::is_finite) || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    let scale = (width / 320.0).min(height / 180.0);
+    let x = (x - (width - 320.0 * scale) / 2.0) / scale;
+    let y = (y - (height - 180.0 * scale) / 2.0) / scale;
+    if (0.0..320.0).contains(&x) && (0.0..180.0).contains(&y) {
+        Some((x.floor() as i32, y.floor() as i32))
+    } else {
+        None
+    }
+}
+
 /// Fresh owned assets, scene and UI at one application safe point.
 pub struct FrozenCapture {
     pub scene: titan::render::three_d::RenderFrame3d,
@@ -54,6 +69,7 @@ struct Control {
     blocked: BTreeSet<String>,
     buttons: BufferedButtons<Action>,
     tracker: InputTracker<Action>,
+    pointer: titan::ui::UiPointer,
     replay: Option<Playback>,
 }
 struct Playback {
@@ -120,6 +136,7 @@ fn clear(world: &mut World) {
     control.blocked.extend(control.keys.iter().cloned());
     control.keys.clear();
     control.buttons.clear();
+    control.pointer.cancel();
     control.tracker = InputTracker::default();
     control.epoch = control.epoch.wrapping_add(1);
     world.insert_resource(InputFrame::<Action>::default());
@@ -313,6 +330,64 @@ impl PlayerSession {
         control.replay = None;
         self.inspector.note_external_change();
     }
+    /// An explicit ECS button / Enter choice advances the sequence at a fixed tick.
+    pub fn confirm(&mut self) {
+        if self.replay_active() || game::status(&self.app)["phase"] == "playing" {
+            return;
+        }
+        let generation = game::status(&self.app)["session_generation"].clone();
+        game::confirm(&mut self.app);
+        if game::status(&self.app)["session_generation"] != generation {
+            self.inspector.reset_capture_session();
+            self.app
+                .world_mut()
+                .resource_mut::<Control>()
+                .unwrap()
+                .paused = false;
+        }
+        self.inspector.note_external_change();
+    }
+    /// Primary press/release in logical overlay pixels. UI owns the hit bounds.
+    pub fn pointer(&mut self, position: Option<(i32, i32)>, pressed: bool) {
+        if self.replay_active() {
+            return;
+        }
+        let mut pointer = std::mem::take(
+            &mut self
+                .app
+                .world_mut()
+                .resource_mut::<Control>()
+                .unwrap()
+                .pointer,
+        );
+        let activated = pointer
+            .update(self.app.world(), position, pressed)
+            .activated;
+        self.app
+            .world_mut()
+            .resource_mut::<Control>()
+            .unwrap()
+            .pointer = pointer;
+        let name = activated
+            .and_then(|id| self.app.world().get::<titan::Name>(id))
+            .map(|n| n.as_str().to_owned());
+        match name.as_deref() {
+            Some("ui/confirm") => self.confirm(),
+            Some("ui/restart-room") => {
+                self.restart();
+                self.resume();
+            }
+            _ => {}
+        }
+    }
+    pub fn cancel_pointer(&mut self) {
+        self.app
+            .world_mut()
+            .resource_mut::<Control>()
+            .unwrap()
+            .pointer
+            .cancel();
+    }
     /// Explicit practice-room selection; no progression or completion transition.
     pub fn select_room(&mut self, room: u8) -> Result<(), ProtocolError> {
         game::select_room(&mut self.app, room)?;
@@ -352,12 +427,35 @@ impl PlayerSession {
                 .blocked
                 .remove(key);
         }
-        if repeat || self.paused() || self.replay_active() {
-            return;
-        }
         let Some(action) = key_action(key) else {
             return;
         };
+        if self.replay_active() {
+            return;
+        }
+        if self.paused() {
+            let blocked = self
+                .app
+                .world()
+                .resource::<Control>()
+                .unwrap()
+                .blocked
+                .iter()
+                .any(|k| key_action(k) == Some(action));
+            if pressed && !repeat && !blocked && action == Action::Confirm {
+                self.confirm();
+            }
+            let control = self.app.world_mut().resource_mut::<Control>().unwrap();
+            if pressed {
+                control.blocked.insert(key.into());
+            } else {
+                control.keys.remove(key);
+            }
+            return;
+        }
+        if repeat {
+            return;
+        }
         let control = self.app.world_mut().resource_mut::<Control>().unwrap();
         if control
             .blocked
@@ -494,6 +592,7 @@ fn key_action(key: &str) -> Option<Action> {
         "KeyE" => Some(Action::Interact),
         "KeyQ" => Some(Action::Switch),
         "KeyR" => Some(Action::Restart),
+        "Enter" | "NumpadEnter" => Some(Action::Confirm),
         _ => None,
     }
 }
@@ -527,11 +626,93 @@ pub fn reference_recording() -> Recording {
 mod tests {
     use super::*;
     fn session() -> PlayerSession {
-        PlayerSession::new("test", "test", RunMode::Interactive, true)
+        let mut player = PlayerSession::new("test", "test", RunMode::Interactive, true);
+        player.select_room(1).unwrap();
+        player
     }
     fn state(player: &PlayerSession) -> serde_json::Value {
         game::status(player.app())
     }
+    #[test]
+    fn start_button_and_enter_share_sequence_and_release_gates() {
+        let mut p = PlayerSession::new("test", "test", RunMode::Interactive, true);
+        assert_eq!(state(&p)["phase"], "start");
+        p.resume();
+        p.set_key("KeyD", true, false);
+        p.set_key("Space", true, false);
+        p.set_key("KeyQ", true, false);
+        p.pointer(Some((50, 125)), true);
+        assert_eq!(state(&p)["phase"], "start");
+        p.pointer(Some((50, 125)), false);
+        assert_eq!(state(&p)["phase"], "playing");
+        let initial = state(&p)["characters"].clone();
+        for _ in 0..3 {
+            p.tick();
+        }
+        assert_eq!(state(&p)["characters"], initial);
+        assert_eq!(state(&p)["active_character"], "jumper");
+        p.set_key("KeyD", false, false);
+        p.set_key("KeyD", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["x"], 1560);
+        let mut p = PlayerSession::new("test", "test", RunMode::Interactive, true);
+        p.set_key("Space", true, false); // A key pressed while paused must also release.
+        p.set_key("Enter", true, false);
+        assert_eq!(state(&p)["phase"], "playing");
+        p.set_key("Space", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 0);
+        p.set_key("Space", false, false);
+        p.set_key("Space", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 170);
+    }
+    #[test]
+    fn ui_pointer_cancellation_and_surface_mapping() {
+        let mut p = PlayerSession::new("test", "test", RunMode::Interactive, true);
+        p.pointer(Some((50, 125)), true);
+        p.clear_input();
+        p.pointer(Some((50, 125)), false);
+        assert_eq!(state(&p)["phase"], "start");
+        p.pointer(Some((50, 125)), true);
+        p.pointer(None, false);
+        assert_eq!(state(&p)["phase"], "start");
+        p.pointer(Some((50, 125)), true);
+        p.pointer(Some((50, 125)), false);
+        assert_eq!(state(&p)["phase"], "playing");
+        assert_eq!(overlay_point(150., 375., 960., 540.), Some((50, 125)));
+        assert_eq!(overlay_point(200., 500., 1280., 720.), Some((50, 125)));
+        assert_eq!(overlay_point(150., 405., 960., 600.), Some((50, 125)));
+        assert_eq!(overlay_point(100., 10., 960., 600.), None);
+        assert_eq!(overlay_point(f64::NAN, 0., 960., 540.), None);
+        assert_eq!(overlay_point(0., 0., 0., 0.), None);
+    }
+    #[test]
+    fn every_ui_label_fits_its_ecs_bounds_and_uses_supported_glyphs() {
+        let mut p = PlayerSession::new("test", "test", RunMode::Interactive, true);
+        let check = |p: &PlayerSession| {
+            let world = p.app().world();
+            let font = world.resource::<titan::ui::BitmapFont>().unwrap();
+            for (_, node, text) in world.iter2::<titan::ui::UiNode, titan::ui::UiText>() {
+                if node.visible {
+                    assert!(text.text.len() * 4 <= node.width as usize, "{}", text.text);
+                    assert!(
+                        text.text
+                            .chars()
+                            .all(|c| c == ' ' || font.glyph(c).is_some()),
+                        "{}",
+                        text.text
+                    );
+                }
+            }
+        };
+        check(&p);
+        p.select_room(1).unwrap();
+        check(&p);
+        p.select_room(2).unwrap();
+        check(&p);
+    }
+
     #[test]
     fn practice_room_selection_and_replay_keep_room_and_cancel_old_state() {
         let mut p = session();

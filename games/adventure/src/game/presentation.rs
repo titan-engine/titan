@@ -1,11 +1,20 @@
 //! Device presentation comes from the same sampled puzzle state as inspection.
 use super::*;
+use titan::render::{Image, ImageId, SpriteDraw};
+use titan::ui::UiButton;
 
 #[derive(Component)]
 pub(super) struct PuzzleHud(u8);
+#[derive(Component)]
+struct Panel {
+    image: ImageId,
+    modal: bool,
+}
+#[derive(Component)]
+struct ScreenText(u8);
 
 pub(super) fn setup(world: &mut World) {
-    for (index, y) in [18, 28, 165, 155].into_iter().enumerate() {
+    for (index, y) in [18, 28, 146, 156, 166].into_iter().enumerate() {
         world.spawn_with((
             Name::new(format!("ui/puzzle-{index}")),
             PuzzleHud(index as u8),
@@ -13,10 +22,43 @@ pub(super) fn setup(world: &mut World) {
             UiText::new("").with_color(Color::rgb(240, 235, 205)),
         ));
     }
+    for (name, x, y, width, height, modal) in [
+        ("top", 0, 0, 320, 36, false),
+        ("bottom", 0, 140, 320, 40, false),
+        ("screen", 24, 42, 272, 96, true),
+    ] {
+        let image = world
+            .resource_mut::<ImageAssets>()
+            .unwrap()
+            .insert(Image::from_fn(width, height, |_, _| Color::rgb(17, 28, 41)).unwrap());
+        world.spawn_with((
+            Name::new(format!("ui/panel-{name}")),
+            Panel { image, modal },
+            UiNode::new(x, y, width, height),
+        ));
+    }
+    for (index, y) in [50, 64, 75, 86, 97, 108].into_iter().enumerate() {
+        world.spawn_with((
+            Name::new(format!("ui/screen-{index}")),
+            ScreenText(index as u8),
+            UiNode::new(32, y, 256, 7),
+            UiText::new("").with_color(Color::rgb(240, 235, 205)),
+        ));
+    }
+    for (name, x, width) in [("confirm", 32, 136), ("restart-room", 176, 112)] {
+        world.spawn_with((
+            Name::new(format!("ui/{name}")),
+            UiNode::new(x, 122, width, 12),
+            UiButton::default(),
+            UiText::new("").with_color(Color::rgb(125, 235, 205)),
+        ));
+    }
 }
 
 pub(super) fn sync(world: &mut World) {
     let session = world.resource::<Session>().unwrap();
+    let playing = session.phase == Phase::Playing;
+    let phase = session.phase;
     let puzzle = &session.puzzle;
     let pressed = |i: usize| {
         if puzzle.plates[i].pressed {
@@ -26,45 +68,116 @@ pub(super) fn sync(world: &mut World) {
         }
     };
     let door = match puzzle.door.state {
-        "open_plate" => "OPEN: PLATE",
-        "open_obstructed" => "OPEN: BODY IN DOOR",
+        "open_plate" => "OPEN",
+        "open_obstructed" => "HELD BY PARTNER",
         _ => "CLOSED",
     };
     let text = [
-        format!("A || {}  B || {}  DOOR || {}", pressed(0), pressed(1), door),
         format!(
-            "EXIT: JUMPER {}  STRONG {}",
+            "LEDGE PLATE {}  FAR PLATE {}  DOOR {}",
+            pressed(0),
+            pressed(1),
+            door
+        ),
+        format!(
+            "EXIT  JUMPER {}  STRONG {}",
             if puzzle.exit.jumper { "IN" } else { "OUT" },
             if puzzle.exit.strong { "IN" } else { "OUT" }
         ),
-        if puzzle.complete {
-            format!("ROOM {} COMPLETE!  [R] RESTART ROOM", session.room)
+        if session.room == 2 {
+            "ROOM 2  BUILD A STEP. HOLD PLATES. BRING BOTH TO EXIT.".into()
         } else {
-            if session.room == 2 {
-                "[E]+UP/DOWN PUSH  BLOCK -> A -> B -> EXIT".into()
-            } else {
-                "HOLD A, CROSS TO B, BRING BOTH TO EXIT".into()
-            }
+            "ROOM 1  JUMP TO LEDGE PLATE. HOLD FAR PLATE. BOTH TO EXIT.".into()
         },
         if session.room == 2 {
-            let feedback = match session.block.last_rejection {
-                Some("wrong_character") => "STRONG ONLY",
-                Some("not_grounded") => "STAND ON FLOOR - NO JUMP",
-                Some("invalid_direction") => "ONE RAIL DIRECTION REQUIRED",
-                Some("invalid_stance") => "STAND 1M BEHIND BLOCK",
-                Some("rail_end") => "RAIL END",
-                Some("block_occupied") => "BLOCK OCCUPIED",
-                Some("path_obstructed") => "PATH OBSTRUCTED",
-                _ => "READY",
-            };
-            format!("K SOCKET {} / 3: {}", session.block.socket + 1, feedback)
+            match session.block.last_rejection {
+                Some("wrong_character") => "PUSH WITH STRONG",
+                Some("not_grounded") => "PUSH FROM THE FLOOR WITHOUT JUMPING",
+                Some("invalid_direction") => "PUSH WITH E AND ONE OF UP OR DOWN",
+                Some("invalid_stance") => "STAND CLOSE BEHIND THE BLOCK TO PUSH",
+                Some("rail_end") => "BLOCK AT END OF TRACK",
+                Some("block_occupied") => "BLOCK OCCUPIED. STEP OFF BEFORE PUSHING",
+                Some("path_obstructed") => "PATH BLOCKED. MOVE YOUR PARTNER CLEAR",
+                _ => "STRONG PUSHES THE STRIPED BLOCK WITH E AND UP OR DOWN",
+            }
+            .into()
         } else {
-            String::new()
+            "JUMPER HAS A TRIANGLE. STRONG HAS A SQUARE. STRIPES LINK DEVICES.".into()
         },
+        "WASD OR ARROWS MOVE. SPACE JUMPS. Q SWITCHES. P PAUSES.".into(),
     ];
+    let lines = match phase {
+        Phase::Start => [
+            "ADVENTURE / TWO CHARACTERS. ONE TEAM.",
+            "WASD OR ARROWS MOVE. Q SWITCHES PARTNERS.",
+            "SPACE JUMPS. JUMPER CAN REACH HIGHER LEDGES.",
+            "STRONG PUSHES BLOCKS WITH E AND UP OR DOWN.",
+            "HOLD THE STRIPED PLATES TO OPEN THE STRIPED DOOR.",
+            "BRING BOTH TO THE OUTLINED EXIT. R RESTARTS ROOM.",
+        ],
+        Phase::RoomComplete => [
+            "ROOM COMPLETE / BOTH PARTNERS ARE HOME.",
+            "NEXT / BUILD A STEP",
+            "STRONG CAN MOVE THE BLOCK TO HELP JUMPER CLIMB.",
+            "USE THE PLATES TO HOLD THE WAY OPEN FOR EACH OTHER.",
+            "CONTINUE WHEN YOU ARE READY.",
+            "R RESTARTS THIS ROOM.",
+        ],
+        Phase::SliceComplete => [
+            "SLICE COMPLETE / YOU DID IT TOGETHER.",
+            "BOTH ROOMS COMPLETE.",
+            "PLAY AGAIN TO RETURN TO THE FIRST ROOM.",
+            "RESTART ROOM TO TRY THE BLOCK PUZZLE AGAIN.",
+            "",
+            "R RESTARTS THIS ROOM.",
+        ],
+        Phase::Playing => [""; 6],
+    };
     let ids: Vec<_> = world.iter::<PuzzleHud>().map(|(id, h)| (id, h.0)).collect();
     for (id, index) in ids {
         world.get_mut::<UiText>(id).unwrap().text = text[index as usize].clone();
+        world.get_mut::<UiNode>(id).unwrap().visible = playing;
+    }
+    let ids: Vec<_> = world
+        .iter::<ScreenText>()
+        .map(|(id, h)| (id, h.0))
+        .collect();
+    for (id, index) in ids {
+        world.get_mut::<UiText>(id).unwrap().text = lines[index as usize].into();
+        world.get_mut::<UiNode>(id).unwrap().visible = !playing;
+    }
+    let ids: Vec<_> = world.iter::<Panel>().map(|(id, p)| (id, p.modal)).collect();
+    for (id, modal) in ids {
+        world.get_mut::<UiNode>(id).unwrap().visible = if modal { !playing } else { playing };
+    }
+    let id = world.iter::<Hud>().next().unwrap().0;
+    world.get_mut::<UiNode>(id).unwrap().visible = playing;
+    let ids: Vec<_> = world
+        .iter2::<Name, UiButton>()
+        .map(|(id, name, _)| (id, name.as_str().to_owned()))
+        .collect();
+    for (id, name) in ids {
+        let confirm = name == "ui/confirm";
+        world.get_mut::<UiNode>(id).unwrap().visible =
+            !playing && (confirm || phase != Phase::Start);
+        world.get_mut::<UiText>(id).unwrap().text = if confirm {
+            match phase {
+                Phase::Start => "START / ENTER",
+                Phase::RoomComplete => "CONTINUE / ENTER",
+                _ => "PLAY AGAIN / ENTER",
+            }
+        } else {
+            "RESTART ROOM / R"
+        }
+        .into();
+    }
+}
+
+pub(super) fn append_overlay(world: &World, frame: &mut RenderFrame) {
+    for (_, panel, node) in world.iter2::<Panel, UiNode>() {
+        if node.visible {
+            frame.push(SpriteDraw::new(panel.image, node.x, node.y).with_layer(99));
+        }
     }
 }
 
