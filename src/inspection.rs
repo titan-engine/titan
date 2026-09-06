@@ -1,5 +1,6 @@
 //! Transport-neutral inspection of a Titan [`App`](crate::App).
 
+mod aliases;
 mod browser;
 mod capture;
 #[cfg(all(target_arch = "wasm32", feature = "browser-capture"))]
@@ -165,6 +166,7 @@ pub struct Inspector {
     commands: BTreeMap<String, RegisteredCommand>,
     queries: BTreeMap<String, RegisteredQuery>,
     fields: BTreeMap<String, BTreeMap<String, RegisteredField>>,
+    component_aliases: BTreeMap<String, String>,
     input_handler: Option<InputHandler>,
     capture_handler: Option<CaptureHandler>,
     async_capture_handler: Option<AsyncCaptureHandler>,
@@ -190,6 +192,7 @@ impl Inspector {
             commands: BTreeMap::new(),
             queries: BTreeMap::new(),
             fields: BTreeMap::new(),
+            component_aliases: BTreeMap::new(),
             input_handler: None,
             capture_handler: None,
             async_capture_handler: None,
@@ -308,6 +311,7 @@ impl Inspector {
         setter: Option<FieldSetter>,
     ) -> Result<&mut Self, ProtocolError> {
         let component = std::any::type_name::<T>();
+        self.validate_component_identity(component)?;
         if field.trim().is_empty()
             || self
                 .fields
@@ -348,7 +352,7 @@ impl Inspector {
             .iter()
             .map(|(component, fields)| {
                 (
-                    component.clone(),
+                    self.component_name(component).to_owned(),
                     fields
                         .iter()
                         .map(|(name, field)| (name.clone(), field.metadata.clone()))
@@ -701,6 +705,9 @@ impl Inspector {
     }
 
     fn execute(&mut self, app: &mut App, request: &Request) -> Result<Response, ProtocolError> {
+        if matches!(request, Request::Entities { .. } | Request::Entity { .. }) {
+            self.validate_component_aliases(app.world())?;
+        }
         match request {
             Request::Capabilities => Ok(Response::Capabilities(self.capabilities())),
             Request::Status => Ok(Response::Status(RuntimeStatus {
@@ -728,12 +735,13 @@ impl Inspector {
                     .entities()
                     .filter_map(|entity| {
                         let name = app.world().get::<Name>(entity).map(|name| name.to_string());
-                        let components: Vec<_> = app
+                        let mut components: Vec<_> = app
                             .world()
                             .component_type_names(entity)
                             .into_iter()
-                            .map(str::to_owned)
+                            .map(|name| self.component_name(name).to_owned())
                             .collect();
+                        components.sort();
                         let name_matches = query
                             .name
                             .as_ref()
@@ -781,7 +789,7 @@ impl Inspector {
                             ),
                             None => serde_json::Value::Null,
                         };
-                        Ok((name.to_owned(), value))
+                        Ok((self.component_name(name).to_owned(), value))
                     })
                     .collect::<Result<BTreeMap<_, _>, ProtocolError>>()?;
                 Ok(Response::Entity(EntityDetails {
@@ -826,10 +834,14 @@ impl Inspector {
                         "entity is not alive",
                     ));
                 }
+                self.validate_component_aliases(app.world())?;
+                let component = self
+                    .component_identity(component)
+                    .ok_or_else(missing_component)?;
                 if !app
                     .world()
                     .component_type_names(entity)
-                    .contains(&component.as_str())
+                    .contains(&component)
                 {
                     return Err(missing_component());
                 }

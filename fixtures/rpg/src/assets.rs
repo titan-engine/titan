@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn file_sprite_matches_procedural_pixels_and_reference() {
         let loaded = decode_images(
-            include_bytes!("../../assets/player.png"),
-            include_bytes!("../../assets/tree.png"),
+            include_bytes!("../../../assets/player.png"),
+            include_bytes!("../../../assets/tree.png"),
         )
         .unwrap();
         assert_eq!(loaded, super::super::generated_images());
@@ -130,8 +130,8 @@ mod startup_tests {
     use super::*;
     #[test]
     fn each_source_failure_is_named_and_repaired_pair_decodes() {
-        let player = include_bytes!("../../assets/player.png");
-        let tree = include_bytes!("../../assets/tree.png");
+        let player = include_bytes!("../../../assets/player.png");
+        let tree = include_bytes!("../../../assets/tree.png");
         assert!(
             decode_images(b"bad", tree)
                 .unwrap_err()

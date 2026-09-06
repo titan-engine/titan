@@ -15,7 +15,7 @@ shards overlap; include the number collected as semantic evidence. Moving,
 spawning a shard, opening the journal, loading a save and activating the shrine
 alone produce no cue. This avoids adding gameplay rules or a second sound.
 
-The current [`collect_shards`](../examples/support/procedural_rpg.rs) system
+The current [`collect_shards`](../fixtures/rpg/src/lib.rs) system
 increments quest progress and queues shard despawns in canonical traversal order.
 It emits no audio event today. A future game-owned resource would accumulate
 that tick's pickup count there and expose the cue after the fixed schedule's

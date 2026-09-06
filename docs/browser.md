@@ -6,8 +6,8 @@ The browser build copies root `assets/` into `web/assets`; replace the served fi
 and reload to change art without rebuilding WASM. Startup failures expose Retry
 and no playable world. See [asset behavior](assets.md) for limits and replay rules.
 
-The browser adapter runs the same procedural RPG as the native example, using
-`examples/support/procedural_rpg.rs`. It executes the same protocol envelopes
+The browser adapter runs the same procedural RPG as the native example, through the internal
+[`titan-rpg` fixture package](../fixtures/rpg/README.md). It executes the same protocol envelopes
 through a safe-point WASM dispatch. Acceptance is synchronous; asynchronous
 capture completion owns its immutable snapshot and releases the player borrow.
 
@@ -31,7 +31,8 @@ stepping, logical input, registered commands, and explicitly registered writable
 component fields. Reloading returns to read-only mode. The RPG exposes integer
 `Position.x` and `Position.y` within map bounds. Discover the fully qualified
 component name through entity details before submitting a `set_field` request;
-Rust type names can differ between browser and native builds. Successful field
+The existing host-specific names are preserved by inspector component aliases;
+see the [fixture compatibility inventory](../fixtures/rpg/README.md#inspection-compatibility). Successful field
 writes change the revision and subsequent capture without advancing a tick.
 Invalid types or out-of-range values leave state and revision unchanged.
 

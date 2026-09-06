@@ -11,6 +11,7 @@ description = "Browser host for the Titan procedural RPG and inspection protocol
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+titan-rpg = { path = "../../fixtures/rpg" }
 titan-diagnostics = { path = "../titan-diagnostics" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

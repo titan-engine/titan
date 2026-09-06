@@ -23,7 +23,7 @@ assert.equal(capabilities.mutation_enabled, false);
 const readOnlyPlayer = call(readOnly, { type: 'entities' }).response.entities.find(entity => entity.name === 'player').id;
 const readOnlyDetails = call(readOnly, { type: 'entity', entity: readOnlyPlayer }).response;
 const readOnlyPosition = Object.keys(readOnlyDetails.components).find(name => name.endsWith('::Position'));
-assert.ok(readOnlyPosition);
+assert.equal(readOnlyPosition, 'titan_browser::game::Position');
 const readOnlyCapture = call(readOnly, { type: 'capture' }).response.checksum;
 for (const operation of ['step', 'invoke', 'inject_input', 'mutate']) assert.ok(!capabilities.operations.includes(operation));
 for (const request of [
