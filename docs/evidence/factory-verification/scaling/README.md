@@ -6,13 +6,18 @@ It does not reuse the historical construction-only measurements at
 `0468ffe00b2cb109acc33591dc382839196ce7fe`. It follows the phase boundaries and
 reporting distinctions in [the shared procedure](../../../agent-iteration.md).
 
-Run from a disposable checkout containing this report and the measured git object:
+This completed experiment remains available with its assertions and generated
+workloads at [evidence revision `17723e62334a19763f8cf81b2f31cc840b4d6289`](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/scaling).
+It is not a maintained HEAD benchmark. Run in an unused disposable checkout
+containing that harness and the measured Git object:
 
 ```sh
+git worktree add --detach /tmp/titan-scaling-repro 17723e62334a19763f8cf81b2f31cc840b4d6289
+cd /tmp/titan-scaling-repro
 python3 docs/evidence/factory-verification/scaling/measure.py
 ```
 
-The script archives the pinned revision, adds [the disposable probe](probe.rs)
+The script archives the pinned revision, adds [the disposable probe](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/scaling/probe.rs)
 as an additional Rust binary, builds with `--locked` in an empty private target,
 then deletes that archive and target. It does not edit game rules, inject items,
 or write gameplay source in the working checkout. Existing global Cargo registry

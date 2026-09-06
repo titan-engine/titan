@@ -31,11 +31,16 @@ The first observed UTC-to-verification interval was 244 seconds. **Full handoff
 monotonic timing was missed**, so the baseline honestly leaves full task time
 null; it does not equate command timing with full authoring time.
 
-Reproduce from the repository root, using an external disposable directory:
+This completed variation is historical. Its [runner and required route](https://github.com/titan-engine/titan/blob/3e584a023d346805c23c2bf11162c87dee5042ed/games/adventure/evidence/playtest-86)
+remain at evidence revision `3e584a023d346805c23c2bf11162c87dee5042ed`, separate
+from the measured source and applied patch. Reproduce from the repository root
+using external disposable directories:
 
 ```sh
 scratch=$(mktemp -d)
-evidence="$PWD/games/adventure/evidence/playtest-86"
+evidence_root=$(mktemp -d)
+git archive 3e584a023d346805c23c2bf11162c87dee5042ed games/adventure/evidence/playtest-86 | tar -x -C "$evidence_root"
+evidence="$evidence_root/games/adventure/evidence/playtest-86"
 git archive 02272893a0d91af2b1ac6b5159644b70ab46108c | tar -x -C "$scratch"
 patch -d "$scratch" -p1 < "$evidence/variation.patch"
 python3 "$evidence/variation-reproduce.py" "$scratch" "$scratch/results"

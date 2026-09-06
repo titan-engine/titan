@@ -1,8 +1,9 @@
 # Adventure initial iteration evidence
 
-The [executable procedure](adventure-baseline.py) runs the committed `HEAD`
+The historical [executable procedure](https://github.com/titan-engine/titan/blob/1b1f138da009e589521df7d3e155e711562a8375/docs/evidence/agent-iteration/adventure-baseline.py) runs the committed `HEAD`
 in a disposable source copy with an empty Cargo target. It uses native CPU
-hosts, authenticated CLI discovery and no GUI focus. From the repository root:
+hosts, authenticated CLI discovery and no GUI focus. First prepare the pinned
+[disposable reproduction checkout](README.md#reading-the-numbers); from its root:
 
 ```sh
 mkdir -p target/evidence

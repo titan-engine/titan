@@ -26,8 +26,18 @@ must conduct that separate exercise and record full task time and interventions.
 Detailed headless results and reproduction instructions are in the
 [adventure report](adventure-notes.md) and [factory report](factory.md). Their scripts preserve the exact scenario,
 scratch change, expected assertions and measured phases. To reproduce the historical source, create a disposable checkout at the recorded
-revision, then copy this PR's `docs/evidence/agent-iteration/` directory into the
-same relative location there (the scripts were not present in that old commit).
+revision, then extract the [original harness directory](https://github.com/titan-engine/titan/blob/1b1f138da009e589521df7d3e155e711562a8375/docs/evidence/agent-iteration) from evidence revision
+`1b1f138da009e589521df7d3e155e711562a8375` into the same relative location there
+(the scripts were not present in the measured commit):
+
+```sh
+git worktree add --detach /tmp/titan-skeleton-repro 0468ffe00b2cb109acc33591dc382839196ce7fe
+git archive 1b1f138da009e589521df7d3e155e711562a8375 docs/evidence/agent-iteration | tar -x -C /tmp/titan-skeleton-repro
+cd /tmp/titan-skeleton-repro
+```
+
+Choose an unused disposable path. These completed skeleton experiments are
+historical programs, not supported HEAD regression runners.
 Run the copied scripts from that checkout and copy results to ignored output in
 the maintained checkout under the [evidence lifecycle](../../acceptance-evidence.md); existing `scripts/acceptance_process.py`
 is available at the baseline revision. Scripts intentionally measure committed
