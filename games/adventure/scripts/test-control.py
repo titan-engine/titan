@@ -68,7 +68,7 @@ def main(failures, log):
         failures.record_process(process)
         try:
             deadline = time.monotonic() + 10
-            while not call('instances')['instances']:
+            while not any(item['instance_id'] == instance for item in call('instances')['instances']):
                 assert process.poll() is None, 'runtime exited before discovery'
                 assert time.monotonic() < deadline, 'discovery exceeded 10 seconds'
                 time.sleep(.05)
@@ -151,7 +151,7 @@ def main(failures, log):
             processes.graceful_shutdown(process)
         finally:
             processes.terminate(process)
-    assert not call('instances')['instances'], 'shutdown left discovery registration'
+    assert not any(item['instance_id'] == instance for item in call('instances')['instances']), 'shutdown left owned discovery registration'
     if '--trace' in sys.argv:
         Path(sys.argv[sys.argv.index('--trace') + 1]).write_text(json.dumps(trace))
     print('Adventure native CLI: named fields, per-tick control route, held switching, replay, restart, switch command and cleanup passed.')

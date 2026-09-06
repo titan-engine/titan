@@ -94,7 +94,7 @@ def main(failures):
             failures.record_process(process)
             try:
                 deadline = time.monotonic() + 15
-                while not call('instances')['instances']:
+                while not any(item['instance_id'] == instance for item in call('instances')['instances']):
                     assert process.poll() is None, log_path.read_text()
                     assert time.monotonic() < deadline, 'player discovery timed out'
                     time.sleep(.05)
@@ -227,6 +227,11 @@ def main(failures):
                 move(['right'], 15)
                 assert state()['puzzle']['door']['state'] == 'closed'
                 capture('puzzle-cleared')
+                invoke('select_room', {'room': 2})
+                move(['interact', 'up'], 1)
+                assert state()['block']['last_rejection'] == 'wrong_character'
+                assert state()['block']['socket'] == 0
+                capture('block-rejected')
                 for route_name in ('block-solution.json', 'block-intermediate-solution.json'):
                     invoke('select_room', {'room': 2})
                     assert state()['room'] == 2
@@ -266,7 +271,7 @@ def main(failures):
             failures.record_process(process)
             try:
                 deadline = time.monotonic() + 10
-                while not call('instances')['instances']:
+                while not any(item['instance_id'] == instance for item in call('instances')['instances']):
                     assert process.poll() is None, 'read-only GPU host exited'
                     assert time.monotonic() < deadline, 'read-only discovery timed out'
                     time.sleep(.05)

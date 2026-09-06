@@ -1,8 +1,8 @@
 # Cooperative room verification
 
 Issue #83 was exercised on 2026-09-06 on macOS / Apple M5 Pro. Room 1 now
-replaces the earlier movement practice layout. The wider two-room sequence and
-block manipulation remain future scope.
+replaces the earlier movement practice layout. Room 2 and block manipulation are covered below; the wider progression sequence
+remains future scope.
 
 ![Both plates held across the doorway](evidence/puzzle-plate-b-native.png)
 
@@ -176,3 +176,55 @@ Browser keyboard tests drive the real WASM player API and browser event adapter;
 this is reproducible runtime evidence, not an extended human usability study.
 The release-gating choice remains the documented initial prototype policy.
 No other operating system or hardware performance claim is established here.
+
+## Combined-abilities room (#84)
+
+Room 2 was verified on 2026-09-06 on macOS / Apple M5 Pro. It is available through
+explicit practice-room selection; the full start/Continue/Play again sequence
+remains #85 scope. The initial block socket cannot reach the high ledge, even
+from the most generous supported north edge. Native and actual-WASM acceptance
+agree exactly across 27 scenarios and 2,650 states. Both normal-input solutions
+complete: one push reaches the intermediate socket, and two reach the final
+socket. Each mounts the block with Jumper, reaches plate A, exchanges the door
+hold at B, and brings both characters to the exit.
+
+The scenarios also cover ordered rejection reasons, grounded stance, cancelled
+opposing directions, jump-plus-push, swept and destination body obstruction,
+exact face contact versus 1 mm overlap, airborne clearance, occupied support,
+held E and switching, intermediate reverse pushing, Strong's jump restrictions,
+room-aware recording/replay, completion freeze and full room reset/recovery.
+Both moved sockets use the same physical support and plate rules. No socket
+flag unlocks the ledge or plate.
+
+![Jumper supported at the intermediate socket in WebGL2](evidence/block-intermediate-solution-block-support-webgl2.png)
+
+![Both characters complete room 2 in WebGPU](evidence/block-solution-complete-webgpu.png)
+
+The actual native Metal player presented 3,543 frames; browser WebGPU and
+WebGL2 each passed 177 checks. All three players execute
+both complete routes, capture their push/support/plate/exit checkpoints, replay
+within room 2, and reconstruct room 2 on restart. Selected PNGs and their exact
+capture identity, checksum and semantic state are in
+[block evidence](evidence/block-evidence.json). Inspection confirmed distinct
+character markers, the raised block top and socket guides, clear A/B plate and
+door states, both exit indicators and room completion text. A rejected Jumper
+push visibly reports STRONG ONLY without moving the block. The camera shows
+the block and ledge together; the suggested final socket route and optional
+intermediate route remain visible.
+
+An initial concurrent native/WASM control run exposed a pre-existing harness
+race: its discovery wait accepted another live GPU instance before its own
+headless host registered. The adventure harnesses now wait for their own
+instance ID and check only their own registration on cleanup. This changes
+acceptance orchestration, not game or discovery behavior.
+
+Room 1's versioned recording and all movement/puzzle checks remain intact.
+Workspace gates and existing native/actual-WASM RPG control, replay and asset
+loops passed. The new block conformance runner is part of required WASM CI;
+the extended native GPU harness remains in the macOS job. Historical RPG/arena
+checksums and the committed crisp README preview are unchanged.
+
+These are deterministic prototype and platform-integration checks, not a human
+usability study or a new platform claim. The 100 mm push-stance tolerance,
+release/repress gesture and fixed camera remain prototype defaults. Independent
+whole-slice playtesting follows in #86.

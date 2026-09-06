@@ -1,0 +1,2106 @@
+{
+  "date_utc": "2026-09-06",
+  "source_commit": "d42c43346dda5497d70500d6fb9448b0b381e779",
+  "native_gpu_frames": 3543,
+  "captures": {
+    "block-solution-block-support-native.png": {
+      "artifact": "block-solution-block-support-native.png",
+      "checksum": "8faef473dad1ab63",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 24,
+        "height": 540,
+        "instance_id": "adventure-player-test-39741",
+        "observed_frame": 1878,
+        "session_generation": 9,
+        "state_revision": 1388,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "jumper",
+        "block": {
+          "last_rejection": null,
+          "moves": 2,
+          "socket": 2
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 3950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 3050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "heavy-block",
+            "velocity_y": 0,
+            "x": 5460,
+            "y": 750,
+            "z": 3500
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 6500,
+            "y": 0,
+            "z": 5540
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 1878,
+        "pending_inputs": 0,
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 208,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 9,
+        "session_tick": 208,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "block-solution-plate-b-native.png": {
+      "artifact": "block-solution-plate-b-native.png",
+      "checksum": "6537e1af94f7486b",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 26,
+        "height": 540,
+        "instance_id": "adventure-player-test-39741",
+        "observed_frame": 1982,
+        "session_generation": 9,
+        "state_revision": 1498,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "strong",
+        "block": {
+          "last_rejection": null,
+          "moves": 2,
+          "socket": 2
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 3950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 3050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "high-ledge",
+            "velocity_y": 0,
+            "x": 5460,
+            "y": 2000,
+            "z": 2300
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 9980,
+            "y": 0,
+            "z": 5000
+          }
+        },
+        "consumed_input": {
+          "active": [
+            "right"
+          ],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 1982,
+        "pending_inputs": 0,
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": true,
+            "state": "open_plate"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [
+                "jumper"
+              ],
+              "pressed": true
+            },
+            {
+              "id": "B",
+              "occupants": [
+                "strong"
+              ],
+              "pressed": true
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 312,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 9,
+        "session_tick": 312,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "block-intermediate-solution-complete-native.png": {
+      "artifact": "block-intermediate-solution-complete-native.png",
+      "checksum": "c5110ef6f9398f9d",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 37,
+        "height": 540,
+        "instance_id": "adventure-player-test-39741",
+        "observed_frame": 3394,
+        "session_generation": 12,
+        "state_revision": 2378,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "strong",
+        "block": {
+          "last_rejection": null,
+          "moves": 1,
+          "socket": 1
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 4950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 4050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 10500,
+            "y": 0,
+            "z": 2000
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 11480,
+            "y": 0,
+            "z": 2780
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 3394,
+        "pending_inputs": 0,
+        "puzzle": {
+          "complete": true,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": true,
+            "strong": true
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 574,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 12,
+        "session_tick": 561,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    },
+    "block-solution-complete-webgpu.png": {
+      "type": "capture",
+      "identity": {
+        "instance_id": "adventure-browser-player",
+        "session_generation": 12,
+        "capture_id": 32,
+        "observed_frame": 2271,
+        "state_revision": 2298,
+        "width": 960,
+        "height": 540
+      },
+      "width": 960,
+      "height": 540,
+      "format": "png",
+      "artifact": "block-solution-complete-webgpu.png",
+      "checksum": "bf8658decf04e9d2",
+      "state": {
+        "active_character": "strong",
+        "adapter": "AdapterInfo { name: \"\", vendor: 0, device: 0, device_type: Other, device_pci_bus_id: \"\", driver: \"\", driver_info: \"\", backend: BrowserWebGpu, subgroup_min_size: 32, subgroup_max_size: 32, transient_saves_memory: None, limit_bucket: None }",
+        "block": {
+          "last_rejection": null,
+          "moves": 2,
+          "socket": 2
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 3950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 3050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 10500,
+            "y": 0,
+            "z": 2300
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 11480,
+            "y": 0,
+            "z": 2780
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 2271,
+        "pending_inputs": 0,
+        "playback": {
+          "active": false,
+          "complete": false,
+          "paused": false,
+          "position": 0,
+          "total": 0
+        },
+        "puzzle": {
+          "complete": true,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": true,
+            "strong": true
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 575,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 12,
+        "session_tick": 562,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ],
+        "surface": {
+          "size": [
+            960,
+            540
+          ],
+          "suspended": false
+        }
+      }
+    },
+    "block-intermediate-solution-block-support-webgl2.png": {
+      "type": "capture",
+      "identity": {
+        "instance_id": "adventure-browser-player",
+        "session_generation": 15,
+        "capture_id": 35,
+        "observed_frame": 3021,
+        "state_revision": 3053,
+        "width": 960,
+        "height": 540
+      },
+      "width": 960,
+      "height": 540,
+      "format": "png",
+      "artifact": "block-intermediate-solution-block-support-webgl2.png",
+      "checksum": "dd7865e6d5cc8cb3",
+      "state": {
+        "active_character": "jumper",
+        "adapter": "AdapterInfo { name: \"ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)\", vendor: 4203, device: 0, device_type: IntegratedGpu, device_pci_bus_id: \"\", driver: \"\", driver_info: \"WebGL 2.0 (OpenGL ES 3.0 Chromium)\", backend: Gl, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: None, limit_bucket: None }",
+        "block": {
+          "last_rejection": null,
+          "moves": 1,
+          "socket": 1
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 4950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 4050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "heavy-block",
+            "velocity_y": 0,
+            "x": 5460,
+            "y": 750,
+            "z": 4460
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 6500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 3021,
+        "pending_inputs": 0,
+        "playback": {
+          "active": false,
+          "complete": false,
+          "paused": false,
+          "position": 0,
+          "total": 0
+        },
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 175,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 15,
+        "session_tick": 175,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ],
+        "surface": {
+          "size": [
+            960,
+            540
+          ],
+          "suspended": false
+        }
+      }
+    },
+    "block-intermediate-solution-plate-a-webgl2.png": {
+      "type": "capture",
+      "identity": {
+        "instance_id": "adventure-browser-player",
+        "session_generation": 15,
+        "capture_id": 36,
+        "observed_frame": 3072,
+        "state_revision": 3104,
+        "width": 960,
+        "height": 540
+      },
+      "width": 960,
+      "height": 540,
+      "format": "png",
+      "artifact": "block-intermediate-solution-plate-a-webgl2.png",
+      "checksum": "14238cbeffe19146",
+      "state": {
+        "active_character": "jumper",
+        "adapter": "AdapterInfo { name: \"ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)\", vendor: 4203, device: 0, device_type: IntegratedGpu, device_pci_bus_id: \"\", driver: \"\", driver_info: \"WebGL 2.0 (OpenGL ES 3.0 Chromium)\", backend: Gl, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: None, limit_bucket: None }",
+        "block": {
+          "last_rejection": null,
+          "moves": 1,
+          "socket": 1
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 4950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 4050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "high-ledge",
+            "velocity_y": 0,
+            "x": 5460,
+            "y": 2000,
+            "z": 2000
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 6500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [],
+          "pressed": [],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 3072,
+        "pending_inputs": 0,
+        "playback": {
+          "active": false,
+          "complete": false,
+          "paused": false,
+          "position": 0,
+          "total": 0
+        },
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": true,
+            "state": "open_plate"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [
+                "jumper"
+              ],
+              "pressed": true
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 226,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 15,
+        "session_tick": 226,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ],
+        "surface": {
+          "size": [
+            960,
+            540
+          ],
+          "suspended": false
+        }
+      }
+    },
+    "block-rejected-webgl2.png": {
+      "type": "capture",
+      "identity": {
+        "instance_id": "adventure-browser-player",
+        "session_generation": 11,
+        "capture_id": 23,
+        "observed_frame": 1696,
+        "state_revision": 1720,
+        "width": 960,
+        "height": 540
+      },
+      "width": 960,
+      "height": 540,
+      "format": "png",
+      "artifact": "block-rejected-webgl2.png",
+      "checksum": "882c847ec3f93a85",
+      "state": {
+        "active_character": "jumper",
+        "adapter": "AdapterInfo { name: \"ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)\", vendor: 4203, device: 0, device_type: IntegratedGpu, device_pci_bus_id: \"\", driver: \"\", driver_info: \"WebGL 2.0 (OpenGL ES 3.0 Chromium)\", backend: Gl, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: None, limit_bucket: None }",
+        "block": {
+          "last_rejection": "wrong_character",
+          "moves": 0,
+          "socket": 0
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 5950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 5050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1500,
+            "y": 0,
+            "z": 6440
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 3500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [
+            "up",
+            "interact"
+          ],
+          "pressed": [
+            "up",
+            "interact"
+          ],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 1696,
+        "pending_inputs": 0,
+        "playback": {
+          "active": false,
+          "complete": false,
+          "paused": false,
+          "position": 0,
+          "total": 0
+        },
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 1,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 11,
+        "session_tick": 1,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ],
+        "surface": {
+          "size": [
+            960,
+            540
+          ],
+          "suspended": false
+        }
+      }
+    },
+    "block-rejected-native.png": {
+      "artifact": "block-rejected-native.png",
+      "checksum": "882c847ec3f93a85",
+      "format": "png",
+      "height": 540,
+      "identity": {
+        "capture_id": 20,
+        "height": 540,
+        "instance_id": "adventure-player-test-39741",
+        "observed_frame": 1670,
+        "session_generation": 8,
+        "state_revision": 1166,
+        "width": 960
+      },
+      "type": "capture",
+      "width": 960,
+      "state": {
+        "active_character": "jumper",
+        "block": {
+          "last_rejection": "wrong_character",
+          "moves": 0,
+          "socket": 0
+        },
+        "block_geometry": {
+          "max": {
+            "x": 5950,
+            "y": 750,
+            "z": 5950
+          },
+          "min": {
+            "x": 5050,
+            "y": 0,
+            "z": 5050
+          },
+          "name": "heavy-block"
+        },
+        "blocked_actions": [],
+        "characters": {
+          "jumper": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 1500,
+            "y": 0,
+            "z": 6440
+          },
+          "strong": {
+            "collisions": {
+              "ceiling": null,
+              "landed": null,
+              "x": null,
+              "z": null
+            },
+            "grounded": true,
+            "support": "floor",
+            "velocity_y": 0,
+            "x": 3500,
+            "y": 0,
+            "z": 6500
+          }
+        },
+        "consumed_input": {
+          "active": [
+            "up",
+            "interact"
+          ],
+          "pressed": [
+            "up",
+            "interact"
+          ],
+          "released": []
+        },
+        "fixture": "adventure-v3",
+        "frame": 1670,
+        "pending_inputs": 0,
+        "puzzle": {
+          "complete": false,
+          "door": {
+            "open": false,
+            "state": "closed"
+          },
+          "exit": {
+            "jumper": false,
+            "strong": false
+          },
+          "plates": [
+            {
+              "id": "A",
+              "occupants": [],
+              "pressed": false
+            },
+            {
+              "id": "B",
+              "occupants": [],
+              "pressed": false
+            }
+          ]
+        },
+        "puzzle_geometry": {
+          "door": {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 6000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 4000
+            },
+            "name": "door"
+          },
+          "exit": {
+            "max_x": 12000,
+            "max_z": 3000,
+            "min_x": 10000,
+            "min_z": 1000,
+            "y": 0
+          },
+          "plates": [
+            {
+              "max_x": 5800,
+              "max_z": 2300,
+              "min_x": 5200,
+              "min_z": 1700,
+              "y": 2000
+            },
+            {
+              "max_x": 10300,
+              "max_z": 5300,
+              "min_x": 9700,
+              "min_z": 4700,
+              "y": 0
+            }
+          ]
+        },
+        "recorded_ticks": 1,
+        "recording_truncated": false,
+        "recording_valid": true,
+        "recovery_message_ticks": 0,
+        "room": 2,
+        "session_generation": 8,
+        "session_tick": 1,
+        "solids": [
+          {
+            "max": {
+              "x": 12000,
+              "y": 0,
+              "z": 8000
+            },
+            "min": {
+              "x": 0,
+              "y": -1000,
+              "z": 0
+            },
+            "name": "floor"
+          },
+          {
+            "max": {
+              "x": 0,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": -200,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-west"
+          },
+          {
+            "max": {
+              "x": 12200,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 12000,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-east"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 0
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": -200
+            },
+            "name": "wall-north"
+          },
+          {
+            "max": {
+              "x": 12000,
+              "y": 4000,
+              "z": 8200
+            },
+            "min": {
+              "x": 0,
+              "y": 0,
+              "z": 8000
+            },
+            "name": "wall-south"
+          },
+          {
+            "max": {
+              "x": 7000,
+              "y": 2000,
+              "z": 3000
+            },
+            "min": {
+              "x": 4000,
+              "y": 0,
+              "z": 1000
+            },
+            "name": "high-ledge"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 4000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 0
+            },
+            "name": "partition-north"
+          },
+          {
+            "max": {
+              "x": 8000,
+              "y": 4000,
+              "z": 8000
+            },
+            "min": {
+              "x": 7000,
+              "y": 0,
+              "z": 6000
+            },
+            "name": "partition-south"
+          }
+        ]
+      }
+    }
+  },
+  "webgpu": {
+    "checks": 177,
+    "status": "passed",
+    "adapter": "AdapterInfo { name: \"\", vendor: 0, device: 0, device_type: Other, device_pci_bus_id: \"\", driver: \"\", driver_info: \"\", backend: BrowserWebGpu, subgroup_min_size: 32, subgroup_max_size: 32, transient_saves_memory: None, limit_bucket: None }"
+  },
+  "webgl2": {
+    "checks": 177,
+    "status": "passed",
+    "adapter": "AdapterInfo { name: \"ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)\", vendor: 4203, device: 0, device_type: IntegratedGpu, device_pci_bus_id: \"\", driver: \"\", driver_info: \"WebGL 2.0 (OpenGL ES 3.0 Chromium)\", backend: Gl, subgroup_min_size: 4, subgroup_max_size: 128, transient_saves_memory: None, limit_bucket: None }"
+  },
+  "source_note": "Gameplay revision above; evidence harness additionally captures rejection and matches owned discovery instance."
+}

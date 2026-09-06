@@ -181,6 +181,10 @@ try {
  check(state().puzzle.door.state==='closed','door closes after obstructing body clears');
  await capture('puzzle-cleared');player.pause();
  // Room 2 is selected explicitly until progression is implemented.
+ player.select_room(2); player.resume();
+ player.set_key('KeyE',true,false); player.set_key('ArrowUp',true,false); tick();
+ check(state().block.last_rejection==='wrong_character'&&state().block.socket===0,'Jumper push visibly rejected without moving block');
+ await capture('block-rejected'); player.pause();
  for (const routeName of ['block-solution.json','block-intermediate-solution.json']) {
    player.select_room(2); player.resume();
    check(state().room===2,'practice selector constructs room 2');
