@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
     if sys.platform not in ('darwin', 'linux'):
         parser.error('process RSS measurement supports macOS and Linux; run the Rust example directly elsewhere')
-    build = ['cargo', 'build', '-p', 'titan', '--example', 'swarm', '--message-format=json']
+    build = ['cargo', 'build', '--locked', '-p', 'titan', '--example', 'swarm', '--message-format=json']
     if not args.debug:
         build.append('--release')
     result = processes.run(build, phase="build", cwd=REPO, check=True, stdout=subprocess.PIPE, text=True)

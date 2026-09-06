@@ -26,7 +26,7 @@ def metadata_bootstrap():
     if timeout <= 0:
         raise RuntimeError("build phase deadline expired before cargo metadata")
     environment = dict(os.environ, TITAN_ACCEPTANCE_DEADLINE_EPOCH=str(time.time() + timeout - min(5, timeout / 2)))
-    command = ["cargo", "metadata", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"]
+    command = ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"]
     process = subprocess.Popen(command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
                                start_new_session=True, env=environment)
     previous_handler = signal.getsignal(signal.SIGTERM)

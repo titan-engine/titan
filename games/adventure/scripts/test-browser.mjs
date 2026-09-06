@@ -10,7 +10,7 @@ import { execFile } from '../../../scripts/acceptance_process.mjs';
 const script = fileURLToPath(import.meta.url);
 const root = resolve(dirname(script), '..');
 if (!process.argv.includes('--wasm-worker')) {
-  const metadata = JSON.parse(await execFile('cargo', ['metadata', '--format-version', '1', '--no-deps'],
+  const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--format-version', '1', '--no-deps'],
     { phase: 'build', cwd: root, encoding: 'utf8' }));
   const directory = await mkdtemp(resolve(tmpdir(), 'adventure-agreement-'));
   try {

@@ -13,7 +13,7 @@ if (process.argv[2] === '--execute') {
 } else {
   const repo = fileURLToPath(new URL('../', import.meta.url));
   const options = { cwd: repo, encoding: 'utf8', phase: 'build' };
-  const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], options));
+  const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], options));
   await execFile('cargo', ['build', '--locked', '-p', 'titan', '--example', 'render_3d', '--no-default-features', '--target', 'wasm32-unknown-unknown'], options);
   const wasm = resolve(metadata.target_directory, 'wasm32-unknown-unknown/debug/examples/render_3d.wasm');
   process.stdout.write(await execFile(process.execPath, [fileURLToPath(import.meta.url), '--execute', wasm], { cwd: repo, encoding: 'utf8' }));

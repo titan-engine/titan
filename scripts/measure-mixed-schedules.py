@@ -110,7 +110,7 @@ def main():
     if len(set(args.threads)) != len(args.threads):
         parser.error('--threads values must be unique')
 
-    build = ['cargo', 'build', '-p', 'titan', '--example', 'mixed_schedule', '--message-format=json']
+    build = ['cargo', 'build', '--locked', '-p', 'titan', '--example', 'mixed_schedule', '--message-format=json']
     if not args.debug:
         build.append('--release')
     result = processes.run(build, phase='build', cwd=REPO, check=True,

@@ -5,7 +5,7 @@ import { execFile } from './acceptance_process.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 const repo = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], { phase: 'build', cwd: repo, encoding: 'utf8' }));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], { phase: 'build', cwd: repo, encoding: 'utf8' }));
 const require = createRequire(import.meta.url);
 const { BrowserRuntime } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 let sequence = 0;

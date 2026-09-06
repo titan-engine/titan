@@ -35,7 +35,7 @@ for the separately invoked WASM tests. Games retain small entrypoints and their
 own browser pages, binding names, application names and bundle IDs.
 
 - `cargo_metadata(root)` returns resolved Cargo metadata and respects
-  `CARGO_TARGET_DIR`.
+  `CARGO_TARGET_DIR`. Metadata, browser builds and native bundles use `--locked`.
 - `browser(root, metadata, package_name=..., out_name=...)` builds the named
   package's single cdylib for release WASM, resolves the matching wasm-bindgen
   CLI, and writes web bindings to `root/web/inspector/pkg` and Node bindings to
@@ -60,6 +60,14 @@ source or fixed checkout location is needed. More than one resolved package
 with a required name is rejected explicitly rather than choosing an arbitrary
 version. A game with another web layout can call the bindings tool itself;
 this is a narrow convention, not a project generator or general build CLI.
+
+Verification requires an existing, current project `Cargo.lock` and fails with
+Cargo's lockfile diagnostic when it is missing or stale. No helper retries with
+unlocked resolution. After configuring a new copied project, explicitly run
+`cargo generate-lockfile` in that project. For deliberate dependency changes,
+use `cargo update -p PACKAGE` or regenerate the whole graph intentionally,
+review and commit the resulting lockfile, then rerun locked verification. The
+workspace, starter and games keep independent lockfiles.
 
 Browser builds reuse a CLI under the game's Cargo target directory, the Titan
 checkout's default target directory, or PATH only if its reported version
