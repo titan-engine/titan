@@ -100,6 +100,11 @@ try {
  check(state().characters.strong.x===3680,'release and repress restores movement after pause');
  player.set_key('KeyR',true,false);tick();player.set_key('KeyR',false,false);
  check(state().characters.jumper.x===1500&&state().characters.strong.x===3500&&state().active_character==='jumper','R reconstructs both character starts');
+ player.set_key('KeyD',false,false);player.set_key('ArrowUp',true,false);tick();player.set_key('ArrowUp',false,false);
+ const afterRestart=state();const restartRecording=player.recording();
+ player.load_recording(restartRecording);
+ check((await request({type:'step',frames:1})).status==='success'&&state().playback.active&&state().playback.position===1,'inspector step retains replay after recorded restart');
+ check((await request({type:'step',frames:1})).status==='success'&&state().playback.complete&&JSON.stringify(state().characters)===JSON.stringify(afterRestart.characters),'inspector replay continues after recorded restart and matches live state');
  player.pause();
  const pending=request({type:'capture'});const overlapping=request({type:'capture'});player.restart();
  const busy=await overlapping;check(busy.status==='failure'&&busy.error.code==='busy','overlapping capture is bounded busy');

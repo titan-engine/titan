@@ -15,6 +15,9 @@ not a software reference or an image generated separately from the game.
 - Package Rust tests cover axial/diagonal/opposing movement, bounds, inactive
   stationarity, input switching and repeat edges, restart precedence, recording
   limits and transactional rejection, physical aliases and focus/resume handling.
+  Inspector stepping across a recorded restart retains playback; mixed step
+  chunks, local stepping and timed playback agree. Explicit restart still exits
+  replay, and both reset paths invalidate old capture identities.
 - `scripts/test-control.py` drives the authenticated native server through the
   Titan CLI. `scripts/test-browser.mjs` runs a fresh native trace and compares
   every complete state against actual WASM executing the same 11-tick fixture.
