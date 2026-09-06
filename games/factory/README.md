@@ -4,7 +4,8 @@ A standalone 12×8 factory construction game using public Titan crates. Native,
 headless and WASM players share `src/game.rs`. This implements the construction
 foundation of [#89](https://github.com/titan-engine/titan/issues/89) and deterministic
 transport in [#90](https://github.com/titan-engine/titan/issues/90), and the production
-objective in [#91](https://github.com/titan-engine/titan/issues/91), following the
+objective in [#91](https://github.com/titan-engine/titan/issues/91), and the player
+interface in [#92](https://github.com/titan-engine/titan/issues/92), following the
 [approved factory rules](../../docs/factory-slice.md). Build an extractor on the ore
 deposit, connect it to a processor, then route plates to delivery. Ten plates
 complete the challenge. Normal runs start empty; seeding is only a test fixture.
@@ -41,13 +42,68 @@ CLI and WASM target when needed. No frontend package manager is required.
 
 ## Player controls
 
-Click a tile to place the selected structure; right click to inspect. Keys 1, 2,
-and 3 select conveyor, extractor, and processor. Q changes the placement facing,
-E rotates the hovered structure, and X removes it. WASD/arrows pan; the mouse
-wheel zooms. R restarts (Escape closes the native window). The native title bar
-shows the selected tool and operation feedback. The browser also provides
-buttons for tile actions, pan, zoom, pause/resume and restart. Construction works
-while paused. Browser selection and operation results appear beside the canvas.
+Choose a structure from the build palette, then point at a tile to preview its
+placement and output facing. Place an extractor on the brown deposit at (1,3),
+connect conveyors to a processor, and connect its plate output to the fixed green
+delivery at (10,3). Cyan marks are accepting input faces; yellow arrows are
+outputs. Processors accept ore at their rear; delivery accepts plates from west.
+
+Click to apply the selected tool; right click to select a tile for live inspection.
+Keys 1, 2 and 3 choose conveyor, extractor and processor. Q changes placement
+facing. The Rotate tool previews the next facing before applying it; E rotates
+the hovered structure. X removes the hovered structure, and the Remove tool
+previews the exact ore/plate discard counts. Removing in-process ore counts as a
+discard even when processing has finished. Total discards remain visible until
+restart. Placement never replaces an occupied tile.
+
+Both players provide pause/resume, a single-tick step, restart, a build palette,
+objective progress and live selected-tile details. Construction and inspection
+work while paused. WASD/arrows pan and the wheel zooms. Restart restores the
+empty challenge, initial camera/tool and cleared input. Completed runs freeze
+at ten deliveries; inspection and restart remain available.
+
+The inspection panel explains the current machine work, each slot's contents and
+capacity, recipe progress, output connection and a concrete repair suggestion.
+These descriptions also come from read-only `interface`, `tile` and `state`
+queries; the hosts do not infer a second version of transport rules. A `preview`
+query accepts integer `x`, `y` and `action` (`place`, `rotate`, `remove`, `inspect`).
+Querying or rendering never advances the factory or records a construction action.
+
+| Feedback | What to check or repair |
+| --- | --- |
+| Working | Extraction or processing is progressing; watch the bounded work counter. |
+| Starved | Feed ore into the processor's rear input; inspect the upstream output. |
+| Output blocked | An output item or finished batch is waiting; inspect its connection. |
+| Disconnected | Build a receiving neighbor inside the grid, or rotate the output toward one. |
+| Wrong facing | The output touches a non-input face; rotate the receiving structure or change the route. |
+| Wrong item type | Process ore before delivery; processors receive ore, not plates. |
+| Full destination | The receiving slot is occupied. Follow the backed-up line to its blocked end. Snapshot capacity does not free until the following tick. |
+| Contended | Another eligible source wins the same empty slot in fixed top-to-bottom, left-to-right source order. Reroute a feed to avoid competition. |
+
+An empty output is distinct from a stalled item. Connection geometry can still
+warn about a missing neighbor before the first item arrives. A full line retains
+all its items indefinitely; fixing its actual blocked end allows it to resume.
+
+Native keys 4, 5 and 6 choose Inspect, Rotate and Remove. Tab moves focus among
+palette and run controls; Enter activates the focused button. Space pauses or
+resumes and period steps one tick while paused. The native window has an 800×560
+logical interface and a minimum 1000×700 window; the game viewport retains its
+384×256 coordinate system. UI clicks are consumed before world hit testing.
+Browser shortcuts apply while the canvas has focus; normal buttons retain their
+standard keyboard activation. Both hosts clear held input across pause/restart
+and completion. Panning while paused changes only the camera.
+
+Run `cargo run --bin play -- --test-interface` for bounded native interface
+acceptance. It exercises palette hit exclusion, keyboard focus, a wrong-facing
+route and its repair, controlled stepping to completion at tick 1269, completion
+freeze and restart. It then presents a paused broken line for inspection; use
+`--frames N` after the fixture flag to change the bounded presentation count.
+After building and serving WASM, open
+[interface acceptance](http://localhost:8080/play/test-interface.html). It drives
+the actual DOM controls and GPU player, diagnoses and repairs five route failure
+classes, and checks pause/step, repeats across reset, scrolled-canvas pointer
+mapping and completion. The dedicated fixture hook exists only with `?test=1`;
+it is absent from normal play. See [runtime evidence](evidence/README.md).
 
 For bounded native GPU acceptance, run `cargo run --bin play -- --test-construction`.
 It places three kinds through physical-to-logical pointer mapping, rotates,
@@ -137,8 +193,8 @@ Build the reference route at tick zero: extractor (1,3), east conveyors at
 (2,3)–(4,3), east processor (5,3), east conveyors at (6,3)–(9,3). All face east.
 The first ore appears at tick 60, processing starts at 64, the first plate appears
 at 184 and arrives at 189. Further deliveries are 120 ticks apart; the tenth
-completes at tick 1269. Paused browser construction allows an exact tick-zero
-start; native play can build while time advances without changing machine rates.
+completes at tick 1269. Both hosts allow construction while paused or while time advances, without
+changing machine rates. Acceptance fixtures build at tick zero for exact traces.
 
 Transfer snapshot and simultaneous commit precede completion, then production.
 The tenth delivery skips that tick's production and freezes the game tick,
@@ -205,10 +261,12 @@ use sanitized CLI output as evidence. SIGTERM/Ctrl-C removes registration.
 - `src/game/transport.rs`: fixed-tick snapshot transport, slots, item accounting,
   stall reasons and named test fixtures.
 - `src/game/production.rs`: extraction/processing phases and bounded production fixtures.
+- `src/game/interface.rs`: immutable player explanations and prospective edit previews.
 - `src/main.rs`: headless sequence execution and native control server.
 - `src/bin/play.rs`: native window/pointer/keyboard adapter.
 - `src/browser.rs`, `web/play/`: actual-WASM player and browser controls.
 - `tests/construction.json`: shared native/WASM construction fixture.
+- `scripts/interface-acceptance.mjs`: independent expected diagnoses and repairs, plus immutable query/capture checks.
 - `scripts/production-acceptance.mjs`: independent production traces and accounting.
 - `scripts/transport-acceptance.mjs`: independent transport traces and full
   native/actual-WASM parity, called by `scripts/test-browser.mjs`.
