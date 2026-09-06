@@ -1,0 +1,14 @@
+[
+  {"op":"place","kind":"extractor","x":1,"y":3,"facing":"E"},
+  {"op":"place","kind":"conveyor","x":2,"y":3,"facing":"E"},
+  {"op":"place","kind":"processor","x":5,"y":3,"facing":"E"},
+  {"op":"place","kind":"conveyor","x":2,"y":3,"facing":"N"},
+  {"op":"place","kind":"extractor","x":0,"y":0,"facing":"E"},
+  {"op":"place","kind":"conveyor","x":-1,"y":0,"facing":"E"},
+  {"op":"rotate","x":10,"y":3},
+  {"op":"remove","x":10,"y":3},
+  {"op":"rotate","x":2,"y":3},
+  {"op":"inspect","x":2,"y":3},
+  {"op":"remove","x":5,"y":3},
+  {"op":"advance","ticks":60}
+]

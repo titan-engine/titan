@@ -1,0 +1,6 @@
+/target/
+/web/play/pkg/
+/web/inspector/pkg/
+/scripts/__pycache__/
+/scripts/acceptance_process.mjs
+/web/shared/input.mjs

@@ -65,3 +65,5 @@ for current instructions; measurements and environments describe specific runs.
 - [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
 
 - [Inspection failure repair evidence](inspection-repair/README.md).
+
+The [factory construction package](../games/factory/README.md) implements the initial grid-building foundation of the [factory slice](factory-slice.md).

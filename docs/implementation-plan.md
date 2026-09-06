@@ -110,3 +110,5 @@ cargo test -p titan-render-wgpu --test composition -- --ignored # native GPU
 For actual browser GPU acceptance, serve the collection-room `web/` directory
 and open `/play/test.html?backend=webgpu` and `?backend=webgl2`. Each must report
 its own pass; Node execution is CPU/WASM evidence only.
+
+Factory construction package gates and player checks are documented in its [README](../games/factory/README.md#source-and-checks). Run them for factory changes alongside the workspace gates above.

@@ -152,6 +152,13 @@ jobs:
           cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/arena/scripts/test-control.py
 
+      - name: Check and drive factory construction
+        run: |
+          cargo fmt --manifest-path games/factory/Cargo.toml --all --check
+          cargo test --manifest-path games/factory/Cargo.toml --all-targets
+          cargo clippy --manifest-path games/factory/Cargo.toml --all-targets --all-features -- -D warnings
+          python3 games/factory/scripts/test-control.py
+
       - name: Verify real acceptance failure retention and cleanup
         run: python3 scripts/test-acceptance-failure-integration.py
 
@@ -254,6 +261,13 @@ jobs:
         run: |
           python3 scripts/test-starter.py --browser
 
+      - name: Build factory WASM and exercise construction
+        run: |
+          python3 games/factory/scripts/build-browser.py
+          node games/factory/scripts/test-browser.mjs
+          node --test games/factory/web/inspector/*.test.mjs
+          node --test games/factory/web/play/*.test.mjs
+
       - name: Build arena WASM and exercise its control loop
         run: |
           cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
@@ -324,6 +338,11 @@ jobs:
             ${{ runner.temp }}/titan-composition-evidence/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Exercise native factory construction player
+        run: |
+          cargo test --manifest-path games/factory/Cargo.toml --test render -- --ignored
+          cargo run --manifest-path games/factory/Cargo.toml --bin play -- --test-construction
 
       - name: Inspect and replay the actual native arena player
         run: python3 games/arena/scripts/test-live-player.py

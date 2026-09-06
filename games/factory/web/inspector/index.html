@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Titan · Browser inspector</title>
+  <link rel="stylesheet" href="./inspector.css">
+  <script type="module" src="./inspector.js"></script>
+</head>
+<body>
+<header><div><p class="eyebrow">TITAN / DEVELOPMENT TOOLS</p><h1>Browser inspector</h1><a href="../play/">Play the game</a><p>Inspect and control the factory construction scene through the shared protocol.</p></div><span id="mode" class="badge">Loading WebAssembly…</span></header>
+<main>
+  <section class="toolbar" aria-label="Runtime controls"><div><strong id="runtime-status">Starting runtime</strong><p id="session-note">The runtime starts in read-only mode.</p></div><div class="actions"><button id="refresh" disabled>Refresh</button><button id="enable-controls" disabled>Enable controls</button></div></section>
+  <p id="error" role="alert" hidden></p>
+  <div class="grid">
+    <section><div class="section-title"><h2>Scene</h2><button id="capture" disabled>Capture</button></div><div class="viewport"><img id="scene" alt="Factory software-rendered scene" hidden><p id="capture-placeholder">Capture will appear here.</p></div><p id="capture-info" class="muted">Captures are produced by the runtime.</p></section>
+    <section><h2>Runtime</h2><dl id="status-fields"></dl><h3>Advertised operations</h3><p id="capabilities" class="muted">Waiting for capabilities…</p><details><summary>Last protocol response</summary><pre id="last-response"></pre></details></section>
+    <section><div class="section-title"><h2>Entities</h2><span id="entity-count" class="muted"></span></div><div id="entities" class="entity-list"></div><button id="more-entities" hidden>Load more</button></section>
+    <section><h2>Entity details</h2><p id="entity-placeholder" class="muted">Select an entity to inspect its components.</p><pre id="entity-details"></pre><form id="mutation-form" hidden><h3>Set a reflected field</h3><label>Component<select id="mutation-component"></select></label><label>Field<input id="mutation-field" required placeholder="field_name"></label><label>Value (JSON)<input id="mutation-value" required value="0"></label><button>Apply field</button></form></section>
+    <section id="time-panel" hidden><h2>Controlled time</h2><form id="step-form" class="inline-form"><label>Exact ticks<input id="ticks" type="number" min="1" max="10000" step="1" value="1" required></label><button>Step</button></form></section>
+    <section id="input-panel" hidden><h2>Logical input</h2><form id="input-form"><label>Target frame<input id="input-frame" type="number" min="1" step="1" value="1" required></label><label>Actions (JSON)<textarea id="input-actions" rows="4" spellcheck="false">{"right":{"kind":"button","value":true}}</textarea></label><button>Queue input</button></form><p class="muted">Actions: up, down, left, right. Queue input before stepping its frame.</p></section>
+    <section class="wide"><h2>Game commands</h2><p id="commands-note" class="muted">Commands are shown when advertised by the runtime.</p><div id="commands"></div></section>
+  </div>
+</main>
+<footer>Local WebAssembly runtime · shared Titan protocol · no native relay</footer>
+</body>
+</html>

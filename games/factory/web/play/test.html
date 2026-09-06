@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Factory browser construction acceptance</title>
+<style>body{background:#101519;color:#e6edf0;font:16px system-ui}iframe{width:1100px;height:1050px;border:0}pre{white-space:pre-wrap}</style>
+<h1>Actual WASM and GPU construction acceptance</h1><pre id="result">Running…</pre>
+<iframe id="player" src="./?test=1"></iframe>
+<script type="module">
+const frame = document.querySelector('iframe');
+const result = document.querySelector('#result');
+const assert = (condition,message) => { if (!condition) throw new Error(message); };
+const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
+try {
+  await new Promise(resolve => frame.addEventListener('load',resolve,{once:true}));
+  const win = frame.contentWindow, doc = win.document;
+  doc.querySelector('#start').click();
+  for (let i=0;i<300 && !win.titanPlayerTest?.status();i++) await delay(100);
+  const api = win.titanPlayerTest;
+  assert(api?.status(),'GPU player initialization failed: '+doc.querySelector('#error').textContent);
+  api.step(0);
+  doc.querySelector('#restart').click();
+  const initial = api.status();
+  assert(initial.structures.length===1,'initial fixed delivery');
+  const canvas = doc.querySelector('canvas');
+  function clickLogical(x,y,button=0) {
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new win.PointerEvent('pointerdown',{bubbles:true,button,clientX:rect.left+x/384*rect.width,clientY:rect.top+y/256*rect.height}));
+  }
+  doc.querySelector('[data-kind="extractor"]').click(); clickLogical(48,112);
+  doc.querySelector('[data-kind="conveyor"]').click(); clickLogical(80,112);
+  doc.querySelector('[data-kind="processor"]').click(); clickLogical(112,112);
+  let state = api.status();
+  assert(state.structures.length===4,'pointer construction builds all three kinds');
+  clickLogical(112,112); assert(api.status().structures.length===4,'occupied placement rejected');
+  assert(doc.querySelector('#result').textContent.length>0,'visible placement feedback');
+  doc.querySelector('[data-mode="rotate"]').click(); clickLogical(80,112);
+  assert(api.status().structures.find(s=>s.x===2&&s.y===3).facing==='S','rotate selected tile');
+  doc.querySelector('[data-mode="remove"]').click(); clickLogical(80,112);
+  assert(api.status().structures.length===3,'remove selected tile');
+  clickLogical(336,112); assert(api.status().structures.length===3,'fixed delivery cannot be removed');
+  doc.querySelector('[data-mode="inspect"]').click(); clickLogical(48,112);
+  assert(doc.querySelector('#result').textContent.includes('extractor'),'inspect visible feedback');
+  api.camera(16,8,1.5);
+  state=api.status(); assert(state.camera.zoom===1.5,'camera zoom accepted');
+  assert(state.camera.x!==initial.camera.x || state.camera.y!==initial.camera.y,'camera pan accepted');
+  // Invert the documented camera transform to address a known tile after zoom/pan.
+  const cam=state.camera;
+  const x=(6*32+16-192)*cam.zoom+192+cam.x;
+  const y=(4*32+16-128)*cam.zoom+128+cam.y;
+  canvas.style.width='720px'; canvas.style.height='420px'; api.resize();
+  doc.querySelector('[data-kind="conveyor"]').click(); clickLogical(x,y);
+  assert(api.status().structures.some(s=>s.x===6&&s.y===4),'camera + CSS resize pointer maps to intended tile');
+  api.step(1,'right'); assert(api.status().camera.x!==cam.x,'keyboard camera pan');
+  doc.querySelector('#restart').click();
+  state=api.status(); assert(state.structures.length===1 && state.tick===0,'restart world');
+  assert(JSON.stringify(state.camera)===JSON.stringify(initial.camera),'restart camera');
+  assert(state.selection.kind==='conveyor' && state.selection.facing==='E','restart construction selection');
+  api.step(1); assert(JSON.stringify(api.status().camera)===JSON.stringify(initial.camera),'restart clears held input');
+  result.textContent=JSON.stringify({ok:true,checks:['GPU render','three tools','occupied rejection','rotate','remove','fixed delivery','inspect','camera pan/zoom','CSS resize mapping','keyboard pan','restart clears world/camera/input'],state:api.status()},null,2);
+  document.title='PASS — Factory browser construction';
+} catch(error) { result.textContent=error.stack??String(error);document.title='FAIL — Factory browser construction'; }
+</script></html>
