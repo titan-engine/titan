@@ -74,8 +74,8 @@ cache conditions; the three runs are not independent machine/environment samples
 Setup timing includes ordinary construction, warmup and checks after each setup
 operation. Separate inspection timing covers 20 state serializations, JSON parses
 and equality checks; separate software capture timing covers ten 384×256 renders
-and image checksum computations. Those captures are also checked for identical
-pixels, and state is unchanged after all read-only inspection/capture work.
+and image checksum computations. Those captures are checked for matching software capture checksums, and state
+is unchanged after all read-only inspection/capture work.
 
 The report records build duration and each entire probe subprocess duration too.
 The latter includes setup, correctness checks and comparisons outside the timed
