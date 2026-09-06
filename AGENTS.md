@@ -12,7 +12,10 @@ isolated worktree plus a `codex/` branch.
 
 Use subagents for substantial independent implementation and review. Keep
 coherent local commits, submit reviewable batches through PRs, and continue
-independent Ready work while CI runs. Never push directly to main or bypass
+independent Ready work and eligible dependent stack layers while review, CI or
+the queue runs. Follow docs/workflow.md for starting from available unmerged code,
+true blocking prerequisites, coordinated ownership and necessary upstack rebases;
+keep dependency links truthful. Never push directly to main or bypass
 its required checks. Enqueue work within the issue scope autonomously after independent review
 and green PR CI; the required merge queue validates integration before merging.
 Do not refresh branches solely because main advanced. Review carry-forward and
