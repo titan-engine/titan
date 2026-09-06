@@ -68,7 +68,9 @@ its dependencies through native GitHub relationships.
 Ready is the queue; it does not guarantee that prerequisites are complete or that
 a newly filed bug has been fully triaged. The Ready view excludes issues GitHub
 marks blocked. Before claiming, check that the work is concrete, its acceptance
-criteria and scope are clear, and its prerequisites are satisfied. Fill missing
+criteria and scope are clear, and its prerequisites are satisfied for the work being started (see
+[dependent implementation](#overlapping-dependent-implementation) for available
+unmerged code). Fill missing
 details through triage, without a separate approval step. Priority orders work.
 Broad requirements and historical design discussions remain context; turn selected
 work into bounded issues under the [planning and issue intake policy](#planning-and-issue-intake).
@@ -96,11 +98,14 @@ Set In review explicitly when the linked implementation is ready.
 ## Maintainer-run agent implementation loop
 
 1. Read the issue, dependencies, relevant design docs and applicable skills.
-   Select a concrete, unblocked Ready issue with clear scope and checks.
+   Select concrete Ready work with clear scope and checks. Apply the
+   [dependent implementation rules](#overlapping-dependent-implementation) when
+   an implementation dependency is available in an unmerged layer.
    Claim Owner and set In progress before editing;
    coordinate claims through one integration owner to avoid simultaneous claims.
 2. Use an isolated worktree and a `codex/` branch for each independent change.
-   Keep two or three independent implementations active initially. Agree shared
+   Keep two or three independent implementations active initially; also advance
+   eligible dependent layers while lower layers are in review, CI or the queue. Agree shared
    interfaces before parallel work; avoid concurrent ownership of the same files.
 3. Commit coherent increments locally. Open a linked draft PR to expose work and
    dependencies; push reviewable batches rather than every small local edit.
@@ -191,26 +196,110 @@ Read the installed gh-stack skill for operations and its stack-design reference
 before creating a stack. Each layer must build and carry its relevant tests/docs.
 Keep independent work on separate branches/stacks, not artificial dependency chains.
 
+### Overlapping dependent implementation
+
+An implementation dependency can be available before its issue closes: a lower
+layer provides the code and an agreed interface that the next layer can build
+against. Start that dependent issue without waiting for the lower PR to merge
+when its scope and checks are concrete, the interface has been inspected and is
+settled enough to build on, and all other start prerequisites are satisfied.
+Review and CI may still be running on the lower layer. This permits overlapping
+implementation, not early integration or assuming that pending checks will pass.
+
+A true start prerequisite still blocks work: an unsettled contract, required
+runtime evidence or maintainer decision, or an issue-specific requirement that
+the prerequisite merge or complete first. For example, a consumer can use agreed
+types in an unmerged foundation; it cannot choose a persistence format while the
+format decision is outstanding, or start a rollout explicitly gated on a merged
+migration. Work on an independent Ready issue while those prerequisites remain.
+
+Keep native GitHub dependency links truthful until the dependency is resolved;
+never remove them to expose a card in the Ready view. A dependent issue may be
+excluded by that view even though implementation can start under these rules.
+Inspect its linked prerequisite directly, then record Owner and In progress for
+the dependent issue, including a short explanation of the available lower PR and
+agreed interface in its claim. Leave the lower issue's ownership and status to
+its owner. An integration owner coordinates the stack, shared interfaces and
+which owner may submit or rebase each branch. If another agent owns the lower
+layer, agree the base commit and handoff before starting; use isolated worktrees
+and never rebase or rewrite another owner's active branch without coordination.
+
+For example, one owner can build a two-layer inspection feature: protocol types
+in the foundation, then a CLI consumer. Each layer includes its own relevant
+tests and documentation. Start from current main in an isolated worktree; these
+commands illustrate a new stack, not operations on another owner's branches:
+
 ```sh
-git worktree add ../titan-example -b codex/example main
-# In the chosen worktree, for genuinely dependent layers:
-gh stack init codex/foundation
-gh stack add codex/integration
+git worktree add ../titan-inspection -b codex/inspection/protocol main
+cd ../titan-inspection
+gh stack init codex/inspection/protocol
+# Implement and validate protocol types; stage only this layer's files.
+git add <protocol-files>
+git commit -m "Add inspection protocol types"
+gh stack submit --auto --remote origin
+# Request independent review of the foundation; its CI can run concurrently.
+gh stack add codex/inspection/cli
+# Implement and validate the CLI against the agreed foundation, without waiting
+# for its PR to merge. Stage this layer's source, tests and documentation.
+git add <cli-files>
+git commit -m "Consume inspection protocol in CLI"
 gh stack submit --auto --remote origin
 gh stack view --json
-# Enqueue only the reviewed, green range within issue scope:
-gh stack merge <top-PR-number> --yes
 ```
 
-Stack creation commands above illustrate alternatives to a normal independent
-branch, not a requirement to stack every change. Use `gh stack` to rebase/sync
-stack branches and merge a stack; do not use `gh pr merge` for stacks. Never
-rewrite a branch another owner is editing without coordination. Ordinary PRs can
-use `gh pr merge <PR-number> --match-head-commit <reviewed-SHA>` after PR
-checks pass; this enqueues rather than bypasses integration. Do not use `--admin`.
-For stacks, `gh stack merge` queues the selected range and the queue chooses the
-merge method. Queued stack layers may land in separate groups; do not promise
-atomic landing of an entire stack.
+Replace angle-bracket placeholders with actual files or PR numbers. Submit
+coherent reviewable batches, edit the generated PR descriptions to explain each
+layer, and obtain an attributed independent review of each authored diff against
+its parent. Mark reviewed PRs ready with `gh pr ready <pr-number>` and retain full
+required checks on every layer and merge group. When only the foundation is
+reviewed and green, it alone is eligible; when both layers are reviewed and green,
+the range through the CLI is eligible. Confirm the selected range from
+`gh stack view --json` before enqueueing:
+
+```sh
+# Only after review, current checks and resolved discussions for every included PR:
+gh stack merge <highest-eligible-pr-number> --yes
+```
+
+The command includes every unmerged layer below the selected PR. The installed
+CLI resolves a bare number as a stack number before a PR number; check for that
+ambiguity and do not issue the command if it would select a wider range. Never
+include a draft, failing or unreviewed layer. Honor explicit review-before-merge
+requests by leaving the affected range open, without enqueueing. The queue
+chooses the merge method and may land layers in separate groups; stack landing
+is not promised to be atomic. Ordinary independent PRs use
+`gh pr merge <PR-number> --match-head-commit <reviewed-SHA>` after their checks
+pass. Never use `--admin` or bypass protections; use `gh stack merge` for stacks.
+
+### Lower-layer fixes and review carry-forward
+
+If foundation CI or review finds a defect, fix and commit it on the foundation
+branch. Continue upper-layer work only where the interface remains usable; an
+invalidated contract blocks dependent work until it is settled again. Coordinate
+a pause/handoff with affected owners before a necessary upstack rebase, with
+clean worktrees and saved old parent/head SHAs for each layer. From the corrected
+lower branch, the integration owner can run:
+
+```sh
+gh stack rebase --upstack --no-trunk --remote origin
+```
+
+This propagates the foundation change without refreshing from main. Compare each
+old and new authored range, for example with
+`git range-diff <old-parent>..<old-head> <new-parent>..<new-head>`, and inspect the
+lower-layer change for semantic interactions. Apply the attributed review
+carry-forward rules above: equivalent authored diffs alone do not prove an
+unchanged dependency contract. Independently review the foundation fix and any
+substantive upper changes or conflict resolutions; if equivalence or interactions
+are uncertain, obtain renewed review. Publish the coordinated result as a
+reviewable batch with `gh stack submit --auto --remote origin`, and require current
+checks for every affected PR before enqueueing. A failed lower layer prevents
+its entire dependent range from enqueueing even if upper checks passed earlier.
+
+Use `gh stack` for necessary stack rebase/sync operations. Do not rebase merely
+because main advanced, and avoid tiny repeated pushes that cancel useful CI.
+Queue CI tests integration with current main; completion still follows the exact
+merged-main verification policy above.
 
 The stack extension is needed only for dependent stacks. Install it explicitly
 when using that workflow; it is not a prerequisite for ordinary contributions.
