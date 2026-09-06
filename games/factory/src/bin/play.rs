@@ -46,6 +46,7 @@ mod native {
         cursor: Option<(f64, f64)>,
         feedback: String,
         test_transport: bool,
+        test_production: bool,
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,9 +54,11 @@ mod native {
         let mut limit = None;
         let mut test_construction = false;
         let mut test_transport = false;
+        let mut test_production = false;
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--test-transport" => test_transport = true,
+                "--test-production" => test_production = true,
                 "--test-construction" => {
                     test_construction = true;
                 }
@@ -71,14 +74,19 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--frames N] [--test-construction | --test-transport] \nWASD/arrows pan; wheel zoom; 1/2/3 conveyor/extractor/processor; Q facing; E rotate; X remove; click place; right click inspect; R restart; Escape exits.\n--frames exits after N presented GPU frames."
+                        "play [--frames N] [--test-construction | --test-transport | --test-production] \nWASD/arrows pan; wheel zoom; 1/2/3 conveyor/extractor/processor; Q facing; E rotate; X remove; click place; right click inspect; R restart; Escape exits.\n--frames exits after N presented GPU frames."
                     );
                     return Ok(());
                 }
                 _ => return Err(format!("unknown argument: {arg}").into()),
             }
         }
-        if test_transport && test_construction {
+        if [test_transport, test_construction, test_production]
+            .into_iter()
+            .filter(|v| *v)
+            .count()
+            > 1
+        {
             return Err("choose one acceptance fixture".into());
         }
         let mut app = if test_transport {
@@ -93,6 +101,10 @@ mod native {
         }
         if test_transport {
             limit = limit.or(Some(240));
+        }
+        if test_production {
+            build_production_route(&mut app)?;
+            limit = limit.or(Some(1500));
         }
         let input = game::InteractiveInput::for_app(&app);
         let mut player = Player {
@@ -109,6 +121,7 @@ mod native {
             cursor: None,
             feedback: String::new(),
             test_transport,
+            test_production,
         };
         EventLoop::new()?.run_app(&mut player)?;
         if let Some(error) = player.error {
@@ -242,6 +255,9 @@ mod native {
                     }
                     if key == KeyCode::KeyR && event.state == ElementState::Pressed && !event.repeat
                     {
+                        // Manual restart ends the scripted acceptance route.
+                        self.test_production = false;
+                        self.test_transport = false;
                         game::restart(&mut self.app);
                         self.held_keys.clear();
                         self.input = game::InteractiveInput::for_app(&self.app);
@@ -266,7 +282,7 @@ mod native {
                         .min(Duration::from_millis(250));
                     self.previous = now;
                     let tick = Duration::from_nanos(16_666_667);
-                    if self.test_transport {
+                    if self.test_transport || self.test_production {
                         // Deliberately hold each state for 30 presented frames so a
                         // reviewer can inspect movement around all four corners.
                         self.accumulated = Duration::ZERO;
@@ -279,7 +295,10 @@ mod native {
                         let status: serde_json::Value =
                             serde_json::from_str(&game::status(&self.app)).unwrap();
                         window.set_title(&format!(
-                            "Ore(1,3) → processor → 10 plates(10,3) | {} {} | {}",
+                            "Ore → processor → plates {}/10 | {} tick {} | {} {} | {}",
+                            status["delivered"],
+                            status["outcome"].as_str().unwrap_or(""),
+                            status["tick"],
                             status["selection"]["kind"].as_str().unwrap_or(""),
                             status["selection"]["facing"].as_str().unwrap_or(""),
                             self.feedback
@@ -298,6 +317,21 @@ mod native {
                         self.renderer.as_mut().unwrap().render(frame, assets)
                     })() {
                         Ok(true) => {
+                            if self.test_production {
+                                if let Err(error) = verify_production_frame(&self.app) {
+                                    self.error = Some(error);
+                                    event_loop.exit();
+                                    return;
+                                }
+                                if [0, 60, 64, 124, 184, 189, 1269].contains(&self.rendered) {
+                                    println!(
+                                        "{}",
+                                        serde_json::json!({"native_production_presented":true,"state":serde_json::from_str::<serde_json::Value>(&game::status(&self.app)).unwrap()})
+                                    );
+                                }
+                                self.input.tick(&mut self.app);
+                            }
+
                             if self.test_transport && self.rendered.is_multiple_of(30) {
                                 println!(
                                     "{}",
@@ -377,16 +411,70 @@ mod native {
                 return format!("Tile ({},{}) empty", value["x"], value["y"]);
             }
             return format!(
-                "{} ({},{}) {} inputs:{} output:{}",
+                "{} ({},{}) {} {} progress:{} remaining:{} slots:{}",
                 structure["kind"].as_str().unwrap_or(""),
                 value["x"],
                 value["y"],
                 structure["facing"].as_str().unwrap_or(""),
-                structure["inputs"],
-                structure["output"]
+                structure["machine_status"].as_str().unwrap_or(""),
+                structure["progress"],
+                structure["remaining"],
+                structure["slots"]
             );
         }
         text
+    }
+
+    // This route uses the same tool selection and pointer placement as a player.
+    fn build_production_route(app: &mut App) -> Result<(), String> {
+        for (kind, xs) in [
+            ("extractor", vec![1]),
+            ("processor", vec![5]),
+            ("conveyor", vec![2, 3, 4, 6, 7, 8, 9]),
+        ] {
+            game::player_command(
+                app,
+                &serde_json::json!({"op":"select","kind":kind}).to_string(),
+            )?;
+            for x in xs {
+                let (px, py) = logical_pointer(f64::from(x * 96 + 48), 336., 1152, 768).unwrap();
+                game::pointer(app, px, py, "place")?;
+            }
+        }
+        Ok(())
+    }
+
+    fn verify_production_frame(app: &App) -> Result<(), String> {
+        let state: serde_json::Value = serde_json::from_str(&game::status(app)).unwrap();
+        let tick = state["tick"].as_u64().unwrap();
+        let delivered = if tick < 189 {
+            0
+        } else {
+            1 + (tick - 189) / 120
+        };
+        if state["delivered"] != delivered || tick > 1269 || state["seeded"] != 0 {
+            return Err(format!("production delivery timing failed: {state}"));
+        }
+        if tick == 1269 && (state["outcome"] != "Complete" || state["completion_tick"] != 1269) {
+            return Err(format!("production completion failed: {state}"));
+        }
+        let resident = state["structures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                s["slots"]
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .filter(|v| !v.is_null())
+                    .count() as u64
+            })
+            .sum::<u64>();
+        if state["extracted"].as_u64().unwrap() != resident + delivered {
+            return Err(format!("production accounting failed: {state}"));
+        }
+        Ok(())
     }
 
     fn construction_acceptance(app: &mut App) -> Result<(), String> {

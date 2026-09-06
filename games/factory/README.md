@@ -3,10 +3,11 @@
 A standalone 12×8 factory construction game using public Titan crates. Native,
 headless and WASM players share `src/game.rs`. This implements the construction
 foundation of [#89](https://github.com/titan-engine/titan/issues/89) and deterministic
-transport in [#90](https://github.com/titan-engine/titan/issues/90), following the
-[approved factory rules](../../docs/factory-slice.md). Production is not implemented:
-normal runs start empty and advancing time creates no items. Explicitly seeded
-test fixtures exercise transport without adding an item-injection player action.
+transport in [#90](https://github.com/titan-engine/titan/issues/90), and the production
+objective in [#91](https://github.com/titan-engine/titan/issues/91), following the
+[approved factory rules](../../docs/factory-slice.md). Build an extractor on the ore
+deposit, connect it to a processor, then route plates to delivery. Ten plates
+complete the challenge. Normal runs start empty; seeding is only a test fixture.
 
 ## Build and play
 
@@ -95,7 +96,7 @@ Each conveyor holds at most one ore or plate and sends toward its facing neighbo
 It accepts inputs on its other three faces, allowing corners and competing feeds.
 Head-on outputs do not connect. Processor inputs accept ore from their rear;
 delivery accepts plates from the west. Extractors have no input. Machine slots
-participate in transport, but extraction and processing do not run in this increment.
+participate in transport before extraction and processing run.
 
 Each 60 Hz tick reads a snapshot of slots and ports. Only snapshot-empty receiving
 slots have room, even when their old item leaves that tick. Eligible transfers
@@ -122,6 +123,53 @@ For headless fixture inspection, use
 `cargo run --bin titan-factory -- --transport-fixture cycle_partial --sequence FILE`,
 where FILE contains the same ordered operation array shown above. Restart in a
 fixture returns to the normal empty challenge.
+
+## Production and completion
+
+An extractor produces one ore per 60 eligible ticks (one second at 60 Hz). Its
+single output pauses progress while full. A processor has separate ore input,
+in-process ore and plate output slots. A batch starts with remaining=120 and
+receives its first work tick on the following tick. Finished work waits at zero
+if output is full. Once output frees, it emits that plate and may start queued
+ore in the same tick. New output transfers no earlier than the next tick.
+
+Build the reference route at tick zero: extractor (1,3), east conveyors at
+(2,3)–(4,3), east processor (5,3), east conveyors at (6,3)–(9,3). All face east.
+The first ore appears at tick 60, processing starts at 64, the first plate appears
+at 184 and arrives at 189. Further deliveries are 120 ticks apart; the tenth
+completes at tick 1269. Paused browser construction allows an exact tick-zero
+start; native play can build while time advances without changing machine rates.
+
+Transfer snapshot and simultaneous commit precede completion, then production.
+The tenth delivery skips that tick's production and freezes the game tick,
+structures and counters. The visible outcome and delivery count identify success.
+Construction rejects while Complete; restart begins an empty challenge with the
+initial camera/tool and no held input. Inspection remains available.
+
+Tile inspection includes `slots`, `progress`, `remaining`, `machine_status` and
+transport reason. A finished blocked batch remains an ore for accounting, even
+at remaining=0. Rotation retains all contents/work; removal reports discards for
+every slot, including queued and in-process ore. At every boundary, extracted
+plus explicitly seeded fixture items equals all resident items plus deliveries
+and explicit discards. Counter overflow stops simulation with an inspected
+`diagnostic` and `Stopped` outcome; it never wraps. Restart clears that diagnostic.
+
+`cargo run --bin play -- --test-production` constructs the reference route with
+tool selection and pointer placement, presents every fixed tick through completion,
+checks delivery timing and independent item counts, then holds the completed world.
+Use `--frames N` to change its bounded presentation count. After building/serving
+WASM, open [production acceptance](http://localhost:8080/play/test-production.html).
+It constructs through DOM player controls, checks every tick, completion freeze,
+rejected construction and restart, then rebuilds to complete again. The normal
+player exposes no fixture injection control.
+
+The actual-WASM harness runs `scripts/production-acceptance.mjs` automatically.
+It compares complete native/WASM states at each operation and independently asserts
+the specification's timing and accounting, including blocked outputs, starvation,
+backlog and occupied machine edits. Named production fixtures are available only
+at test startup: `--production-fixture NAME --sequence FILE` for native, and
+`BrowserRuntime.production_fixture(NAME, true)` for WASM. Existing transport
+fixtures keep production disabled; their restart returns to normal production.
 
 ## Native control
 
@@ -156,10 +204,12 @@ use sanitized CLI output as evidence. SIGTERM/Ctrl-C removes registration.
   rendering, inspection and ordered operation records.
 - `src/game/transport.rs`: fixed-tick snapshot transport, slots, item accounting,
   stall reasons and named test fixtures.
+- `src/game/production.rs`: extraction/processing phases and bounded production fixtures.
 - `src/main.rs`: headless sequence execution and native control server.
 - `src/bin/play.rs`: native window/pointer/keyboard adapter.
 - `src/browser.rs`, `web/play/`: actual-WASM player and browser controls.
 - `tests/construction.json`: shared native/WASM construction fixture.
+- `scripts/production-acceptance.mjs`: independent production traces and accounting.
 - `scripts/transport-acceptance.mjs`: independent transport traces and full
   native/actual-WASM parity, called by `scripts/test-browser.mjs`.
 

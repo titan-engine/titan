@@ -87,45 +87,63 @@ fn plan(
 }
 pub(super) fn tick(world: &mut World) {
     let state = world.resource::<State>().unwrap();
-    if state.completion_tick.is_some() {
+    if state.completion_tick.is_some() || state.diagnostic.is_some() {
         return;
     }
-    let next_tick = state.tick.checked_add(1).expect("factory tick overflow");
+    if let Err(error) = tick_checked(world) {
+        world.resource_mut::<State>().unwrap().diagnostic = Some(error);
+    }
+}
+// Calculate every phase before committing: even overflow preserves all items,
+// progress and accounting at the preceding game boundary.
+fn tick_checked(world: &mut World) -> Result<(), String> {
+    let state = world.resource::<State>().unwrap();
+    let next_tick = state
+        .tick
+        .checked_add(1)
+        .ok_or("COUNTER_OVERFLOW: game tick")?;
     let snapshot = snapshot(world);
     let plans = plan(&snapshot, state.delivered);
-    let mut slots: Vec<_> = snapshot.iter().map(|(_, s)| s.slots).collect();
+    let mut next = snapshot.clone();
     let mut delivered = state.delivered;
+    let mut extracted = state.extracted;
     for (source, (_, destination)) in plans.iter().enumerate() {
         if let Some(destination) = destination {
             let item = snapshot[source].1.slots.output.unwrap();
-            slots[source].output = None;
+            next[source].1.slots.output = None;
             match snapshot[*destination].1.kind {
                 Kind::Delivery => {
                     delivered = delivered
                         .checked_add(1)
-                        .expect("factory delivered overflow")
+                        .ok_or("COUNTER_OVERFLOW: delivered")?;
                 }
-                Kind::Processor => slots[*destination].input = Some(item),
-                _ => slots[*destination].output = Some(item),
+                Kind::Processor => next[*destination].1.slots.input = Some(item),
+                _ => next[*destination].1.slots.output = Some(item),
             }
         }
     }
-    for (i, (entity, _)) in snapshot.iter().enumerate() {
-        let s = world.get_mut::<Structure>(*entity).unwrap();
-        s.slots = slots[i];
-        s.last_transfer_reason = Some(if plans[i].1.is_some() {
+    if delivered != 10 && state.production_enabled {
+        for (_, structure) in &mut next {
+            production::produce(structure, &mut extracted)?;
+        }
+    }
+    for (i, (entity, mut structure)) in next.into_iter().enumerate() {
+        structure.last_transfer_reason = Some(if plans[i].1.is_some() {
             "transferred"
         } else {
             plans[i].0
         });
+        *world.get_mut::<Structure>(entity).unwrap() = structure;
     }
     let state = world.resource_mut::<State>().unwrap();
     state.tick = next_tick;
     state.delivered = delivered;
+    state.extracted = extracted;
     if delivered == 10 {
         state.completion_tick = Some(next_tick);
     }
     assert!(conserved(world), "factory item conservation violated");
+    Ok(())
 }
 pub(super) fn conserved(world: &World) -> bool {
     let s = world.resource::<State>().unwrap();
@@ -148,6 +166,7 @@ pub(super) fn structure_value(world: &World, s: &Structure) -> Value {
         .position(|(_, d)| (s.x, s.y) == (d.x, d.y))
         .unwrap();
     let mut value = s.value();
+    value["machine_status"] = json!(production::machine_status(state, s));
     value["transport"] = json!({"reason":if state.completion_tick.is_some(){"complete"}else{plans[i].0},"target":target(s).map(|(x,y)|json!({"x":x,"y":y}))});
     value
 }
@@ -161,6 +180,10 @@ pub(super) fn item_positions(s: &Structure) -> Vec<Value> {
 /// returned app needs no Startup schedule to construct its initial world.
 pub fn build_transport_fixture(name: &str) -> Result<App, String> {
     let mut app = build_game();
+    app.world_mut()
+        .resource_mut::<State>()
+        .unwrap()
+        .production_enabled = false;
     let mut add = |x, y, kind, facing, item| {
         apply(&mut app, Operation::Place { kind, x, y, facing }).unwrap();
         let e = at(app.world(), x, y).unwrap();

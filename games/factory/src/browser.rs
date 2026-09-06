@@ -44,6 +44,19 @@ impl BrowserRuntime {
         })
     }
 
+    /// Construct an explicit bounded production test setup; not a player command.
+    pub fn production_fixture(name: &str, enable_control: bool) -> Result<BrowserRuntime, JsValue> {
+        let mut app = game::build_production_fixture(name).map_err(|e| JsValue::from_str(&e))?;
+        app.update_schedule(Startup);
+        let inspector = game::inspector_with_capture(
+            InspectionConfig::controlled("factory-browser", "factory"),
+            capture,
+        );
+        Ok(Self {
+            session: BrowserSession::new(app, inspector, enable_control),
+        })
+    }
+
     /// Executes one request at a safe point and returns its JSON response envelope.
     pub fn handle(&mut self, request_json: &str) -> String {
         self.session.handle(request_json)
