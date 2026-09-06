@@ -89,7 +89,7 @@ def main(failures):
         with log_path.open('w') as log:
             process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
-                                       '--run-for-ms', '120000'], project=GAME, instance=instance,
+                                       '--run-for-ms', '240000'], project=GAME, instance=instance,
                                       cwd=GAME, stdout=log, stderr=log)
             failures.record_process(process)
             try:
@@ -227,6 +227,25 @@ def main(failures):
                 move(['right'], 15)
                 assert state()['puzzle']['door']['state'] == 'closed'
                 capture('puzzle-cleared')
+                for route_name in ('block-solution.json', 'block-intermediate-solution.json'):
+                    invoke('select_room', {'room': 2})
+                    assert state()['room'] == 2
+                    capture(f'{route_name}-initial')
+                    for segment in json.loads((GAME / 'tests' / route_name).read_text()):
+                        move(segment['actions'], segment['ticks'])
+                        if segment.get('checkpoint'):
+                            capture(f"{route_name}-{segment['checkpoint']}")
+                    solved_block = state()
+                    assert solved_block['puzzle']['complete'], solved_block
+                    block_recording = call('query', 'recording')['response']['value']
+                    arguments.write_text(json.dumps({'recording': block_recording}))
+                    call('invoke', 'load_replay', '--arguments-file', arguments)
+                    call('step', len(block_recording['frames']))
+                    assert state()['room'] == 2 and state()['puzzle']['complete']
+                    assert state()['characters'] == solved_block['characters']
+                    invoke('restart')
+                    assert state()['room'] == 2 and not state()['puzzle']['complete']
+                capture('block-reset')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)

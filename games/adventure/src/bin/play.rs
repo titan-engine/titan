@@ -59,6 +59,7 @@ mod native {
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let mut args = std::env::args().skip(1);
         let mut verify_surface_lifecycle = false;
+        let mut room = 1;
         let (mut limit, mut duration, mut recording) = (None, None, None);
         let (mut inspect, mut allow_control, mut configured, mut start_paused) =
             (false, false, false, false);
@@ -78,6 +79,12 @@ mod native {
                 "--recording" => {
                     recording = Some(args.next().ok_or("--recording requires a JSON path")?);
                 }
+                "--room" => {
+                    room = args.next().ok_or("--room requires 1 or 2")?.parse::<u8>()?;
+                    if !matches!(room, 1 | 2) {
+                        return Err("--room requires 1 or 2".into());
+                    }
+                }
                 "--paused" => start_paused = true,
                 "--verify-surface-lifecycle" => verify_surface_lifecycle = true,
                 "--inspect" => inspect = true,
@@ -95,7 +102,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; Space jump; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--room 1|2] [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; Space jump; E + direction push; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }
@@ -123,6 +130,9 @@ mod native {
             RunMode::Interactive,
             allow_control,
         );
+        if room != 1 {
+            session.select_room(room).map_err(|e| e.message)?;
+        }
         if let Some(path) = recording {
             session
                 .load_replay(read_recording(Path::new(&path))?)

@@ -7,7 +7,7 @@ const backend = new URL(location.href).searchParams.get('backend') ?? 'auto';
 const report = error => { failed = true; player?.pause(); byId('error').textContent = `Graphics/player error: ${error}. Check GPU support and reload to start a fresh session.`; };
 const run = fn => { try { fn(); byId('error').textContent = ''; } catch (error) { byId('error').textContent = String(error); } };
 const graphics = fn => { try { fn(); } catch (error) { report(error); } };
-const show = () => { byId('status').textContent = player.status(); byId('pause').textContent = player.paused() ? 'Resume' : 'Pause'; };
+const show = () => { const status = player.status(); byId('status').textContent = status; byId('room').value = String(JSON.parse(status).room); byId('pause').textContent = player.paused() ? 'Resume' : 'Pause'; };
 const keys = bindKeys({canvas, key: (...args) => player?.set_key(...args), clear: () => player?.clear_input(), pause: () => { player?.pause(); previous = undefined; }, shortcut: code => {
   if (!player) return false;
   if (code === 'KeyP') { toggle(); return true; }
@@ -29,6 +29,7 @@ byId('play').onclick = async () => {
     try { player = await Promise.race([BrowserPlayer.create(canvas, backend), new Promise((_, reject) => { timer = setTimeout(() => reject(Error("GPU initialization exceeded 60 seconds")), 60000); })]); } finally { clearTimeout(timer); }
     player.set_control_enabled(byId('control').checked);
     for (const id of ['pause','step','restart','replay','export','import','capture']) byId(id).disabled = false;
+    player.select_room(Number(byId('room').value));
     resize(); player.resume(); canvas.focus();
     // Deliberate same-page inspection boundary. Runtime enforces explicit control opt-in.
     window.adventure = { dispatch: json => player.dispatch(json), status: () => JSON.parse(player.status()) };
@@ -67,3 +68,5 @@ byId('capture').onclick = async () => {
   } catch (error) { byId('error').textContent = `Capture failed: ${error}`; }
   finally { byId('capture').disabled = false; }
 };
+
+byId('room').onchange = () => { if (player) run(() => { keys.cancel(); player.pause(); player.select_room(Number(byId('room').value)); previous = undefined; show(); }); };

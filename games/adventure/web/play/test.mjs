@@ -180,6 +180,27 @@ try {
  }
  check(state().puzzle.door.state==='closed','door closes after obstructing body clears');
  await capture('puzzle-cleared');player.pause();
+ // Room 2 is selected explicitly until progression is implemented.
+ for (const routeName of ['block-solution.json','block-intermediate-solution.json']) {
+   player.select_room(2); player.resume();
+   check(state().room===2,'practice selector constructs room 2');
+   await capture(`block-${routeName}-initial`);
+   const route=await (await fetch(routeName)).json();
+   const blockBindings={...bindings,interact:'KeyE',restart:'KeyR'};
+   for(const segment of route){
+     for(const [action,key] of Object.entries(blockBindings))player.set_key(key,segment.actions.includes(action),false);
+     for(let i=0;i<segment.ticks;i++)tick();
+     if(segment.checkpoint)await capture(`${routeName}-${segment.checkpoint}`);
+   }
+   check(state().puzzle.complete,`${routeName}: ordinary keyboard input completes room 2`);
+   const solvedBlock=state(), blockRecording=player.recording();
+   player.load_recording(blockRecording); player.resume();
+   for(let i=0;i<JSON.parse(blockRecording).frames.length;i++)tick();
+   check(state().room===2&&state().puzzle.complete&&JSON.stringify(state().characters)===JSON.stringify(solvedBlock.characters),`${routeName}: room-aware player replay matches`);
+   player.restart();
+   check(state().room===2&&!state().puzzle.complete,`${routeName}: restart keeps room 2`);
+ }
+ await capture('block-reset'); player.pause();
  let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
  if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
  publish({status:'passed',backend,checks,live,replay,final:state()});

@@ -1,6 +1,7 @@
 # Two-character adventure
 
-A complete cooperative room for [issue #83](https://github.com/titan-engine/titan/issues/83).
+Two cooperative practice rooms for [issues #83](https://github.com/titan-engine/titan/issues/83)
+and [#84](https://github.com/titan-engine/titan/issues/84).
 The same fixed-tick Rust simulation runs headlessly, in a native GPU window, and
 in an actual-WASM browser player. Jumper has a triangle marker; Strong has a
 square marker. A yellow outline and the active name identify control.
@@ -8,8 +9,8 @@ square marker. A yellow outline and the active name identify control.
 Jump Jumper onto the raised plate A, switch to Strong and cross the open door
 to plate B. Switch back, bring Jumper through to the exit, then bring Strong.
 Both complete footprints must be grounded in the exit together. Completion
-latches and freezes the room; R or Restart restores it. This increment contains
-only room 1: room 2, block movement and Continue are later implementation scope.
+latches and freezes the room; R or Restart restores it. Room 2 adds a heavy block and a higher ledge requiring both abilities. Select
+a practice room explicitly; start/Continue/Play again progression belongs to #85.
 The [first-slice design](design.md) specifies the wider intended sequence.
 
 ## Play locally
@@ -18,13 +19,16 @@ From the repository root:
 
 ```sh
 cargo run --manifest-path games/adventure/Cargo.toml --features player --bin play
+# Start the combined-abilities practice room:
+cargo run --manifest-path games/adventure/Cargo.toml --features player --bin play -- --room 2
 # Bounded GPU run:
 cargo run --manifest-path games/adventure/Cargo.toml --features player --bin play -- --frames 120 --run-for-ms 10000
 # Optional unsigned local macOS bundle:
 python3 games/adventure/scripts/build-macos-app.py --name "Titan Adventure" --bundle-id dev.titan.adventure
 ```
 
-WASD/arrows move, Space jumps, Q switches, R restarts and P pauses/resumes. N steps a paused
+WASD/arrows move, Space jumps, Q switches, E plus north/south pushes with Strong,
+R restarts the displayed room and P pauses/resumes. N steps a paused
 player. Native Escape closes the window. The browser requires canvas focus;
 Escape releases it and pauses. Losing focus pauses and clears pending input;
 resume is explicit. Space never pauses the browser.
@@ -34,7 +38,8 @@ python3 games/adventure/scripts/build-browser.py
 python3 -m http.server 8000 --bind 127.0.0.1 --directory games/adventure/web
 ```
 
-Open `/play/`, click Play, and focus the canvas. Add `?backend=webgpu` or
+Open `/play/`, choose a Practice room, click Play, and focus the canvas.
+Changing the selector reconstructs that room and pauses; explicitly resume to play. Add `?backend=webgpu` or
 `?backend=webgl2` to select a backend explicitly. Initialization errors are
 reported; there is no software 3D fallback. The camera remains at `(6,14,17)`,
 looking at `(6,0,4)`, with a 50-degree vertical field of view. Presentation uses
@@ -63,7 +68,8 @@ feedback, `active_character`, effective
 `consumed_input`, suppressed actions, session tick/generation and recording
 bounds. Recordings retain the raw logical input necessary to reproduce filtering;
 maximum length is 4096 ticks. Recordings use fixture `adventure-v3`; older
-practice-room recordings are rejected. The `origin` metadata preserves recovery
+practice-room recordings are rejected. The optional `room` field selects room 2 for replay (absent means room 1).
+The `origin` metadata preserves recovery
 feedback and held-input gates for recordings started after a defensive reset. A truncated or invalid recording is rejected
 before changing the app. Restart resets the session, pending input and recording
 while retaining the monotonic host frame. Player replay supports pause, step,
@@ -119,6 +125,46 @@ the message. The room tick resets while host frame and reset generation retain
 provenance. Controlled below-floor fixtures run only in the optional
 `movement-acceptance` build; players expose no teleport control.
 
+## Combined-abilities room
+
+Room 2 has a 2 m ledge at X `[4000,7000]`, Z `[1000,3000]`. Its plate A is
+centered at `(5500,2000,2000)`. A 900 × 900 × 750 mm block starts at `(5500,0,5500)`
+and moves between north/south sockets at Z 5500, 4500 and 3500. Socket markers
+are flat guides; only the block provides support. The door, far plate and exit
+use the room 1 rules.
+
+Select Strong, approach `(5500,0,6500)` and press E with north. A valid push
+moves the block one socket immediately and consumes Strong's movement for that
+tick. Release E and approach the next stance to push again. Jump Jumper onto
+the block, release jump and land, then jump north onto the ledge and plate A.
+Exchange the door-holding role at B as in room 1. Either moved socket permits
+the ledge jump; the initial socket is too far away. Strong cannot jump onto
+the block or reach A, and Jumper cannot push.
+
+Strong must stand on the floor within 100 mm of the point 1 m behind the block.
+Pushes require one effective north/south direction and a fresh E press, with
+no jump request. Both characters must be clear of the entire swept volume;
+characters supported by the block prevent moving it. Positive overlap blocks
+movement, while exact face contact is clear. Rejected pushes leave the block
+unchanged; ordinary movement/jumping still runs. Inspection's `block` reports
+socket, move count and `last_rejection`, using this priority:
+`wrong_character`, `not_grounded`, `invalid_direction`, `invalid_stance`,
+`rail_end`, `block_occupied`, `path_obstructed`. The HUD shows rejection feedback.
+`room`, `block_geometry` and room-specific `solids`/`puzzle_geometry` expose the
+collision state. Dynamic support has the stable name `heavy-block`.
+
+At the intermediate socket, Strong can walk around the east side and push south
+to recover the initial arrangement. The final socket's reverse stance is inside
+the ledge, so restart restores it. Missed jumps preserve the arrangement; R and
+defensive fall recovery reconstruct the current room, including block, puzzle,
+input gates and recording origin.
+
+The [two-push route](tests/block-solution.json) and
+[one-push route](tests/block-intermediate-solution.json) are ordinary-input
+solutions. `test-block.mjs` compares native and actual-WASM state at every tick,
+including adversarial fixtures. Both GPU player harnesses exercise both routes
+and capture their support, plate and completion checkpoints.
+
 ## Inspect and control
 
 ```sh
@@ -131,6 +177,7 @@ target/debug/titan --format json --instance adventure step 1
 target/debug/titan --format json --instance adventure invoke switch
 target/debug/titan --format json --instance adventure query recording
 target/debug/titan --format json --instance adventure invoke restart
+target/debug/titan --format json --instance adventure invoke select_room --arguments '{"room":2}'
 ```
 
 Inputs are complete button snapshots for a future host frame. An omitted action
@@ -161,6 +208,7 @@ python3 games/adventure/scripts/build-browser.py
 node games/adventure/scripts/test-browser.mjs
 node games/adventure/scripts/test-movement.mjs
 node games/adventure/scripts/test-puzzle.mjs
+node games/adventure/scripts/test-block.mjs
 node --test games/adventure/web/play/*.test.mjs
 python3 games/adventure/scripts/test-player.py
 ```

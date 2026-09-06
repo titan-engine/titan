@@ -155,7 +155,7 @@ fn load(app: &mut App, recording: Recording) -> Result<(), ProtocolError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     game::validate_origin(&recording.origin)?;
-    game::restart(app);
+    game::select_room(app, recording.room)?;
     game::apply_origin(app, &recording.origin);
     paused(app, true);
     app.world_mut().resource_mut::<Control>().unwrap().replay = Some(Playback {
@@ -312,6 +312,19 @@ impl PlayerSession {
         let control = self.app.world_mut().resource_mut::<Control>().unwrap();
         control.replay = None;
         self.inspector.note_external_change();
+    }
+    /// Explicit practice-room selection; no progression or completion transition.
+    pub fn select_room(&mut self, room: u8) -> Result<(), ProtocolError> {
+        game::select_room(&mut self.app, room)?;
+        self.inspector.reset_capture_session();
+        clear(self.app.world_mut());
+        self.app
+            .world_mut()
+            .resource_mut::<Control>()
+            .unwrap()
+            .replay = None;
+        self.inspector.note_external_change();
+        Ok(())
     }
     pub fn stop_replay(&mut self) {
         self.app
@@ -478,6 +491,7 @@ fn key_action(key: &str) -> Option<Action> {
         "KeyA" | "ArrowLeft" => Some(Action::Left),
         "KeyD" | "ArrowRight" => Some(Action::Right),
         "Space" => Some(Action::Jump),
+        "KeyE" => Some(Action::Interact),
         "KeyQ" => Some(Action::Switch),
         "KeyR" => Some(Action::Restart),
         _ => None,
@@ -500,6 +514,7 @@ pub fn reference_recording() -> Recording {
         }
     }
     Recording {
+        room: 1,
         origin: Default::default(),
         format_version: 1,
         fixture: game::FIXTURE.into(),
@@ -517,6 +532,32 @@ mod tests {
     fn state(player: &PlayerSession) -> serde_json::Value {
         game::status(player.app())
     }
+    #[test]
+    fn practice_room_selection_and_replay_keep_room_and_cancel_old_state() {
+        let mut p = session();
+        p.select_room(2).unwrap();
+        assert_eq!(state(&p)["room"], 2);
+        p.resume();
+        p.set_key("KeyE", true, false);
+        p.tick();
+        let recording = game::recording(p.app()).unwrap();
+        assert_eq!(recording.room, 2);
+        p.select_room(1).unwrap();
+        p.load_replay(recording).unwrap();
+        assert_eq!(state(&p)["room"], 2);
+        p.step().unwrap();
+        p.restart();
+        assert_eq!(state(&p)["room"], 2);
+        assert!(!p.replay_active());
+        let before = state(&p);
+        assert!(p.select_room(3).is_err());
+        assert_eq!(state(&p), before);
+        let mut invalid = game::recording(p.app()).unwrap();
+        invalid.room = 3;
+        assert!(p.load_replay(invalid).is_err());
+        assert_eq!(state(&p), before);
+    }
+
     #[test]
     fn taps_aliases_switch_and_focus_use_logical_actions() {
         let mut p = session();
