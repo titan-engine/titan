@@ -110,6 +110,21 @@ impl BrowserPlayer {
     pub fn set_key(&mut self, code: &str, pressed: bool, repeat: bool) {
         self.session.set_key(code, pressed, repeat);
     }
+    pub fn pointer(&mut self, x: f64, y: f64, pressed: bool) {
+        let position = if x.is_finite()
+            && y.is_finite()
+            && (0.0..320.0).contains(&x)
+            && (0.0..180.0).contains(&y)
+        {
+            Some((x.floor() as i32, y.floor() as i32))
+        } else {
+            None
+        };
+        self.session.pointer(position, pressed);
+    }
+    pub fn cancel_pointer(&mut self) {
+        self.session.cancel_pointer();
+    }
     pub fn clear_input(&mut self) {
         self.session.clear_input();
     }

@@ -123,6 +123,7 @@ node games/adventure/scripts/test-browser.mjs
 node games/adventure/scripts/test-movement.mjs
 node games/adventure/scripts/test-puzzle.mjs
 node games/adventure/scripts/test-block.mjs
+node games/adventure/scripts/test-sequence.mjs
 node --test games/adventure/web/play/*.test.mjs
 python3 games/adventure/scripts/test-player.py # desktop GPU/window required
 ```

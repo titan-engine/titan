@@ -56,3 +56,8 @@ required-features = ["movement-acceptance"]
 name = "block-acceptance"
 path = "src/bin/block-acceptance.rs"
 required-features = ["movement-acceptance"]
+
+[[bin]]
+name = "sequence-acceptance"
+path = "src/bin/sequence-acceptance.rs"
+required-features = ["movement-acceptance"]

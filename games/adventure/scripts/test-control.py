@@ -80,6 +80,7 @@ def main(failures, log):
     process = start(True)
     trace = []
     try:
+        invoke('select_room', {'room': 1})
         initial = state()
         entities = call('entities')['response']['entities']
         names = [entity['name'] for entity in entities]

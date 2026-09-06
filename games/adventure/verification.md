@@ -1,3 +1,64 @@
+# Playable sequence verification
+
+Issue #85 was exercised on 2026-09-06 on macOS / Apple M5 Pro. The default
+player now opens on instructions, explicitly starts room 1, waits for Continue
+at room 1 completion, and offers Play again or Restart room at slice completion.
+The screens and buttons are ECS UI shared by native and browser rendering.
+
+![Start instructions](evidence/sequence-start-webgpu.png)
+
+The ordinary-input [two-push sequence](tests/sequence-solution.json) and
+[one-push sequence](tests/sequence-intermediate-solution.json) each start at
+instructions and complete both rooms. The sequence runner compares 6 scenarios
+and 11,487 full states between native and actual WASM. Both route recordings
+also reproduce every tick in a fresh replay. Sampled and injected suites cover
+held actions on Start/Continue/Play again, frozen completion, fresh Jumper and
+device state, queued old-room input cancellation, room-specific R precedence,
+and release/repress after reset. The existing 34 movement, 24 plate/door and
+27 block scenarios remain passing, including both physical block routes.
+
+Native Metal presented 1,911 GPU frames in the successful acceptance run.
+Browser WebGPU and WebGL2 each passed 209 checks. Their actual played instances
+exercise the full sequence and replay, both room-2 routes, pause/restart and
+input-source boundaries. Captures freeze the accepted frame/revision and record
+reset generations across Start, Continue and room restart. Native read-only
+capture and OS surface lifecycle checks passed. Browser checks present at
+960 × 540 and 1280 × 720, plus smaller/letterboxed and capped high-DPI surfaces.
+
+![Fresh room 2 after Continue](evidence/sequence-continued-native.png)
+
+The Start, playing-room and both completion captures were visually inspected.
+Text is legible at 960 × 540, all controls/objectives fit, and characters,
+plates, doorway and exit remain visible while playing. Triangle/square markers,
+striped device links and explicit state text provide cues beyond color. Direct
+browser interaction additionally verified the ECS Start click, Q switching,
+R and pause. Independent review inspected the code and saved captures.
+
+![Slice completion choices](evidence/sequence-room-2-complete-webgl2.png)
+
+Selected PNGs and complete capture identity/state metadata are retained in
+[sequence evidence](evidence/sequence-evidence.json). Package format, 52 Rust
+tests, strict Clippy, native CLI, browser keyboard tests and all four native/WASM
+conformance runners passed. Workspace gates and existing native/WASM RPG control,
+replay and asset checks passed. CI includes the sequence runner and native GPU
+acceptance. Historical RPG/arena references and the repository README preview
+are unchanged.
+
+An initial integration run exposed test setup errors: the legacy browser route
+inherited a held direction from the new sequence, and a read-only Start capture
+was compared with a playing-room baseline. The harness now explicitly releases
+its prior physical keys and compares matching phases. Native runs interrupted
+by focus events were not accepted as evidence; a subsequent isolated run passed.
+
+Limits: these are deterministic prototype and platform-integration checks,
+not extended human usability feedback. The fixed camera and movement tuning
+are unchanged. GPU checksums establish consistency within each backend, not
+portable pixel identity. Recordings remain bounded to 4096 ticks; Start/Continue/
+Play again preserve sequence history, while R/recovery begin a new room origin.
+Independent whole-slice playtesting remains tracked by #86.
+
+The sections below retain historical evidence at their original revisions.
+
 # Cooperative room verification
 
 Issue #83 was exercised on 2026-09-06 on macOS / Apple M5 Pro. Room 1 now

@@ -1,17 +1,18 @@
 # Two-character adventure
 
-Two cooperative practice rooms for [issues #83](https://github.com/titan-engine/titan/issues/83)
-and [#84](https://github.com/titan-engine/titan/issues/84).
+A short two-room cooperative game for [issue #85](https://github.com/titan-engine/titan/issues/85).
 The same fixed-tick Rust simulation runs headlessly, in a native GPU window, and
 in an actual-WASM browser player. Jumper has a triangle marker; Strong has a
 square marker. A yellow outline and the active name identify control.
 
 Jump Jumper onto the raised plate A, switch to Strong and cross the open door
 to plate B. Switch back, bring Jumper through to the exit, then bring Strong.
-Both complete footprints must be grounded in the exit together. Completion
-latches and freezes the room; R or Restart restores it. Room 2 adds a heavy block and a higher ledge requiring both abilities. Select
-a practice room explicitly; start/Continue/Play again progression belongs to #85.
-The [first-slice design](design.md) specifies the wider intended sequence.
+Both complete footprints must be grounded in the exit together. Start explains
+the controls and selects Jumper in room 1. Room completion freezes the puzzle
+until Continue or Enter starts room 2 with Jumper and fresh puzzle state. Room 2
+adds a heavy block and a higher ledge requiring both abilities. Slice completion
+offers Restart room and Play again; Play again starts room 1. R always restores
+the displayed room. The [first-slice design](design.md) specifies the rules.
 
 ## Play locally
 
@@ -38,8 +39,8 @@ python3 games/adventure/scripts/build-browser.py
 python3 -m http.server 8000 --bind 127.0.0.1 --directory games/adventure/web
 ```
 
-Open `/play/`, choose a Practice room, click Play, and focus the canvas.
-Changing the selector reconstructs that room and pauses; explicitly resume to play. Add `?backend=webgpu` or
+Open `/play/`, initialize the player, then choose Start or press Enter with the
+canvas focused. Add `?backend=webgpu` or
 `?backend=webgl2` to select a backend explicitly. Initialization errors are
 reported; there is no software 3D fallback. The camera remains at `(6,14,17)`,
 looking at `(6,0,4)`, with a 50-degree vertical field of view. Presentation uses
@@ -60,16 +61,23 @@ switch tick without movement. Held movement remains suppressed until its
 logical action is released; a fresh unrelated direction works immediately on a
 later tick. Holding Q never repeats a switch. Physical aliases are combined
 before this policy. Keyboard and injected input use the same filtering.
-Restart takes precedence over switch and movement and selects Jumper.
+Restart takes precedence over confirmation, switching and movement and selects
+Jumper. Start, Continue and Play again consume their action without movement,
+jumping or pushing; held actions require release/repress in the new room.
+Room transitions discard pending input and invalidate old pending captures.
 
-`state` exposes both foot positions, vertical velocities, grounded flags, support
+`state.phase` distinguishes `start`, `playing`, `room_complete` and
+`slice_complete`. `state` also exposes both foot positions, vertical velocities, grounded flags, support
 names, per-tick X/Z/ceiling/landing contacts, static solid bounds, recovery
 feedback, `active_character`, effective
 `consumed_input`, suppressed actions, session tick/generation and recording
 bounds. Recordings retain the raw logical input necessary to reproduce filtering;
 maximum length is 4096 ticks. Recordings use fixture `adventure-v3`; older
-practice-room recordings are rejected. The optional `room` field selects room 2 for replay (absent means room 1).
-The `origin` metadata preserves recovery
+practice-room recordings are rejected. The optional `room` field selects the recording origin room (absent means room 1).
+Recordings begun on Start retain the complete sequence through Continue and
+Play again; room-only recordings remain supported.
+The `origin.phase` field is `start` for a sequence recording and defaults to
+`playing` when absent in an existing room recording. `origin` also preserves recovery
 feedback and held-input gates for recordings started after a defensive reset. A truncated or invalid recording is rejected
 before changing the app. Restart resets the session, pending input and recording
 while retaining the monotonic host frame. Player replay supports pause, step,
@@ -172,7 +180,8 @@ cargo build -p titan-cli
 cargo run --manifest-path games/adventure/Cargo.toml -- --serve --instance adventure --run-for-ms 120000
 # In another terminal, using the directory the host was launched from:
 target/debug/titan --format json --instance adventure query state
-target/debug/titan --format json --instance adventure input 1 --actions '{"right":{"kind":"button","value":true}}'
+target/debug/titan --format json --instance adventure invoke confirm
+target/debug/titan --format json --instance adventure input 2 --actions '{"right":{"kind":"button","value":true}}'
 target/debug/titan --format json --instance adventure step 1
 target/debug/titan --format json --instance adventure invoke switch
 target/debug/titan --format json --instance adventure query recording
@@ -209,6 +218,7 @@ node games/adventure/scripts/test-browser.mjs
 node games/adventure/scripts/test-movement.mjs
 node games/adventure/scripts/test-puzzle.mjs
 node games/adventure/scripts/test-block.mjs
+node games/adventure/scripts/test-sequence.mjs
 node --test games/adventure/web/play/*.test.mjs
 python3 games/adventure/scripts/test-player.py
 ```

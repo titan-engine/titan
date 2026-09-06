@@ -16,6 +16,7 @@ impl Run {
     fn new() -> Self {
         let mut app = game::build_game();
         app.update_schedule(Startup);
+        game::select_room(&mut app, 1).unwrap();
         let trace = vec![game::status(&app)];
         Self {
             app,
@@ -123,7 +124,10 @@ pub fn run() -> Value {
     let recording = serde_json::to_value(game::recording(&solution.app).unwrap()).unwrap();
     let committed: Value =
         serde_json::from_str(include_str!("../tests/puzzle-recording.json")).unwrap();
-    assert_eq!(recording, committed, "versioned solution recording drifted");
+    let canonical =
+        serde_json::to_value(serde_json::from_value::<game::Recording>(committed.clone()).unwrap())
+            .unwrap();
+    assert_eq!(recording, canonical, "versioned solution recording drifted");
     let decoded: game::Recording = serde_json::from_value(committed).unwrap();
     let mut playback = Run::new();
     for (index, frame) in decoded.frames.iter().enumerate() {

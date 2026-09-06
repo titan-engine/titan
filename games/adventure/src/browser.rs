@@ -56,3 +56,9 @@ pub fn puzzle_acceptance() -> String {
 pub fn block_acceptance() -> String {
     crate::block_acceptance::run().to_string()
 }
+
+#[cfg(feature = "movement-acceptance")]
+#[wasm_bindgen]
+pub fn sequence_acceptance() -> String {
+    crate::sequence_acceptance::run().to_string()
+}

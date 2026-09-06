@@ -2,6 +2,12 @@ use super::*;
 fn app() -> App {
     let mut app = build_game();
     app.update_schedule(Startup);
+    app.world_mut().resource_mut::<Session>().unwrap().phase = Phase::Playing;
+    app.world_mut()
+        .resource_mut::<Session>()
+        .unwrap()
+        .origin
+        .phase = Phase::Playing;
     app
 }
 fn tick_with(app: &mut App, tracker: &mut InputTracker<Action>, actions: &[Action]) {
@@ -1007,4 +1013,256 @@ fn dynamic_block_support_stays_stable_and_prevents_push() {
             z: 5500
         }
     );
+}
+
+fn finish_room_fixture(a: &mut App, t: &mut InputTracker<Action>) {
+    for index in 0..2 {
+        fixture_set_character(
+            a,
+            index,
+            Position {
+                x: 10_500,
+                y: 0,
+                z: 1500,
+            },
+            0,
+            true,
+        );
+    }
+    tick_with(a, t, &[]);
+    assert_eq!(status(a)["puzzle"]["complete"], true);
+}
+
+#[test]
+fn start_freezes_and_confirm_reconstructs_with_all_held_actions_gated() {
+    let mut a = build_game();
+    a.update_schedule(Startup);
+    let mut t = InputTracker::default();
+    let held = [
+        Action::Right,
+        Action::Jump,
+        Action::Interact,
+        Action::Switch,
+    ];
+    tick_with(&mut a, &mut t, &held);
+    assert_eq!(status(&a)["phase"], "start");
+    assert_eq!(status(&a)["session_tick"], 0);
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    let mut start = held.to_vec();
+    start.push(Action::Confirm);
+    tick_with(&mut a, &mut t, &start);
+    assert_eq!(status(&a)["phase"], "playing");
+    assert_eq!(status(&a)["session_generation"], 1);
+    assert_eq!(status(&a)["session_tick"], 0);
+    tick_with(&mut a, &mut t, &start);
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    assert_eq!(status(&a)["active_character"], "jumper");
+    tick_with(&mut a, &mut t, &[]);
+    tick_with(&mut a, &mut t, &[Action::Right, Action::Jump]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    assert_eq!(pos(&a, "jumper").y, 170);
+    let expected = status(&a);
+    let record = recording(&a).unwrap();
+    assert_eq!(record.origin.phase, Phase::Start);
+    assert_eq!(record.frames.len(), 5);
+    replay(&mut a, record).unwrap();
+    for key in [
+        "phase",
+        "characters",
+        "active_character",
+        "consumed_input",
+        "session_tick",
+        "blocked_actions",
+        "recorded_ticks",
+    ] {
+        assert_eq!(status(&a)[key], expected[key], "{key}");
+    }
+}
+
+#[test]
+fn completion_requires_fresh_confirm_and_rebuilds_each_destination() {
+    let mut a = app();
+    let mut t = InputTracker::default();
+    // A confirm held during play must not skip the completion prompt.
+    tick_with(&mut a, &mut t, &[Action::Confirm]);
+    for index in 0..2 {
+        fixture_set_character(
+            &mut a,
+            index,
+            Position {
+                x: 10_500,
+                y: 0,
+                z: 1500,
+            },
+            0,
+            true,
+        );
+    }
+    tick_with(&mut a, &mut t, &[Action::Confirm]);
+    assert_eq!(status(&a)["phase"], "room_complete");
+    let completed = status(&a);
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Confirm, Action::Right, Action::Jump, Action::Switch],
+    );
+    assert_eq!(status(&a)["characters"], completed["characters"]);
+    assert_eq!(status(&a)["session_tick"], completed["session_tick"]);
+    tick_with(&mut a, &mut t, &[]);
+    tick_with(
+        &mut a,
+        &mut t,
+        &[
+            Action::Confirm,
+            Action::Right,
+            Action::Jump,
+            Action::Switch,
+            Action::Interact,
+        ],
+    );
+    assert_eq!(status(&a)["room"], 2);
+    assert_eq!(status(&a)["phase"], "playing");
+    assert_eq!(status(&a)["session_tick"], 0);
+    assert_eq!(status(&a)["active_character"], "jumper");
+    assert_eq!(status(&a)["puzzle"]["complete"], false);
+    for index in 0..2 {
+        assert_eq!(pos(&a, character_name(index)), initial_position(index));
+    }
+    tick_with(
+        &mut a,
+        &mut t,
+        &[
+            Action::Confirm,
+            Action::Right,
+            Action::Jump,
+            Action::Switch,
+            Action::Interact,
+        ],
+    );
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    assert_eq!(status(&a)["active_character"], "jumper");
+    finish_room_fixture(&mut a, &mut t);
+    assert_eq!(status(&a)["phase"], "slice_complete");
+    let before = status(&a);
+    tick_with(&mut a, &mut t, &[Action::Right, Action::Switch]);
+    assert_eq!(status(&a)["characters"], before["characters"]);
+    confirm(&mut a);
+    assert_eq!(status(&a)["room"], 1);
+    assert_eq!(status(&a)["phase"], "playing");
+    assert_eq!(status(&a)["session_tick"], 0);
+    assert_eq!(status(&a)["active_character"], "jumper");
+    assert_eq!(recording(&a).unwrap().room, 1);
+}
+
+#[test]
+fn restart_from_every_phase_keeps_displayed_room_and_canonical_playing_origin() {
+    for (phase, room) in [
+        (Phase::Start, 1),
+        (Phase::Playing, 1),
+        (Phase::RoomComplete, 1),
+        (Phase::Playing, 2),
+        (Phase::SliceComplete, 2),
+    ] {
+        let mut a = app();
+        select_room(&mut a, room).unwrap();
+        a.world_mut().resource_mut::<Session>().unwrap().phase = phase;
+        let mut t = InputTracker::default();
+        tick_with(
+            &mut a,
+            &mut t,
+            &[
+                Action::Restart,
+                Action::Right,
+                Action::Jump,
+                Action::Switch,
+                Action::Confirm,
+            ],
+        );
+        assert_eq!(status(&a)["room"], room);
+        assert_eq!(status(&a)["phase"], "playing");
+        assert_eq!(status(&a)["session_tick"], 0);
+        tick_with(
+            &mut a,
+            &mut t,
+            &[
+                Action::Restart,
+                Action::Right,
+                Action::Jump,
+                Action::Switch,
+                Action::Confirm,
+            ],
+        );
+        assert_eq!(pos(&a, "jumper"), initial_position(0));
+        assert_eq!(status(&a)["active_character"], "jumper");
+        let before = status(&a);
+        let r = recording(&a).unwrap();
+        assert_eq!(r.origin.phase, Phase::Playing);
+        assert_eq!(r.room, room);
+        replay(&mut a, r).unwrap();
+        for key in [
+            "room",
+            "phase",
+            "characters",
+            "session_tick",
+            "blocked_actions",
+        ] {
+            assert_eq!(status(&a)[key], before[key], "{phase:?}:{key}");
+        }
+    }
+}
+
+#[test]
+fn injected_start_and_continue_clear_future_inputs_and_preserve_release_gates() {
+    for phase in [Phase::Start, Phase::RoomComplete, Phase::SliceComplete] {
+        let mut a = app();
+        a.world_mut().resource_mut::<Session>().unwrap().phase = phase;
+        let mut inspector =
+            configured_inspector(InspectionConfig::controlled("sequence-test", "adventure"));
+        let now = status(&a)["frame"].as_u64().unwrap();
+        inspect(
+            &mut a,
+            &mut inspector,
+            titan_protocol::Request::InjectInput {
+                frame: now + 2,
+                actions: BTreeMap::from([("right".into(), InputValue::Button(true))]),
+            },
+        );
+        injected(
+            &mut a,
+            &mut inspector,
+            &["confirm", "switch", "right", "jump", "interact"],
+        );
+        assert_eq!(status(&a)["pending_inputs"], 0);
+        assert_eq!(status(&a)["phase"], "playing");
+        assert_eq!(
+            status(&a)["room"],
+            if phase == Phase::RoomComplete { 2 } else { 1 }
+        );
+        for _ in 0..3 {
+            injected(
+                &mut a,
+                &mut inspector,
+                &["confirm", "switch", "right", "jump", "interact"],
+            );
+        }
+        assert_eq!(pos(&a, "jumper"), initial_position(0));
+        assert_eq!(status(&a)["active_character"], "jumper");
+        injected(&mut a, &mut inspector, &[]);
+        injected(&mut a, &mut inspector, &["right", "jump"]);
+        assert_eq!(pos(&a, "jumper").x, 1560);
+        assert_eq!(pos(&a, "jumper").y, 170);
+    }
+}
+
+#[test]
+fn invalid_completion_origin_is_rejected_before_mutation_and_legacy_origin_defaults_to_playing() {
+    let mut a = app();
+    let json = serde_json::json!({"blocked_actions": [], "recovery_message_ticks": 0});
+    let origin: RecordingOrigin = serde_json::from_value(json).unwrap();
+    assert_eq!(origin.phase, Phase::Playing);
+    let mut r = recording(&a).unwrap();
+    r.origin.phase = Phase::SliceComplete;
+    let before = status(&a);
+    assert!(replay(&mut a, r).is_err());
+    assert_eq!(status(&a), before);
 }
