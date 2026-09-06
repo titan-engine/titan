@@ -23,7 +23,7 @@ failures; a transport timeout does not cancel an executing system.
 The RPG/starter/arena synchronous inspection adapters use software captures and
 keep the paused browser inspection instance separate from the playable instance.
 Live-player inspection and owned asynchronous GPU capture are distinct contracts:
-see [live-player inspection](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/live-player.md) and
+see [live-player inspection](browser.md#inspecting-the-actual-arena-player) and
 [asynchronous capture](inspection.md#asynchronous-capture-contract). Consult each
 game README for its actual player, restart, input and capture semantics.
 

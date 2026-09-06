@@ -114,7 +114,7 @@ The [mid-dash recording](arena-replay/snapshot-recording.json) starts at gamepla
 tick 1 and contains eight subsequent ticks. Try it with:
 
 ```sh
-cargo run --manifest-path games/arena/Cargo.toml --bin replay -- docs/arena-replay/snapshot-recording.json
+cargo run --locked --manifest-path games/arena/Cargo.toml --bin replay -- docs/arena-replay/snapshot-recording.json
 ```
 
 The [game guide](../games/arena/README.md) owns current acceptance commands.
