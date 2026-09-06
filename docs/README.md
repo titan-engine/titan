@@ -28,8 +28,8 @@ Start with what you want to do. Titan is early in development; the
   commitments, preferences, and unresolved choices.
 - [Open design questions](open-questions.md) — decisions that need evidence.
 - [Current implementation overview](handoff.md).
-- [Two-character adventure design](../games/adventure/README.md) — selected first
-  slice; design only, not yet runnable.
+- [Two-character adventure](../games/adventure/README.md) — native/browser control
+  foundation and selected puzzle design.
 - [First conveyor factory slice](factory-slice.md) — selected challenge, construction,
   deterministic transport/production rules, and expected verification traces;
   the factory game is not implemented yet.

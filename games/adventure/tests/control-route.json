@@ -1,0 +1,176 @@
+[
+  {
+    "actions": [
+      "right"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6500
+      }
+    },
+    "active_character": "jumper"
+  },
+  {
+    "actions": [
+      "right",
+      "switch"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6500
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6500
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [
+      "right",
+      "up"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6440
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6380
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6380
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6320
+      }
+    },
+    "active_character": "strong"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6320
+      }
+    },
+    "active_character": "jumper"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6320
+      }
+    },
+    "active_character": "jumper"
+  },
+  {
+    "actions": [],
+    "characters": {
+      "jumper": {
+        "x": 1560,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6320
+      }
+    },
+    "active_character": "jumper"
+  },
+  {
+    "actions": [
+      "left"
+    ],
+    "characters": {
+      "jumper": {
+        "x": 1500,
+        "z": 6500
+      },
+      "strong": {
+        "x": 3500,
+        "z": 6320
+      }
+    },
+    "active_character": "jumper"
+  }
+]
