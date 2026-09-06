@@ -5,4 +5,4 @@ contact_links:
     about: Ask for setup help, discuss game development, or talk through an idea.
   - name: Titan Development board
     url: https://github.com/orgs/titan-engine/projects/1
-    about: Check existing ideas, priorities, dependencies, and active work before filing a duplicate.
+    about: Check existing issues, priorities, dependencies, and active work before filing a duplicate.

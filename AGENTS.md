@@ -26,8 +26,10 @@ session links or local worktree paths as review evidence. Maintainer-run agents 
 share one GitHub account; PR comments provide review evidence, not human approvals.
 
 Use the gh-stack skill for dependent PR stacks; ordinary independent work uses
-ordinary PRs. Keep requirements/architecture/usage in repository docs and TODOs
-in issues. Read `docs/vision.md`, `docs/design-requirements.md` and relevant runtime
+ordinary PRs. Keep brainstorming and planning in local conversations or GitHub
+Discussions, never in tracked Markdown or another tracked format. Follow the
+[planning and issue intake policy](docs/workflow.md#planning-and-issue-intake)
+for concrete issues and accepted durable documentation. Read `docs/vision.md`, `docs/design-requirements.md` and relevant runtime
 skills before engine changes. Quality gates are in `docs/implementation-plan.md`.
 Preserve reference checksums and the committed crisp README preview unless an
 intentional visual change is approved. Do not publish crates or create release

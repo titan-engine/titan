@@ -21,12 +21,27 @@ and give actionable feedback.
 - Comment on an unassigned **Ready** issue before starting so the maintainer can
   coordinate ownership. Check that prerequisites are complete. You do not need
   project write access; the maintainer updates the board for you.
-- **Proposed** means the approach or scope needs discussion. Contribute ideas and
-  evidence there, and agree the implementation scope before starting.
+- **Proposed** means implementation is unapproved, even when an issue is fully
+  specified. Reports may also need maintainer triage before becoming Ready.
 
 For a typo or small documentation correction, a focused PR is welcome without
 a separate issue. For larger changes, agree an issue with the maintainer first.
 An issue's priority does not mean it is approved.
+
+Keep brainstorming and planning in local conversations or GitHub Discussions;
+do not commit plans, speculative roadmaps or task journals in any tracked format.
+Once discussion yields concrete work, use an issue with an outcome,
+acceptance/verification criteria, boundaries and approval state. Maintainers triage
+prerequisites through native GitHub blocking relationships and use native
+parent/sub-issue relationships for decomposition. Do not duplicate relationship
+lists or titles in issue bodies; add prerequisite rationale only when useful beyond
+those relationships.
+The [planning and issue intake policy](docs/workflow.md#planning-and-issue-intake)
+explains the handoff and what belongs in accepted repository documentation.
+
+Bug reports are welcome without a proposed fix or completed work specification.
+Share what happened and how to reproduce it as available; maintainers handle
+triage and approval. For usage or contributor questions, use Discussions.
 
 ## Set up a development checkout
 
