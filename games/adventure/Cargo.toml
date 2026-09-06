@@ -1,0 +1,42 @@
+[package]
+name = "titan-adventure"
+default-run = "titan-adventure"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[features]
+default = []
+player = ["dep:titan-render-wgpu", "dep:winit", "dep:pollster", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:js-sys"]
+
+[[bin]]
+name = "play"
+path = "src/bin/play.rs"
+required-features = ["player"]
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+titan-diagnostics = { path = "../../crates/titan-diagnostics" }
+titan = { path = "../..", default-features = false, features = ["browser-capture"] }
+titan-protocol = { path = "../../crates/titan-protocol" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "=0.2.127"
+titan-render-wgpu = { path = "../../crates/titan-render-wgpu", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "Window", "Performance"], optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+titan-remote = { path = "../../crates/titan-remote" }
+ctrlc = { version = "3", features = ["termination"] }
+
+winit = { version = "0.30", optional = true }
+pollster = { version = "0.4", optional = true }

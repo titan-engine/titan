@@ -134,7 +134,15 @@ The host owns keyboard/focus events, fixed ticks, camera aspect and extraction.
 `adapter_info()` reports the actual backend. Existing 2D callers need no migration.
 
 `resize` returns bounded dimensions (2048 per axis and the device limit for 3D),
-which hosts must use for camera aspect and browser backing sizes. Zero dimensions
+which hosts must use for browser backing sizes and, by default, camera aspect.
+For a fixed camera, call `set_aspect_ratio(Some((16, 9)))?` and use the same ratio
+in the camera. Scene and UI targets fit inside the surface, centered with black
+letterbox/pillarbox bars. In this mode oversized backing surfaces scale both axes
+together to preserve window/canvas proportions, including high-DPI surfaces.
+Fitting rounds down to whole pixels (at least one pixel
+per axis). Both ratio terms must be nonzero. `set_aspect_ratio(None)` restores
+full-surface presentation; offscreen capture dimensions are unaffected.
+Zero dimensions
 suspend presentation and preserve previous allocations; `suspended()` reports
 this state and `size()` reports the retained nonzero target size. Timeout and
 occlusion skip a frame; outdated surfaces reconfigure and skip; suboptimal

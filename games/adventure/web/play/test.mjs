@@ -1,0 +1,118 @@
+import init, {BrowserPlayer} from '../inspector/pkg/titan_game.js';
+const result=document.getElementById('result');
+const backend=new URL(location.href).searchParams.get('backend')??'webgpu';
+const checks=[];
+const captures={};
+const evidence=document.createElement('section');document.body.append(evidence);
+function publish(data){
+ result.textContent=JSON.stringify(data,null,2);
+ const bytes=JSON.stringify({...data,captures});
+ if(bytes.length>40*1024*1024)throw Error('capture evidence exceeds 40 MiB');
+ const link=document.createElement('a');link.textContent='Download capture evidence JSON';
+ link.href=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
+ link.download=`adventure-${backend}-evidence.json`;evidence.prepend(link);
+}
+const check=(value,message)=>{if(!value)throw Error(message);checks.push(message);};
+const canvas=document.querySelector('canvas');
+let player, timedOut=false, sequence=0;
+const deadline=setTimeout(()=>{timedOut=true;result.textContent=JSON.stringify({status:'failed',backend,error:'60-second browser deadline expired; reload to discard session',checks});},60000);
+try {
+ await init(); player=await BrowserPlayer.create(canvas,backend);
+ const state=()=>JSON.parse(player.status());
+ const request=async request=>{
+   const request_id=`gpu-${++sequence}`;
+   const response=JSON.parse(await player.dispatch(JSON.stringify({schema_version:2,request_id,request})));
+   if(response.request_id!==request_id)throw Error('response/request correlation mismatch');
+   return response;
+ };
+ check(player.frame(0),'initial GPU frame presented');
+ check((await request({type:'step',frames:1})).error.code==='mutation_disabled','browser controls default disabled');
+ const capture=async (name, retiring=false)=>{
+   const before=await request({type:'status'});
+   let outcome=await request({type:'capture'});
+   const until=performance.now()+5000;
+   while(retiring&&outcome.status==='failure'&&outcome.error.code==='busy'&&performance.now()<until){
+     await new Promise(resolve=>setTimeout(resolve,4));
+     outcome=await request({type:'capture'});
+   }
+   const after=await request({type:'status'});
+   check(outcome.status==='success',`${name}: capture succeeds`);
+   const value=outcome.response, identity=value.identity;
+   check(['observed_frame','state_revision'].every(key=>before[key]===outcome[key]&&outcome[key]===identity[key]&&identity[key]===after[key]),`${name}: immutable frame/revision and no capture tick`);
+   check(identity.width===960&&identity.height===540&&typeof identity.instance_id==='string'&&identity.capture_id>0&&value.width===960&&value.height===540&&value.format==='png'&&value.artifact.startsWith('data:image/png;base64,'),`${name}: owned 960x540 PNG`);
+   captures[name]={...value,state:state()};
+   const figure=document.createElement('figure'),caption=document.createElement('figcaption'),image=document.createElement('img');
+   caption.textContent=`${name}: frame ${identity.observed_frame}, revision ${identity.state_revision}, generation ${identity.session_generation}`;
+   image.src=value.artifact;image.width=960;image.height=540;figure.append(caption,image);evidence.append(figure);
+   return value;
+ };
+ const initial=await capture('initial');
+ check((await capture('initial-repeat')).checksum===initial.checksum,'read-only repeated capture pixels stable');
+ player.set_control_enabled(true);
+
+ const tick=()=>player.frame(1000/60+0.000001);
+ player.resume();
+ player.set_key('KeyD',true,false);
+ for(let i=0;i<8;i++)tick();
+ player.set_key('KeyD',false,false);
+ check(state().characters.jumper.x===1980,'eight fixed movement ticks move Jumper');
+ const moved=await capture('moved');
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ check(state().active_character==='strong','Q selects Strong');
+ const switched=await capture('switched');
+ check(switched.checksum!==moved.checksum,'switch visibly changes active marker');
+ player.set_key('ArrowUp',true,false);for(let i=0;i<8;i++)tick();player.set_key('ArrowUp',false,false);
+ player.pause();
+ const live=state();
+ check(live.session_tick===17&&live.characters.strong.z===6020,'17-tick keyboard route matches semantic foundation');
+ const finish=await capture('route');
+ const recording=player.recording();
+ player.load_recording(recording);player.resume();for(let i=0;i<17;i++)tick();
+ const replay=state();
+ check(JSON.stringify(replay.characters)===JSON.stringify(live.characters)&&replay.active_character===live.active_character&&player.paused(),'recorded keyboard route replays exactly and pauses');
+ check((await capture('replay')).checksum===finish.checksum,'replay pixels match live route');
+ player.resize(0,0);check(!player.frame(0)&&state().surface.suspended,'zero-sized canvas suspends presentation');
+ check((await capture('suspended')).checksum===finish.checksum,'offscreen capture survives suspended surface');
+ for(const [width,height] of [[640,360],[800,500],[1280,720],[960,540]]) {
+   player.resize(width,height);check(player.frame(0)&&!state().surface.suspended,`${width}x${height} presents`);
+ }
+ player.resize(2560,1440);
+ check(player.frame(0)&&JSON.stringify(state().surface.size)===JSON.stringify([2048,1152]),'high-DPI backing size preserves 16:9 under allocation cap');
+ player.resize(960,540);
+ player.restart();player.resume();
+ player.set_key('KeyD',true,false);player.set_key('ArrowRight',true,false);tick();
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ player.set_key('KeyD',false,false);tick();
+ check(state().characters.strong.x===3500,'switch suppresses held physical aliases at logical action level');
+ player.set_key('ArrowRight',false,false);tick();player.set_key('KeyD',true,false);tick();
+ check(state().characters.strong.x===3560,'fresh movement controls selected character');
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
+ check(state().characters.jumper.x===1620,'release/repress between ticks unlocks the selected action');
+ player.set_key('KeyQ',true,false);tick();player.set_key('KeyQ',false,false);
+ player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
+ check(state().characters.strong.x===3620,'quick release/repress survives a second switch');
+ player.pause();const pausedTick=state().session_tick;player.frame(100);
+ check(state().session_tick===pausedTick,'pause freezes simulation ticks');
+ player.resume();player.set_key('KeyD',true,true);tick();
+ check(state().characters.strong.x===3620,'resume discards stale held movement');
+ player.set_key('KeyD',false,false);player.set_key('KeyD',true,false);tick();
+ check(state().characters.strong.x===3680,'release and repress restores movement after pause');
+ player.set_key('KeyR',true,false);tick();player.set_key('KeyR',false,false);
+ check(state().characters.jumper.x===1500&&state().characters.strong.x===3500&&state().active_character==='jumper','R reconstructs both character starts');
+ player.set_key('KeyD',false,false);player.set_key('ArrowUp',true,false);tick();player.set_key('ArrowUp',false,false);
+ const afterRestart=state();const restartRecording=player.recording();
+ player.load_recording(restartRecording);
+ check((await request({type:'step',frames:1})).status==='success'&&state().playback.active&&state().playback.position===1,'inspector step retains replay after recorded restart');
+ check((await request({type:'step',frames:1})).status==='success'&&state().playback.complete&&JSON.stringify(state().characters)===JSON.stringify(afterRestart.characters),'inspector replay continues after recorded restart and matches live state');
+ player.pause();
+ const pending=request({type:'capture'});const overlapping=request({type:'capture'});player.restart();
+ const busy=await overlapping;check(busy.status==='failure'&&busy.error.code==='busy','overlapping capture is bounded busy');
+ const cancelled=await pending;check(cancelled.status==='failure'&&cancelled.error.code==='cancelled','restart invalidates outstanding capture');
+ const reset=await capture('reset',true);
+ check(reset.checksum===initial.checksum&&reset.identity.session_generation>initial.identity.session_generation,'reset restores initial pixels and advances capture generation');
+ let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
+ if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
+ publish({status:'passed',backend,checks,live,replay,final:state()});
+} catch(error){publish({status:'failed',backend,error:String(error),checks});}
+finally{clearTimeout(deadline);}

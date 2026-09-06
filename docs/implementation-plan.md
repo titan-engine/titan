@@ -111,4 +111,21 @@ For actual browser GPU acceptance, serve the collection-room `web/` directory
 and open `/play/test.html?backend=webgpu` and `?backend=webgl2`. Each must report
 its own pass; Node execution is CPU/WASM evidence only.
 
+Adventure control foundation gates:
+
+```sh
+cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
+cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
+cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
+python3 games/adventure/scripts/test-control.py
+python3 games/adventure/scripts/build-browser.py
+node games/adventure/scripts/test-browser.mjs
+node --test games/adventure/web/play/*.test.mjs
+python3 games/adventure/scripts/test-player.py # desktop GPU/window required
+```
+
+Serve `games/adventure/web/` and open `/play/test.html?backend=webgpu`
+and `?backend=webgl2` for actual browser GPU/control verification. The Node
+WASM test compares the full state against a fresh native trace at every tick.
+
 Factory construction package gates and player checks are documented in its [README](../games/factory/README.md#source-and-checks). Run them for factory changes alongside the workspace gates above.

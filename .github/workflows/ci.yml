@@ -145,6 +145,13 @@ jobs:
           cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/collection-room/scripts/test-control.py
 
+      - name: Check and drive two-character adventure
+        run: |
+          cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
+          cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
+          cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
+          python3 games/adventure/scripts/test-control.py
+
       - name: Check and drive independent arena game
         run: |
           cargo fmt --manifest-path games/arena/Cargo.toml --all --check
@@ -240,6 +247,12 @@ jobs:
           python3 games/collection-room/scripts/build-browser.py
           node games/collection-room/scripts/test-browser.mjs
           node --test games/collection-room/web/play/*.test.mjs
+
+      - name: Exercise adventure in actual WebAssembly with native agreement
+        run: |
+          python3 games/adventure/scripts/build-browser.py
+          node games/adventure/scripts/test-browser.mjs
+          node --test games/adventure/web/play/*.test.mjs
 
       - name: Exercise headless 3D primitives in actual WebAssembly
         run: node scripts/test-render-3d.mjs
@@ -338,6 +351,9 @@ jobs:
             ${{ runner.temp }}/titan-composition-evidence/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Inspect and replay the actual native adventure player
+        run: python3 games/adventure/scripts/test-player.py
 
       - name: Exercise native factory construction player
         run: |

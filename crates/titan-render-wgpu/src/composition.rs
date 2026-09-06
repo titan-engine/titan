@@ -173,6 +173,16 @@ impl GpuSceneRenderer3d {
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
     ) -> Result<(), String> {
+        self.render_in_viewport(encoder, target, None)
+    }
+    // Surface presentation may fit the composed scene into a centered viewport.
+    // Scene/UI intermediates already have that viewport's dimensions.
+    pub(crate) fn render_in_viewport(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        viewport: Option<(u32, u32, u32, u32)>,
+    ) -> Result<(), String> {
         if !self.prepared {
             return Err("prepare scene and UI before rendering".into());
         }
@@ -196,6 +206,9 @@ impl GpuSceneRenderer3d {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some((x, y, width, height)) = viewport {
+            pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
+        }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bindings, &[]);
         pass.draw(0..3, 0..1);
