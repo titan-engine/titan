@@ -21,7 +21,7 @@ trace to processing start at 64, first plate at 154, first delivery at 159,
 
 ## Results and reproducibility
 
-[The script](reproduce.py) drives only public CLI and sequence operations.
+[The script](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/variation/reproduce.py) drives only public CLI and sequence operations.
 [The exact route](route.json) places nine structures, then advances one tick per
 operation through tick 969. It asserts successful outcomes, independently counts
 resident slots and checks extracted + seeded = resident + delivered + discarded
@@ -57,12 +57,17 @@ player HUD and cannot establish native/browser interface usability. The PPM is
 the original capture; the PNG is a lossless format conversion using macOS `sips`.
 No GUI was opened or focused. Owned hosts exited and discovery cleanup passed.
 
-To reproduce, from a repository checkout containing this evidence:
+This completed variation is historical; the runner is retained at
+[evidence revision `17723e62334a19763f8cf81b2f31cc840b4d6289`](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/variation).
+To reproduce from the repository root, use unused disposable paths:
 
 ```sh
+mkdir /tmp/factory-variation-evidence
+git archive 17723e62334a19763f8cf81b2f31cc840b4d6289 docs/evidence/factory-verification/variation | tar -x -C /tmp/factory-variation-evidence
+evidence=/tmp/factory-variation-evidence/docs/evidence/factory-verification/variation
 git worktree add /tmp/factory-variation-repro -b codex/factory-variation-repro e4800939606889669e8a9b04650cda4bce6df37d
-git -C /tmp/factory-variation-repro apply "$PWD/docs/evidence/factory-verification/variation/processor-90.patch"
-python3 docs/evidence/factory-verification/variation/reproduce.py /tmp/factory-variation-repro /tmp/factory-variation-results
+git -C /tmp/factory-variation-repro apply "$evidence/processor-90.patch"
+python3 "$evidence/reproduce.py" /tmp/factory-variation-repro /tmp/factory-variation-results
 sips -s format png /tmp/factory-variation-results/complete.ppm --out /tmp/factory-variation-results/complete.png
 ```
 

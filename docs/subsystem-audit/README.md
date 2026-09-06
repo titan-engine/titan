@@ -12,7 +12,19 @@ The issue's original audit baseline was `c14c9dfe7239f7853eed7f0d7ddac02f4fdfc79
 the source and execution evidence here use `3271f2819c2a11a0e1fefa922f888e8864671800`.
 No engine behavior, Cargo features, or CI jobs are changed by this investigation.
 
-## Reproduce the consumer
+## Reproduce the historical consumer
+
+This completed experiment is preserved at evidence-containing revision
+`1c885151a2e59b5f6212939c1658f4c49408273f`. Its scripts are not maintained HEAD verification tools.
+Check out the measured engine source and extract only its historical harness
+from the evidence revision. Run the original commands below there;
+keep generated output in that checkout's ignored `target/` directory.
+
+```sh
+git worktree add --detach /tmp/titan-subsystem-audit 3271f2819c2a11a0e1fefa922f888e8864671800
+git archive 1c885151a2e59b5f6212939c1658f4c49408273f docs/subsystem-audit/reproduce.py docs/subsystem-audit/consumer.rs | tar -x -C /tmp/titan-subsystem-audit
+cd /tmp/titan-subsystem-audit
+```
 
 From the repository root, with stable Rust, Python 3, Node.js, and the WASM target:
 
@@ -23,7 +35,7 @@ python3 docs/subsystem-audit/reproduce.py
 cargo test -p titan --lib app::
 ```
 
-The [runner](reproduce.py) copies [consumer.rs](consumer.rs) into a temporary
+The [runner](https://github.com/titan-engine/titan/blob/1c885151a2e59b5f6212939c1658f4c49408273f/docs/subsystem-audit/reproduce.py) copies [consumer.rs](https://github.com/titan-engine/titan/blob/1c885151a2e59b5f6212939c1658f4c49408273f/docs/subsystem-audit/consumer.rs) into a temporary
 directory **outside the repository workspace**, with its own `[workspace]` and
 only one dependency:
 

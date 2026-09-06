@@ -56,12 +56,13 @@ live-inspector claim is made.
 
 ## Independent browser exercise and parity
 
-Copy the retained HTML into the served root:
-
-```sh
-cp docs/evidence/factory-verification/player/browser-exercise.html games/factory/web/independent-verification.html
-python3 -m http.server 8093 --bind 127.0.0.1 --directory games/factory/web
-```
+This is a historical browser run at the source SHA above. The
+[original DOM harness](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/player/browser-exercise.html) remains available at
+its evidence-containing revision. For a historical rerun, retrieve that revision's
+harness into a disposable checkout of the measured source, build the browser,
+copy the harness to `games/factory/web/independent-verification.html`, and serve
+`games/factory/web` on localhost port 8093. Keep resulting captures in ignored
+`target/evidence/` or outside the maintained checkout.
 
 Open `/independent-verification.html` in an actual GPU browser. It runs a bounded
 DOM exercise against the actual player in an iframe and publishes `PASS independent
@@ -81,11 +82,21 @@ recover, completing at 1806 with zero discards. [Saved JSON](browser-exercise.js
 and [fresh repeat](browser-exercise-repeat.json) preserve all seven states.
 They match exactly after excluding only `frame` (pre-restart startup differed).
 
-[Native verification](verify-traces.py) replays the same repair history through
+[Original native verification](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/player/verify-traces.py) replays the same repair history through
 3,767 operation boundaries and compares all seven browser states after excluding
 only host/UI fields listed in [its result](native-browser-traces.json). It asserts
 conservation at every boundary and no rejected operation. [Exact sequence](repair-sequence.json)
 is retained. The independent simulation result confirms UI-driven semantics.
+
+The maintained [native regression](../../../../games/factory/scripts/verify-traces.py)
+now consumes only seven read-only semantic states in
+[`repair-browser-checkpoints.json`](../../../../games/factory/tests/fixtures/repair-browser-checkpoints.json).
+Run the [current documented command](../../../../games/factory/README.md#source-and-checks)
+to compare HEAD native behavior with that historical browser baseline. Its summary
+and generated sequence default to root `target/evidence/factory-repair/`; an
+explicit `--output-dir` can select another ignored or external directory. This
+headless rerun does not establish fresh browser/GPU or manual-player evidence.
+
 
 The 900px layout control narrows the actual player iframe. [Screenshot](browser-900.png)
 shows readable wrapped palette text, objective and pinned inventory. Restart,

@@ -3,9 +3,28 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 
-const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--no-deps', '--format-version', '1'], { encoding: 'utf8', timeout: 60000 }));
+let repo = dirname(fileURLToPath(import.meta.url));
+while (!(existsSync(resolve(repo, 'Cargo.toml')) && existsSync(resolve(repo, 'scripts')))) {
+  const parent = dirname(repo);
+  if (parent === repo) throw Error('cannot locate Titan repository');
+  repo = parent;
+}
+const { values } = parseArgs({ options: {
+  output: { type: 'string', default: resolve(repo, 'target/evidence/inspection-repair/browser-output.json') },
+  help: { type: 'boolean', default: false },
+} });
+if (values.help) {
+  console.log('Usage: node scripts/inspection-repair/browser.mjs [--output PATH]');
+  process.exit(0);
+}
+const output = resolve(values.output);
+
+const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], { cwd: repo, encoding: 'utf8', timeout: 60000 }));
 const require = createRequire(import.meta.url);
 const { BrowserRuntime, BrowserLiveRuntime } = require(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 const evidence = [];
@@ -62,4 +81,6 @@ try {
   assert.equal(call(optedIn, 'opted-in-capabilities', { type: 'capabilities' }).response.mutation_enabled, true);
   assert.equal(call(optedIn, 'opted-in-step', { type: 'step', frames: 1 }).observed_frame, 1);
 } finally { optedIn.free(); }
-console.log(JSON.stringify(evidence, null, 2));
+mkdirSync(dirname(output), { recursive: true });
+writeFileSync(output, JSON.stringify(evidence, null, 2) + '\n');
+console.log(`WASM inspection evidence: ${output}`);
