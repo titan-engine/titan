@@ -1,0 +1,496 @@
+{
+  "schema": 1,
+  "game": "factory",
+  "utc": "2026-09-06T08:46:06.328290+00:00",
+  "revision": "0468ffe00b2cb109acc33591dc382839196ce7fe",
+  "environment": {
+    "os": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.9.6",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "cpu": "Apple M5 Pro",
+    "logical_cpus": 18,
+    "profile": "Cargo dev (unoptimized + debuginfo)",
+    "backend": "headless native control; software renderer",
+    "concurrency": "private target; global registry/cache and host CPU shared with other agents/builds"
+  },
+  "cache": "empty private CARGO_TARGET_DIR; existing global Cargo registry/toolchain cache retained",
+  "boundary": "automated operation start through asserted result; excludes reading docs, authoring harness, scratch extraction and human/agent reasoning",
+  "human_interventions": 0,
+  "phases": [
+    {
+      "name": "build_cold_private_target",
+      "seconds": 23.381896,
+      "attempts": 1,
+      "result": {
+        "cli_and_game_binaries_exist": true
+      }
+    },
+    {
+      "name": "launch_discovery_initial_state",
+      "seconds": 0.256363,
+      "attempts": 1,
+      "polls": 1,
+      "result": {
+        "structures": 1,
+        "tick": 0
+      }
+    },
+    {
+      "name": "capability_command_entity_inspection",
+      "seconds": 0.027469,
+      "attempts": 1,
+      "result": {
+        "capabilities": {
+          "controlled": true,
+          "mutation_enabled": true,
+          "operations": [
+            "inspect",
+            "step",
+            "invoke",
+            "query",
+            "capture"
+          ],
+          "run_mode": "headless",
+          "schema_version": 2,
+          "type": "capabilities"
+        },
+        "commands": {
+          "commands": [
+            {
+              "arguments": {
+                "ticks": {
+                  "description": "Number of fixed ticks, 0..36000",
+                  "type_name": "u32",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory advance; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "advance"
+            },
+            {
+              "arguments": {
+                "facing": {
+                  "description": "N/E/S/W; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "kind": {
+                  "description": "conveyor/extractor/processor; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "op": {
+                  "description": "place/rotate/remove/inspect/select/advance/restart; additional fields depend on operation",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "ticks": {
+                  "description": "Number of fixed ticks, 0..36000",
+                  "type_name": "u32",
+                  "writable": false
+                },
+                "x": {
+                  "description": "Column 0..11; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                },
+                "y": {
+                  "description": "Row 0..7; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory construct; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "construct"
+            },
+            {
+              "arguments": {
+                "facing": {
+                  "description": "N/E/S/W; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "kind": {
+                  "description": "conveyor/extractor/processor; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "x": {
+                  "description": "Column 0..11; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                },
+                "y": {
+                  "description": "Row 0..7; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory place; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "place"
+            },
+            {
+              "arguments": {
+                "x": {
+                  "description": "Column 0..11; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                },
+                "y": {
+                  "description": "Row 0..7; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory remove; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "remove"
+            },
+            {
+              "description": "Validated factory restart; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "restart"
+            },
+            {
+              "arguments": {
+                "x": {
+                  "description": "Column 0..11; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                },
+                "y": {
+                  "description": "Row 0..7; required for tile operations",
+                  "type_name": "i32",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory rotate; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "rotate"
+            },
+            {
+              "arguments": {
+                "facing": {
+                  "description": "N/E/S/W; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                },
+                "kind": {
+                  "description": "conveyor/extractor/processor; optional for select",
+                  "type_name": "string",
+                  "writable": false
+                }
+              },
+              "description": "Validated factory select; use construct with tagged op JSON, or direct command arguments. Errors include actionable codes.",
+              "name": "select"
+            },
+            {
+              "arguments": {
+                "operations": {
+                  "description": "Ordered tagged operations",
+                  "type_name": "array",
+                  "writable": false
+                }
+              },
+              "description": "Execute at most 256 tagged operations serially; individual rejections are recorded and later operations continue",
+              "name": "sequence"
+            }
+          ],
+          "type": "commands"
+        },
+        "entities": {
+          "entities": [
+            {
+              "components": [
+                "titan::ecs::builtin::Name",
+                "titan_factory::game::Deposit"
+              ],
+              "id": {
+                "generation": 0,
+                "index": 0
+              },
+              "name": "ore deposit (1,3)"
+            },
+            {
+              "components": [
+                "titan::ecs::builtin::Name",
+                "titan_factory::game::Structure"
+              ],
+              "id": {
+                "generation": 0,
+                "index": 1
+              },
+              "name": "delivery"
+            }
+          ],
+          "type": "entities"
+        }
+      }
+    },
+    {
+      "name": "construct_scenario_write_control_verify",
+      "seconds": 0.042123,
+      "attempts": 1,
+      "result": {
+        "state": {
+          "camera": {
+            "x": 0.0,
+            "y": 0.0,
+            "zoom": 1.0
+          },
+          "delivered": 0,
+          "deposit": {
+            "x": 1,
+            "y": 3
+          },
+          "frame": 60,
+          "height": 8,
+          "hover": null,
+          "objective": "Extract ore at (1,3), process ore into plates, deliver 10 plates to (10,3). Construction foundation: production and transport are not implemented.",
+          "outcome": "Running",
+          "selection": {
+            "facing": "E",
+            "kind": "conveyor"
+          },
+          "structures": [
+            {
+              "facing": "E",
+              "inputs": [],
+              "kind": "extractor",
+              "output": "E",
+              "x": 1,
+              "y": 3
+            },
+            {
+              "facing": "E",
+              "inputs": [
+                "N",
+                "S",
+                "W"
+              ],
+              "kind": "conveyor",
+              "output": "E",
+              "x": 2,
+              "y": 3
+            },
+            {
+              "facing": "E",
+              "inputs": [
+                "W"
+              ],
+              "kind": "processor",
+              "output": "E",
+              "x": 3,
+              "y": 3
+            },
+            {
+              "facing": "E",
+              "inputs": [
+                "W"
+              ],
+              "kind": "delivery",
+              "output": null,
+              "x": 10,
+              "y": 3
+            }
+          ],
+          "tick": 60,
+          "width": 12
+        },
+        "recording": {
+          "dropped": 0,
+          "operations": [
+            {
+              "operation": {
+                "facing": "E",
+                "kind": "extractor",
+                "op": "place",
+                "x": 1,
+                "y": 3
+              },
+              "result": {
+                "ok": true,
+                "value": {
+                  "structure": {
+                    "facing": "E",
+                    "inputs": [],
+                    "kind": "extractor",
+                    "output": "E",
+                    "x": 1,
+                    "y": 3
+                  },
+                  "terrain": "ore_deposit",
+                  "x": 1,
+                  "y": 3
+                }
+              },
+              "tick": 0
+            },
+            {
+              "operation": {
+                "facing": "E",
+                "kind": "conveyor",
+                "op": "place",
+                "x": 2,
+                "y": 3
+              },
+              "result": {
+                "ok": true,
+                "value": {
+                  "structure": {
+                    "facing": "E",
+                    "inputs": [
+                      "N",
+                      "S",
+                      "W"
+                    ],
+                    "kind": "conveyor",
+                    "output": "E",
+                    "x": 2,
+                    "y": 3
+                  },
+                  "terrain": "ground",
+                  "x": 2,
+                  "y": 3
+                }
+              },
+              "tick": 0
+            },
+            {
+              "operation": {
+                "facing": "E",
+                "kind": "processor",
+                "op": "place",
+                "x": 3,
+                "y": 3
+              },
+              "result": {
+                "ok": true,
+                "value": {
+                  "structure": {
+                    "facing": "E",
+                    "inputs": [
+                      "W"
+                    ],
+                    "kind": "processor",
+                    "output": "E",
+                    "x": 3,
+                    "y": 3
+                  },
+                  "terrain": "ground",
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "tick": 0
+            },
+            {
+              "operation": {
+                "op": "advance",
+                "ticks": 60
+              },
+              "result": {
+                "ok": true,
+                "value": {
+                  "tick": 60
+                }
+              },
+              "tick": 60
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "replay_fresh_process_verify",
+      "seconds": 0.009763,
+      "attempts": 1,
+      "result": {
+        "exact_full_state_equal": true,
+        "operations": 4
+      }
+    },
+    {
+      "name": "software_capture_read_repeat_verify",
+      "seconds": 0.050131,
+      "attempts": 1,
+      "result": {
+        "checksum": "e2bf69ed3b77d540",
+        "format": "ppm",
+        "height": 256,
+        "identity": {
+          "capture_id": 1,
+          "height": 256,
+          "instance_id": "factory-baseline-76199",
+          "observed_frame": 60,
+          "session_generation": 0,
+          "state_revision": 1,
+          "width": 384
+        },
+        "type": "capture",
+        "width": 384,
+        "ppm_bytes": 294927,
+        "repeat_checksum_equal": true
+      }
+    },
+    {
+      "name": "diagnose_fixed_delivery_rejection",
+      "seconds": 0.060155,
+      "attempts": 1,
+      "result": {
+        "expected_error": "invalid_value",
+        "message": "FIXED_DELIVERY: delivery cannot be rotated or removed",
+        "state_unchanged": true,
+        "tile": {
+          "structure": {
+            "facing": "E",
+            "inputs": [
+              "W"
+            ],
+            "kind": "delivery",
+            "output": null,
+            "x": 10,
+            "y": 3
+          },
+          "terrain": "ground",
+          "x": 10,
+          "y": 3
+        },
+        "diagnostic_manifest_api_png_exist": true,
+        "manifest_keys": [
+          "api_summary",
+          "bundle_version",
+          "capture",
+          "context",
+          "history",
+          "local_error",
+          "logs",
+          "request",
+          "response",
+          "timings_us",
+          "world_state"
+        ]
+      }
+    },
+    {
+      "name": "shutdown_verify",
+      "seconds": 0.005031,
+      "attempts": 1,
+      "result": {
+        "registration_removed": true,
+        "process_exited": true
+      }
+    },
+    {
+      "name": "change_rule_edit_incremental_build_verify",
+      "seconds": 0.970664,
+      "attempts": 1,
+      "result": {
+        "scratch_only": true,
+        "new_limit": 60,
+        "rejects_61": true,
+        "accepts_60": true,
+        "final_tick": 60
+      }
+    }
+  ],
+  "unexpected_failures": []
+}
