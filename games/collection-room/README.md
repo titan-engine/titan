@@ -236,11 +236,9 @@ deferred reply boundary. GPU players advertise capture; CPU-only hosts keep it u
 
 The [historical player acceptance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/collection-room/evidence/player-acceptance.json)
 measured source `e1a2b9314bc05767a2d46af8b4d3799d89ebca71` on 2026-09-05,
-macOS / Apple M5 Pro; its evidence is preserved at
-`e4ff0dff2d02dfffa6bc085286798886a92e30e7`. Native Metal presented 388 frames
-and verified an actual 800 × 500 resize and zero-size suspension. Actual browser
-WebGPU and Chromium WebGL2 via ANGLE Metal passed separately. This is historical
-platform provenance; use the commands above for current acceptance. Physical
+macOS / Apple M5 Pro. It preserves native Metal and independent actual browser
+WebGPU and Chromium WebGL2 via ANGLE Metal observations, including resize and
+zero-size suspension. Use the commands above for current acceptance. Physical
 device loss was not forced and other operating systems were not locally GPU-verified.
 
 
@@ -275,7 +273,5 @@ reading the numeric comparison. The ordinary native/actual-WASM CI remains GPU
 independent; GPU player and cross-backend image checks are explicit desktop runs.
 
 The [historical acceptance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/collection-room/evidence/player-acceptance.json) covers captures on Metal,
-WebGPU and WebGL2. All ten cross-backend pose comparisons measured zero RGB
-difference on Apple M5 Pro; the declared tolerances remain authoritative across
-adapters. Physical device loss was not forced; bounded backend map failure and
+WebGPU and WebGL2. The declared tolerances remain authoritative across adapters. Physical device loss was not forced; bounded backend map failure and
 resource retirement have an explicit native GPU test.

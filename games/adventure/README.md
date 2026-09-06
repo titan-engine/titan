@@ -260,34 +260,27 @@ diagnostic reporting; this example adds no runtime editing or new mechanics.
 
 ## Historical exercise provenance
 
-The independent #86 evaluation measured gameplay source
-`02272893a0d91af2b1ac6b5159644b70ab46108c` on 2026-09-06, macOS / Apple M5 Pro.
-Its [original report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md)
-and adjacent native/WebGPU/WebGL2 identity-bearing reports and inspected PNGs
-remain available at evidence revision `e4ff0dff2d02dfffa6bc085286798886a92e30e7`.
-Native Metal presented 4,311 frames; actual browser WebGPU and WebGL2 each
-passed 209 checks independently. Three perturbed semantic scenarios replayed
-34 checkpoints. These bounded agent checks found no gameplay defect; they do
-not establish human discoverability, current GUI behavior, portable pixel
-identity or exhaustive freedom from softlocks. The fixed view and held-switch
-release gesture were observed limitations. The current commands above remain
-authoritative for reruns; the native playtest runner uses solution routes as
-navigation templates, adding excursions, waits, recovery and transition probes.
-It writes its state/operation report to ignored
-`games/adventure/target/playtest-86/semantic.json` by default. Native GPU captures
-use ignored root `target/adventure-gpu-evidence/`; save browser downloads and their
-capture identities to ignored output such as root `target/evidence/adventure/`.
-Check custom output paths with `git check-ignore` before running.
+The [independent #86 evaluation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md)
+measured source `02272893a0d91af2b1ac6b5159644b70ab46108c` on macOS / Apple M5 Pro.
+The linked report preserves independent native Metal and actual WebGPU/WebGL2
+observations, perturbed routes and semantic checkpoint replays. These bounded
+agent checks found no gameplay defect; they do not establish current GUI behavior,
+human discoverability or portable pixel identity. The fixed view and held-switch
+release gesture were observed limitations.
 
-The unfamiliar-author variation moved room-1 plate B south 600 mm and completed
-a 579-tick ordinary-input route with final-state replay, invalid-recording
-rejection and room-2 preservation. It measured the same source with the
-[original patch and route](https://github.com/titan-engine/titan/tree/3e584a023d346805c23c2bf11162c87dee5042ed/games/adventure/evidence/playtest-86).
-The [method and limitations](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/variation-notes.md)
-support #97's assessment: full-task monotonic timing was missed, the observed
-UTC interval was 244 seconds, and successful command phases totalled 15.044
-seconds with uncertain cache warmth. This is one CPU-only authoring sample,
-not a full-task latency or browser/GPU result. Reproduce outside the checkout:
+Current reruns use the commands above. The native playtest runner adds excursions,
+waits, recovery and transition probes to existing solution routes, writing ignored
+`games/adventure/target/playtest-86/semantic.json`. Native GPU captures use root
+`target/adventure-gpu-evidence/`; save browser downloads with their capture identities
+under ignored root `target/evidence/adventure/`. Check custom destinations with
+`git check-ignore` before running.
+
+The [unfamiliar plate variation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/variation-notes.md)
+measured the same source with the original patch below, completing an adapted
+ordinary-input route with final-state replay, invalid-recording rejection and
+room-2 preservation. This CPU-only sample supports #97's assessment; full-task
+timing was missed and cache warmth was uncertain. Its historical harness, patch
+and route remain reproducible outside the checkout:
 
 ```sh
 scratch=$(mktemp -d)
@@ -299,16 +292,11 @@ patch -d "$scratch" -p1 < "$evidence/variation.patch"
 CARGO_BUILD_JOBS=4 python3 "$evidence/variation-reproduce.py" "$scratch" "$scratch/results"
 ```
 
-The later #124 contact-pushing correction has separate
-[human recording, final state and capture provenance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/push-124/human-result.json)
-and [platform verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/verification.md#contact-pushing-correction-124).
-On 2026-09-06 the maintainer completed room 2 at tick 1042 with ordinary keyboard
-input in the native Metal release player on Apple M5 Pro; inspection was read-only.
-The implementation revision is `bf9835541d5acfe789f20d8a37cfc28aef6ca743`;
-the played build had the same gameplay code before the HUD plus-sign became AND
-and focused tests were added. The 1165-frame recording includes frozen completion
-frames and matched native/actual-WASM final-state replay. The separately recorded
-platform pass reports native Metal and 229 checks each in actual WebGPU/WebGL2.
-This is one maintainer playtest, not a broader usability study. Use the current
-block/sequence and player commands above for new checks; historical recordings
-and their original reproduction context remain at the linked evidence revision.
+The [#124 human playtest provenance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/push-124/human-result.json)
+and [platform verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/verification.md#contact-pushing-correction-124)
+preserve ordinary-keyboard room-2 completion on native Metal / Apple M5 Pro,
+plus separate actual WebGPU/WebGL2 checks. Implementation source was
+`bf9835541d5acfe789f20d8a37cfc28aef6ca743`; the human build used its gameplay code
+before a HUD wording fix and focused tests. This was one maintainer playtest with
+read-only inspection, not a broader usability study. Original recordings and
+reproduction context remain at the linked evidence revision.

@@ -318,9 +318,7 @@ disposable authoring variation are documented in the [#93 verification report](.
 
 The [original interface verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/factory/evidence/README.md#construction-interface-and-bottleneck-diagnosis)
 measured source `9bbac0b5ee750cd365221c5c40db9c153d191704` on 2026-09-06,
-macOS Apple Silicon. The evidence-containing revision is
-`e4ff0dff2d02dfffa6bc085286798886a92e30e7`; adjacent JSON and inspected native/browser
-PNGs preserve actual presentation and manual wrong-facing/disconnected repairs.
+macOS Apple Silicon. Adjacent JSON and inspected native/browser PNGs preserve actual presentation and manual wrong-facing/disconnected repairs.
 Native used Metal; the actual WASM browser player used its default supported GPU
 backend. This does not establish an independent WebGPU/WebGL2 matrix or portable
 pixel identity. Earlier construction, transport and production observations in
