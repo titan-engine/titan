@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Brainstorm in local conversations or [GitHub Discussions](https://github.com/titan-engine/titan/discussions), then specify concrete work here. Do not commit planning files. Follow the [planning and issue intake policy](https://github.com/titan-engine/titan/blob/main/docs/workflow.md#planning-and-issue-intake).
-        A well-specified issue enters Proposed and is not implementation approval. Maintainers record approval before Ready and help with triage. For a bug, use Bug report; for usage or contributor questions, use Discussions.
+        Concrete work enters Ready without a separate approval step. Check scope and prerequisites and coordinate ownership before starting; maintainers help with triage. For a bug, use Bug report; for usage or contributor questions, use Discussions.
   - type: textarea
     id: outcome
     attributes:
@@ -33,13 +33,6 @@ body:
     attributes:
       label: Prerequisite context (optional)
       description: Native GitHub blocking and parent/sub-issue relationships are authoritative; maintainers handle relationship triage. Do not duplicate their lists or titles here. Add prerequisite rationale only if it explains something beyond those relationships.
-  - type: textarea
-    id: approval
-    attributes:
-      label: Approval state
-      description: State that maintainer approval is pending, or link the recorded maintainer agreement. Filing this issue does not authorize implementation.
-    validations:
-      required: true
   - type: textarea
     id: contribution
     attributes:

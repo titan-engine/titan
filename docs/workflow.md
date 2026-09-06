@@ -28,7 +28,6 @@ Once discussion yields concrete work, create a well-specified issue recording:
 - The intended outcome and problem it addresses.
 - Acceptance criteria and how to verify them.
 - Scope boundaries, including what is excluded.
-- The approval state: pending maintainer decision or recorded maintainer agreement.
 
 Triage actual prerequisites using native GitHub blocking relationships, and use
 native parent/sub-issue relationships for decomposition. These relationships are
@@ -37,10 +36,10 @@ rationale in prose only when it explains something beyond the native relationshi
 no body list or "none known" declaration is required. Maintainers handle relationship
 updates for contributors without access.
 
-Link public source discussions or accepted requirements when relevant. A complete
-specification may still be **Proposed** and unapproved; only recorded maintainer
-approval makes it eligible for **Ready**. Blank issues and CLI-created issues follow
-the same handoff, rather than serving as quick idea capture. Concrete discovered
+Link public source discussions or accepted requirements when relevant. Concrete
+work enters **Ready** without a separate proposal stage or maintainer approval
+record. Blank issues and CLI-created issues follow the same intake policy; use
+conversations or Discussions for ideas that are not yet concrete. Discovered
 follow-up work follows this policy too. Small implementation steps may remain
 checklists within their owning issue.
 
@@ -48,32 +47,31 @@ Ordinary bug reports do not require this completed specification: report observe
 behavior, reproduction details and environment as available. Ask usage or contributor
 questions in Discussions. Reporters need not design a fix or perform maintainer
 triage; maintainers fill in missing criteria and boundaries, triage native dependency
-relationships and record approval before work becomes Ready.
+relationships before implementation begins.
 
 For example, explore possible rendering features in a local conversation; discuss
 a wider API proposal in Discussions; document an accepted rendering architecture
 and its rationale in repository docs. Submit a crash report as a bug even without
 a proposed fix. Turn a selected implementation or bounded investigation into an
-issue with the outcome, checks, boundaries and approval state above, and triage
+issue with the outcome, checks and boundaries above, and triage
 its dependencies through native GitHub relationships.
 
-## Approval and ownership
+## Status and ownership
 
 | Status | Meaning |
 | --- | --- |
-| Proposed | Concrete proposal awaiting approval, or a report awaiting triage; implementation is not approved. |
-| Ready | Maintainer-approved scope with concrete acceptance criteria. Check dependencies before claiming. |
-| In progress | One owner has claimed the approved issue and started work. |
+| Ready | Queued work. Check scope, acceptance criteria and dependencies before claiming; fill gaps during bug triage. |
+| In progress | One owner has claimed the issue and started work. |
 | In review | Implementation is ready for independent review and required CI. |
-| Done | Work is completed and its implementation merged. Verify the resulting main revision before reporting completion. |
+| Done | Issue is closed: implemented, not planned or duplicate. The closure reason distinguishes retired work from completed implementation. |
 
-Ready is the approved queue, not a promise that prerequisites are complete. The
-Ready view excludes issues GitHub marks blocked. Priority does not grant approval.
-Record the maintainer-approved scope and decision in the issue before moving
-it to Ready. A broad requirement or historical design discussion does not authorize its
-implementation. Split broad proposals into bounded sub-issues when selected.
-Apply the [planning and issue intake policy](#planning-and-issue-intake) before
-creating implementation issues and during report triage.
+Ready is the queue; it does not guarantee that prerequisites are complete or that
+a newly filed bug has been fully triaged. The Ready view excludes issues GitHub
+marks blocked. Before claiming, check that the work is concrete, its acceptance
+criteria and scope are clear, and its prerequisites are satisfied. Fill missing
+details through triage, without a separate approval step. Priority orders work.
+Broad requirements and historical design discussions remain context; turn selected
+work into bounded issues under the [planning and issue intake policy](#planning-and-issue-intake).
 
 Use Priority (P0 urgent, P1 high, P2 normal, P3 later), Area and Owner fields.
 Assignees identify contributors. Owner is optional coordination metadata for
@@ -87,8 +85,10 @@ Use sub-issues for decomposition and blocking
 relationships only for actual prerequisites. Related work need not be blocked.
 
 New/updated open Titan issues automatically enter the project and default to
-Proposed. Sub-issues are automatically included. Closing an issue sets Done;
-linking a PR does not change approval/ownership status. Moving a card to Done does
+Ready. Sub-issues are automatically included. Closing an issue sets Done; use the
+closure reason to distinguish implemented work from work retired as not planned
+or duplicate. Verify the exact resulting main revision before reporting an
+implementation complete. Linking a PR does not change status or ownership. Moving a card to Done does
 not itself close its issue. Reopened work must be triaged explicitly. PRs appear
 through the Linked pull requests field rather than duplicate execution cards.
 Set In review explicitly when the linked implementation is ready.
@@ -96,7 +96,8 @@ Set In review explicitly when the linked implementation is ready.
 ## Maintainer-run agent implementation loop
 
 1. Read the issue, dependencies, relevant design docs and applicable skills.
-   Select an unblocked Ready issue. Claim Owner and set In progress before editing;
+   Select a concrete, unblocked Ready issue with clear scope and checks.
+   Claim Owner and set In progress before editing;
    coordinate claims through one integration owner to avoid simultaneous claims.
 2. Use an isolated worktree and a `codex/` branch for each independent change.
    Keep two or three independent implementations active initially. Agree shared
@@ -108,8 +109,8 @@ Set In review explicitly when the linked implementation is ready.
    and checksums unless an intentional visual change was approved.
 5. Obtain independent agent review, address findings, and move the issue to
    In review. Record the review on the PR using the attribution format below.
-6. Enqueue approved scope autonomously only after independent review, resolved
-   review discussions, and all required PR checks pass for the current change.
+6. Enqueue work within the issue scope autonomously only after independent review,
+   resolved review discussions, and all required PR checks pass for the current change.
    Do not update branches merely because main advanced: the queue tests the latest
    main plus preceding queued changes before merging. Address real conflicts and
    failures, with renewed review where needed. Never bypass the queue/protections
@@ -163,7 +164,7 @@ Scope: <files/behavior examined>
 Findings: <actionable findings, or no material findings>
 Verification: <checks personally performed and evidence inspected>
 Limitations: <anything not verified>
-Disposition: <changes requested / ready within approved scope>
+Disposition: <changes requested / ready within issue scope>
 ```
 
 The author cannot substitute self-review for independent review. An integration
@@ -197,7 +198,7 @@ gh stack init codex/foundation
 gh stack add codex/integration
 gh stack submit --auto --remote origin
 gh stack view --json
-# Enqueue only the reviewed, green, approved range:
+# Enqueue only the reviewed, green range within issue scope:
 gh stack merge <top-PR-number> --yes
 ```
 

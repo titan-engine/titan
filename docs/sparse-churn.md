@@ -130,7 +130,7 @@ A bounded follow-up investigation is warranted if large worlds use many rare
 component types: compare a paged sparse index against this high-index fixture,
 including dense-operation costs, before selecting a storage change. The measured
 amplification is enough to motivate that comparison, but does not establish that
-replacement would improve a real game's overall tradeoff. No optimization or
-follow-up implementation is approved by this report; issue #71 owns this completed
-investigation and subsequent scope remains a maintainer decision. There is no
+replacement would improve a real game's overall tradeoff. Issue #71 owns this completed
+investigation; any optimization or follow-up implementation needs a separate
+concrete issue with scope and verification criteria. There is no
 basis here for changing the scheduler or promising million-entity capacity.

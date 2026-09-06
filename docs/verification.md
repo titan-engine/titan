@@ -2,7 +2,7 @@
 
 Use this guide to select checks for the affected runtime or tooling. Start with
 [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution setup and
-[workflow.md](workflow.md) for approval, ownership, review and integration policy.
+[workflow.md](workflow.md) for intake, ownership, review and integration policy.
 
 See [acceptance deadlines](acceptance-timeouts.md) for configurable build/runtime
 limits, owned-process cleanup and CI evidence headroom.
@@ -20,7 +20,8 @@ Do not silently present transport timeouts as cancellation of running systems.
 
 The [3D rendering](rendering.md#3d-rendering-contract) and
 [async capture](inspection.md#asynchronous-capture-contract) contracts distinguish implemented CPU 3D primitives, low-level GPU drawing and
-owned asynchronous capture and collection-room player integration; they do not grant approval of implementation issues.
+owned asynchronous capture and collection-room player integration. Follow-up work
+needs a concrete issue with scope and verification criteria.
 Issue status and prerequisites remain on the GitHub board. Existing platform
 limitations remain in effect until the corresponding runtime evidence is added.
 

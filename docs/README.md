@@ -7,7 +7,7 @@ The README owns supported capabilities and getting started; this index owns
 navigation. Reference guides own API contracts and usage, and each game directory
 owns its game rules and controls. [Verification](verification.md) owns quality
 gates; [workflow](workflow.md) owns contribution and integration policy. Issues
-own pending work and approval status. Historical observations describe only the revisions they measured.
+own pending work and its status. Historical observations describe only the revisions they measured.
 
 ## Try Titan
 

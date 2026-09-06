@@ -1,9 +1,11 @@
 # Open questions
 
-These are durable unresolved design choices. Their selection and follow-up work
-are tracked as Proposed issues in [Titan Development](https://github.com/orgs/titan-engine/projects/1).
-Use the board for priority, ownership and dependencies; update this reference when
-a decision is made. Recording a question does not approve implementation.
+These are durable unresolved design choices. Explore them in local conversations
+or [GitHub Discussions](https://github.com/titan-engine/titan/discussions); create
+an issue when there is concrete implementation or a bounded investigation to do.
+Use [Titan Development](https://github.com/orgs/titan-engine/projects/1) for that
+work's priority, ownership and dependencies. Update this reference when a decision
+is made.
 
 ## Game iteration questions
 
@@ -23,7 +25,7 @@ These choices require evidence from game iteration:
 
 The [design requirements](design-requirements.md) distinguish firm commitments
 from tentative design directions. Completed game milestones do not resolve all of those broader questions. These are unresolved
-choices, not a queue of authorized implementation tasks:
+choices; concrete work belongs in issues:
 
 - **Product identity:** how opinionated should Titan be as a whole, beyond the
   agreed convenient high-level framework over composable libraries? (R1.7)
