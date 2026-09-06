@@ -24,11 +24,25 @@ describe that snapshot; the guides below include subsequent development.
 
 ## Try the demo
 
-The [hosted demo](https://titan-engine.github.io/titan/) runs the RPG and arena
-without installing Rust. To run the RPG locally, install stable Rust with Cargo
-and Git. Native development workflows support macOS and
-Linux. The interactive demo requires a working graphics backend and windowing
-session; the headless replay does not require a GPU.
+Titan's first small 3D demo is the [collection room](https://titan-engine.github.io/titan/collection-room/play/):
+a fixed-camera room where you move around obstacles, collect three objects and
+complete the run. It supports inspection, deterministic recording/replay and
+GPU capture as described in the [collection-room guide](games/collection-room/README.md).
+The browser player requires WebGPU or WebGL2 with floating-point color
+attachments; there is no software 3D fallback. Move with arrows or WASD, pause
+or resume with Space, step a paused game with N, and restart with R.
+
+Run the 3D demo in a native GPU window with:
+
+```sh
+cargo run --manifest-path games/collection-room/Cargo.toml --features player --bin play
+```
+
+The [hosted demo collection](https://titan-engine.github.io/titan/) also runs the
+RPG and arena without installing Rust. To run the RPG locally, install stable
+Rust with Cargo and Git. Native development workflows support macOS and Linux.
+The interactive RPG requires a working graphics backend and windowing session;
+its headless replay does not require a GPU.
 
 ```sh
 git clone https://github.com/titan-engine/titan.git
@@ -120,6 +134,10 @@ recent input, and captures. Stop the runtime with Ctrl-C.
   display, with inspectable content and positions.
 - A procedural RPG with native and actual-WASM control-loop tests, semantic
   assertions, and verified software/GPU captures.
+- Bounded 3D support demonstrated by the collection room: generated meshes, a
+  fixed perspective camera, lighting, collision and native/browser GPU players
+  with inspection, replay and capture. Mobile/console targets, a software 3D
+  fallback and a general-purpose 3D editor remain future work.
 
 The [standalone starter](starters/minimal/README.md) can be copied outside this
 checkout and uses public Titan APIs for native, browser and headless runs.

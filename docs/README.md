@@ -5,6 +5,8 @@ Start with what you want to do. Titan is early in development; the
 
 ## Try Titan
 
+- [Play the collection room](../games/collection-room/README.md) — Titan's first
+  small 3D demo, with hosted, native and local-browser instructions.
 - [Run the RPG](../README.md#try-the-demo) — native, headless, and browser setup.
 - [Play the arena](../games/arena/README.md) — a standalone survival game.
 - [Inspect and control a game](cli.md) — discovery, commands, fields, and captures.
