@@ -483,3 +483,109 @@ fn post_recovery_recording_restores_held_gates_and_message_and_validates_before_
     assert!(replay(&mut a, r).is_err());
     assert_eq!(status(&a), before);
 }
+
+fn inspect(app: &mut App, inspector: &mut Inspector, request: titan_protocol::Request) {
+    use titan_protocol::{RequestEnvelope, ResponseOutcome};
+    let response = inspector.handle(app, &RequestEnvelope::new("injected-regression", request));
+    assert!(
+        matches!(response.outcome, ResponseOutcome::Success { .. }),
+        "{response:?}"
+    );
+}
+fn injected(app: &mut App, inspector: &mut Inspector, actions: &[&str]) {
+    use titan_protocol::Request;
+    let frame = app.world().resource::<FixedTime>().unwrap().tick() + 1;
+    inspect(
+        app,
+        inspector,
+        Request::InjectInput {
+            frame,
+            actions: actions
+                .iter()
+                .map(|name| (name.to_string(), InputValue::Button(true)))
+                .collect(),
+        },
+    );
+    inspect(app, inspector, Request::Step { frames: 1 });
+}
+#[test]
+fn inspector_injected_holds_cannot_bypass_restart_or_recovery_release_gates() {
+    for boundary in ["key-restart", "command-restart", "fall"] {
+        let mut a = app();
+        let mut inspector =
+            configured_inspector(InspectionConfig::controlled("input-test", "adventure"));
+        if boundary == "key-restart" {
+            injected(
+                &mut a,
+                &mut inspector,
+                &["restart", "jump", "right", "switch"],
+            );
+        } else {
+            injected(&mut a, &mut inspector, &["jump", "right", "switch"]);
+            if boundary == "fall" {
+                fixture_set_character(
+                    &mut a,
+                    1,
+                    Position {
+                        x: 3500,
+                        y: -2000,
+                        z: 6500,
+                    },
+                    -10,
+                    false,
+                );
+                injected(&mut a, &mut inspector, &["jump", "right", "switch"]);
+            } else {
+                restart(&mut a);
+            }
+        }
+        let generation = status(&a)["session_generation"].clone();
+        // No sampled release: independent snapshots must still mean held.
+        let held = if boundary == "key-restart" {
+            vec!["restart", "jump", "right", "switch"]
+        } else {
+            vec!["jump", "right", "switch"]
+        };
+        for _ in 0..3 {
+            injected(&mut a, &mut inspector, &held);
+        }
+        assert_eq!(status(&a)["session_generation"], generation, "{boundary}");
+        assert_eq!(status(&a)["active_character"], "jumper", "{boundary}");
+        assert_eq!(pos(&a, "jumper"), initial_position(0), "{boundary}");
+        let expected = status(&a);
+        let r = recording(&a).unwrap();
+        replay(&mut a, r).unwrap();
+        for key in [
+            "characters",
+            "active_character",
+            "consumed_input",
+            "session_tick",
+        ] {
+            assert_eq!(status(&a)[key], expected[key], "{boundary}:{key}");
+        }
+        injected(&mut a, &mut inspector, &[]);
+        injected(&mut a, &mut inspector, &["jump", "right"]);
+        assert_eq!(pos(&a, "jumper").y, 170);
+        assert_eq!(pos(&a, "jumper").x, 1560);
+    }
+}
+
+#[test]
+fn clearing_pending_injection_preserves_release_gate_across_other_source_ticks() {
+    let mut a = app();
+    let mut inspector =
+        configured_inspector(InspectionConfig::controlled("clear-test", "adventure"));
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    // This is the input-source clear used by player pause/resume. An intervening
+    // keyboard/empty frame must not count as release by the injected source.
+    clear_scheduled_input(a.world_mut());
+    a.world_mut()
+        .insert_resource(InputFrame::<Action>::default());
+    a.advance_fixed(1);
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    injected(&mut a, &mut inspector, &[]);
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1620);
+}

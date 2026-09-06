@@ -61,6 +61,8 @@ struct ScheduledInput {
     enabled: bool,
     frames: BTreeMap<u64, Vec<(Action, ActionValue)>>,
     tracker: InputTracker<Action>,
+    held: BTreeSet<Action>,
+    blocked: BTreeSet<Action>,
 }
 struct PendingSwitch;
 struct Session {
@@ -281,18 +283,31 @@ pub fn restart(app: &mut App) {
     app.refresh_extracted();
 }
 pub(crate) fn clear_scheduled_input(world: &mut World) {
-    world.insert_resource(ScheduledInput::default());
+    let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
+    scheduled.frames.clear();
+    scheduled.enabled = false;
+    // Clearing pending work is not a physical release. Keep source-local gates
+    // across resets and pauses, including ticks supplied by another input source.
+    scheduled.blocked.extend(scheduled.held.iter().copied());
 }
 fn tick(world: &mut World) {
     crate::player::prepare_tick(world);
     let next = world.resource::<FixedTime>().unwrap().tick() + 1;
     let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
     let frame = if scheduled.enabled {
-        Some(
-            scheduled
-                .tracker
-                .sample(scheduled.frames.remove(&next).unwrap_or_default()),
-        )
+        let values = scheduled.frames.remove(&next).unwrap_or_default();
+        let raw = scheduled.tracker.sample(values);
+        scheduled.held = raw.active_actions().map(|(a, _)| *a).collect();
+        scheduled.blocked.retain(|a| scheduled.held.contains(a));
+        let mut buttons = RecordedButtons::capture(&raw, &SCHEMA).unwrap();
+        for (action, name) in SCHEMA {
+            if scheduled.blocked.contains(&action) {
+                buttons.active.retain(|v| v != name);
+                buttons.pressed.retain(|v| v != name);
+                buttons.released.retain(|v| v != name);
+            }
+        }
+        Some(buttons.decode(&SCHEMA).unwrap())
     } else {
         None
     };

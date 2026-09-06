@@ -114,5 +114,36 @@ if (!process.argv.includes('--wasm-worker')) {
     ok(game, invoke('switch'));
     assert.equal(state(game).active_character, 'strong');
   } finally { game.free(); }
+  for (const held of ['restart', 'jump', 'switch', 'right']) {
+    const runtime = new BrowserRuntime(true);
+    try {
+      const injectStep = actions => {
+        ok(runtime, { type: 'inject_input', frame: state(runtime).frame + 1,
+          actions: Object.fromEntries(actions.map(name => [name, {kind: 'button', value: true}])) });
+        ok(runtime, { type: 'step', frames: 1 });
+      };
+      injectStep([...new Set(['restart', held])]);
+      const generation = state(runtime).session_generation;
+      injectStep([held]);
+      assert.equal(state(runtime).session_generation, generation, `held ${held} must not restart`);
+      assert.equal(state(runtime).active_character, 'jumper', `held ${held} must not switch`);
+      assert.equal(state(runtime).characters.jumper.y, 0, `held ${held} must not jump`);
+      assert.equal(state(runtime).characters.jumper.x, 1500, `held ${held} must not move`);
+      const expected = state(runtime);
+      const recording = ok(runtime, {type: 'query', name: 'recording'}).value;
+      ok(runtime, invoke('replay', {recording}));
+      for (const key of ['characters', 'active_character', 'consumed_input', 'session_tick']) {
+        assert.deepEqual(state(runtime)[key], expected[key], `injected restart replay ${held}: ${key}`);
+      }
+      const beforeFreshGeneration = state(runtime).session_generation;
+      injectStep([]);
+      injectStep([held]);
+      const fresh = state(runtime);
+      if (held === 'restart') assert.equal(fresh.session_generation, beforeFreshGeneration + 1);
+      if (held === 'jump') assert.equal(fresh.characters.jumper.y, 170);
+      if (held === 'switch') assert.equal(fresh.active_character, 'strong');
+      if (held === 'right') assert.equal(fresh.characters.jumper.x, 1560);
+    } finally { runtime.free(); }
+  }
   console.log('Adventure actual-WASM: complete per-tick native agreement, held switching, replay, restart, switch command and read-only policy passed.');
 }

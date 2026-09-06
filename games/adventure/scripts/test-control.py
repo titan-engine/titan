@@ -118,6 +118,33 @@ def main(failures, log):
         assert state()['active_character'] == 'jumper'
         invoke('switch')
         assert state()['active_character'] == 'strong'
+        # Inject one complete snapshot at a time: reconstruction must not
+        # manufacture edges when the next host frame continues the same hold.
+        def sample(actions):
+            frame = call('status')['response']['current_frame'] + 1
+            call('input', frame, '--actions', json.dumps({a: {'kind': 'button', 'value': True} for a in actions}))
+            call('step', 1)
+            return state()
+        for held in ('restart', 'jump', 'switch'):
+            invoke('restart')
+            sample([])
+            first = sample(list(dict.fromkeys(['restart', held])))
+            continuing = sample([held])
+            assert continuing['session_generation'] == first['session_generation'], (held, continuing)
+            assert continuing['active_character'] == 'jumper' and continuing['characters']['jumper']['y'] == 0, (held, continuing)
+            sample([])
+            fresh = sample([held])
+            if held == 'restart':
+                assert fresh['session_generation'] == first['session_generation'] + 1
+            elif held == 'jump':
+                assert fresh['characters']['jumper']['y'] == 170
+            else:
+                assert fresh['active_character'] == 'strong'
+            recording = call('query', 'recording')['response']['value']
+            expected_after_boundary = state()
+            invoke('replay', {'recording': recording})
+            for key in ('characters', 'active_character', 'consumed_input', 'session_tick'):
+                assert state()[key] == expected_after_boundary[key], (held, key)
         call('capture', error='unsupported')
     finally:
         try:

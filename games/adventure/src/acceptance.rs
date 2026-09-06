@@ -59,6 +59,81 @@ fn character<'a>(state: &'a Value, name: &str) -> &'a Value {
     &state["characters"][name]
 }
 
+fn inspected_request(
+    app: &mut App,
+    inspector: &mut titan::inspection::Inspector,
+    request: titan_protocol::Request,
+) {
+    let response = inspector.handle(
+        app,
+        &titan_protocol::RequestEnvelope::new("movement-acceptance", request),
+    );
+    assert!(
+        matches!(
+            response.outcome,
+            titan_protocol::ResponseOutcome::Success { .. }
+        ),
+        "{response:?}"
+    );
+}
+fn inject_at(
+    app: &mut App,
+    inspector: &mut titan::inspection::Inspector,
+    frame: u64,
+    actions: &[&str],
+) {
+    inspected_request(
+        app,
+        inspector,
+        titan_protocol::Request::InjectInput {
+            frame,
+            actions: actions
+                .iter()
+                .map(|name| ((*name).into(), titan_protocol::InputValue::Button(true)))
+                .collect(),
+        },
+    );
+}
+fn injected_tick(
+    app: &mut App,
+    inspector: &mut titan::inspection::Inspector,
+    actions: &[&str],
+    trace: &mut Vec<Value>,
+) {
+    let frame = game::status(app)["frame"].as_u64().unwrap() + 1;
+    inject_at(app, inspector, frame, actions);
+    inspected_request(app, inspector, titan_protocol::Request::Step { frames: 1 });
+    trace.push(game::status(app));
+}
+fn assert_inspected_replay(
+    app: &mut App,
+    inspector: &mut titan::inspection::Inspector,
+    trace: &mut Vec<Value>,
+) {
+    let expected = game::status(app);
+    let recording = serde_json::to_value(game::recording(app).unwrap()).unwrap();
+    inspected_request(
+        app,
+        inspector,
+        titan_protocol::Request::Invoke {
+            name: "replay".into(),
+            arguments: BTreeMap::from([("recording".into(), recording)]),
+        },
+    );
+    let replayed = game::status(app);
+    for key in [
+        "characters",
+        "active_character",
+        "consumed_input",
+        "session_tick",
+        "blocked_actions",
+        "recovery_message_ticks",
+    ] {
+        assert_eq!(replayed[key], expected[key], "inspector replay {key}");
+    }
+    trace.push(replayed);
+}
+
 /// All assertions execute independently in both targets; JSON carries every tick.
 pub fn run() -> Value {
     let mut scenarios = BTreeMap::<String, Vec<Value>>::new();
@@ -433,6 +508,96 @@ pub fn run() -> Value {
         );
         scenarios.insert(
             format!("below-floor-reconstructs-both-character-{fallen}"),
+            trace,
+        );
+    }
+    // Complete injected snapshots have their own source tracker. Reconstruction
+    // must not turn a held action into a new press when that source resumes.
+    for held in ["restart", "jump", "switch"] {
+        let mut app = new_app();
+        let mut inspector = game::configured_inspector(
+            titan::inspection::InspectionConfig::controlled("movement-acceptance", "headless"),
+        );
+        let mut trace = vec![game::status(&app)];
+        injected_tick(&mut app, &mut inspector, &["restart", held], &mut trace);
+        for _ in 0..3 {
+            injected_tick(&mut app, &mut inspector, &[held], &mut trace);
+        }
+        let held_state = trace.last().unwrap();
+        assert_eq!(
+            held_state["session_generation"], 1,
+            "held {held} must not repeat reconstruction"
+        );
+        assert_eq!(held_state["active_character"], "jumper");
+        assert_eq!(character(held_state, "jumper")["y"], 0);
+        // Omitting an action from a complete snapshot is a real release.
+        injected_tick(&mut app, &mut inspector, &[], &mut trace);
+        injected_tick(&mut app, &mut inspector, &[held], &mut trace);
+        let repressed = trace.last().unwrap();
+        match held {
+            "restart" => assert_eq!(repressed["session_generation"], 2),
+            "jump" => assert_eq!(character(repressed, "jumper")["y"], 170),
+            "switch" => assert_eq!(repressed["active_character"], "strong"),
+            _ => unreachable!(),
+        }
+        assert_inspected_replay(&mut app, &mut inspector, &mut trace);
+        scenarios.insert(
+            format!("injected-restart-held-{held}-release-repress-replay"),
+            trace,
+        );
+    }
+    for fallen in [0, 1] {
+        let mut app = new_app();
+        let mut inspector = game::configured_inspector(
+            titan::inspection::InspectionConfig::controlled("movement-acceptance", "headless"),
+        );
+        let mut trace = vec![game::status(&app)];
+        injected_tick(
+            &mut app,
+            &mut inspector,
+            &["jump", "switch", "right"],
+            &mut trace,
+        );
+        game::fixture_set_character(&mut app, fallen, position(500, -2000, 6500), -10, false);
+        let future = game::status(&app)["frame"].as_u64().unwrap() + 5;
+        inject_at(&mut app, &mut inspector, future, &["restart"]);
+        assert_eq!(game::status(&app)["pending_inputs"], 1);
+        trace.push(game::status(&app));
+        injected_tick(
+            &mut app,
+            &mut inspector,
+            &["jump", "switch", "right"],
+            &mut trace,
+        );
+        let reset = trace.last().unwrap();
+        assert_eq!(reset["session_generation"], 1);
+        assert_eq!(reset["session_tick"], 0);
+        assert_eq!(reset["recovery_message_ticks"], 120);
+        assert_eq!(reset["pending_inputs"], 0);
+        for _ in 0..5 {
+            injected_tick(
+                &mut app,
+                &mut inspector,
+                &["jump", "switch", "right"],
+                &mut trace,
+            );
+        }
+        let held = trace.last().unwrap();
+        assert_eq!(held["session_generation"], 1);
+        assert_eq!(held["active_character"], "jumper");
+        assert_eq!(character(held, "jumper")["x"], 1500);
+        assert_eq!(character(held, "jumper")["y"], 0);
+        assert_inspected_replay(&mut app, &mut inspector, &mut trace);
+        injected_tick(&mut app, &mut inspector, &[], &mut trace);
+        injected_tick(&mut app, &mut inspector, &["jump", "right"], &mut trace);
+        assert_eq!(character(trace.last().unwrap(), "jumper")["y"], 170);
+        assert_eq!(character(trace.last().unwrap(), "jumper")["x"], 1560);
+        injected_tick(&mut app, &mut inspector, &[], &mut trace);
+        injected_tick(&mut app, &mut inspector, &["switch"], &mut trace);
+        assert_eq!(trace.last().unwrap()["active_character"], "strong");
+        assert_inspected_replay(&mut app, &mut inspector, &mut trace);
+        scenarios.insert(
+            format!("injected-fall-{fallen}-held-input-release-repress-replay"),
             trace,
         );
     }

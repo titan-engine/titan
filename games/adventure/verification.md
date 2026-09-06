@@ -29,8 +29,11 @@ crossed landing and nearest ceiling, high-speed obstacle sweeps, X-then-Z slide,
 no step-up/coyote/buffer, both character height gates, each static block socket,
 character noncollision/non-support, midair switching, and defensive below-floor
 recovery of either character. `node scripts/test-movement.mjs` builds and runs
-the same runner natively and in actual WASM: 29 scenarios and 1,309 complete
+the same runner natively and in actual WASM: 34 scenarios and 1,363 complete
 per-tick states matched exactly.
+Inspector-path scenarios also retain held restart/jump/switch history across
+restart and both recovery cases, clear future queued input, accept genuine
+release/repress, and reproduce the resulting recordings.
 These fixture helpers are absent from ordinary builds and introduce no player
 teleport command. Both intermediate/final socket launches are accepted; the
 initial socket remains too far from the high ledge even with generous edge
