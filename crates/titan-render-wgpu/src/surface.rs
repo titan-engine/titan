@@ -224,6 +224,7 @@ impl SurfaceRenderer {
 pub struct SurfaceRenderer3d {
     state: SurfaceState,
     renderer: GpuSceneRenderer3d,
+    aspect_ratio: Option<(u32, u32)>,
 }
 impl SurfaceRenderer3d {
     pub async fn new(
@@ -241,7 +242,25 @@ impl SurfaceRenderer3d {
             state.config.height,
             state.config.format,
         )?;
-        Ok(Self { state, renderer })
+        Ok(Self {
+            state,
+            renderer,
+            aspect_ratio: None,
+        })
+    }
+    /// Fit scene and UI to a centered aspect ratio, clearing unused pixels black.
+    /// `None` (the default) fills the entire surface. Both ratio terms must be
+    /// nonzero. The game must use the matching camera aspect; capture dimensions
+    /// remain caller-owned and are unaffected. Fitting rounds down to whole pixels
+    /// with a minimum of one pixel per axis on very small surfaces.
+    pub fn set_aspect_ratio(&mut self, ratio: Option<(u32, u32)>) -> Result<(), String> {
+        if ratio.is_some_and(|(width, height)| width == 0 || height == 0) {
+            return Err("surface aspect ratio terms must be nonzero".into());
+        }
+        let (_, _, width, height) = fitted_viewport(self.size(), ratio);
+        self.renderer.resize(width, height)?;
+        self.aspect_ratio = ratio;
+        Ok(())
     }
     /// Cloned handles for owned asynchronous offscreen jobs on this adapter.
     pub fn capture_device(&self) -> (wgpu::Device, wgpu::Queue) {
@@ -254,8 +273,9 @@ impl SurfaceRenderer3d {
         let size = self.state.resize(width, height);
         if !self.state.suspended {
             // Dimensions are bounded below the renderer's validated budget.
+            let (_, _, width, height) = fitted_viewport(size, self.aspect_ratio);
             self.renderer
-                .resize(size.0, size.1)
+                .resize(width, height)
                 .expect("bounded surface dimensions");
         }
         size
@@ -287,10 +307,40 @@ impl SurfaceRenderer3d {
             .state
             .device
             .create_command_encoder(&Default::default());
-        self.renderer.render(&mut encoder, &view)?;
+        self.renderer.render_in_viewport(
+            &mut encoder,
+            &view,
+            self.aspect_ratio
+                .map(|_| fitted_viewport(self.size(), self.aspect_ratio)),
+        )?;
         self.state.present(texture, suboptimal, encoder)?;
         Ok(true)
     }
+}
+
+// Inputs are nonzero configured surface dimensions and a validated ratio.
+fn fitted_viewport((width, height): (u32, u32), ratio: Option<(u32, u32)>) -> (u32, u32, u32, u32) {
+    let Some((rw, rh)) = ratio else {
+        return (0, 0, width, height);
+    };
+    let (inner_width, inner_height) =
+        if u64::from(width) * u64::from(rh) > u64::from(height) * u64::from(rw) {
+            (
+                (u64::from(height) * u64::from(rw) / u64::from(rh)).max(1) as u32,
+                height,
+            )
+        } else {
+            (
+                width,
+                (u64::from(width) * u64::from(rh) / u64::from(rw)).max(1) as u32,
+            )
+        };
+    (
+        (width - inner_width) / 2,
+        (height - inner_height) / 2,
+        inner_width,
+        inner_height,
+    )
 }
 
 // Keep the acquisition policy independent from a live OS surface so every
@@ -320,6 +370,18 @@ fn bounded_size(width: u32, height: u32, maximum: u32) -> (u32, u32) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fixed_aspect_fits_centered_without_overflow_or_empty_targets() {
+        use super::fitted_viewport as fit;
+        assert_eq!(fit((960, 540), Some((16, 9))), (0, 0, 960, 540));
+        assert_eq!(fit((960, 720), Some((16, 9))), (0, 90, 960, 540));
+        assert_eq!(fit((1280, 540), Some((16, 9))), (160, 0, 960, 540));
+        assert_eq!(fit((961, 541), Some((16, 9))), (0, 0, 961, 540));
+        assert_eq!(fit((1, 1), Some((16, 9))), (0, 0, 1, 1));
+        assert_eq!(fit((100, 100), Some((u32::MAX, 1))), (0, 49, 100, 1));
+        assert_eq!(fit((100, 100), Some((1, u32::MAX))), (49, 0, 1, 100));
+        assert_eq!(fit((100, 200), None), (0, 0, 100, 200));
+    }
     #[test]
     fn surface_failures_skip_reconfigure_or_fail_explicitly() {
         use super::{acquired_texture, wgpu::CurrentSurfaceTexture as Status};
