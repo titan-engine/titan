@@ -18,19 +18,29 @@ export TITAN_REPO="$PWD"
 export GAME_DIR="$(dirname "$TITAN_REPO")/my-game"
 python3 scripts/create-game.py "$GAME_DIR"
 cd "$GAME_DIR"
-cargo run --bin play
+cargo generate-lockfile
+cargo run --locked --bin play
 ```
 
 You should see a small cyan square on a dark background. Arrow keys or WASD move
 it; Escape exits. The first build downloads and compiles dependencies. Use
-`cargo run --bin play -- --frames 2` for a bounded window smoke check, or
-`cargo run --bin titan-game` for a headless run that prints game state.
+`cargo run --locked --bin play -- --frames 2` for a bounded window smoke check, or
+`cargo run --locked --bin titan-game` for a headless run that prints game state.
 
 Choose any new persistent directory by changing `GAME_DIR`. The setup command
 refuses to overwrite an existing directory. Your game's `Cargo.toml` points to
 this Titan checkout, so keep the checkout in place; if you move it, update the
 Titan dependency paths in your game's manifest. The command runs from the Titan
 checkout; the remaining commands run from your copied game.
+
+The explicit `cargo generate-lockfile` step initializes your copied project's
+dependency graph after configuring its manifest. Keep that game's `Cargo.lock`
+in version control. Build helpers and verification use `--locked` and reject a
+missing or stale lockfile; they never initialize or update it implicitly. After
+an intentional dependency change, run `cargo update -p PACKAGE` (or
+`cargo generate-lockfile` to deliberately resolve the whole graph), review the
+lockfile diff, then run the locked checks again. Each standalone game owns its
+lockfile; it does not use the engine checkout's lockfile.
 
 ## Make your first visible change
 
@@ -46,7 +56,7 @@ Change it to orange:
 Color::rgb(255, 160, 60)
 ```
 
-Save, close the running window, and run `cargo run --bin play` again. The square
+Save, close the running window, and run `cargo run --locked --bin play` again. The square
 should now be orange and move as before. Titan rebuilds the game when you run
 Cargo; source edits do not reload into an already running player. For the
 browser player, rebuild with the [browser commands below](#browser) and reload
@@ -55,7 +65,7 @@ the page after changing source.
 Then try changing `DOT_SIZE` near the top of the same file from `5` to `9`.
 Rebuild to see a larger square; the movement bounds use this constant too.
 These edits belong to your copied game and do not change Titan's demo or
-reference images. When ready, run `cargo test --all-targets` and explore
+reference images. When ready, run `cargo test --locked --all-targets` and explore
 [where code belongs](#where-code-belongs).
 
 ## Package layout
@@ -71,8 +81,8 @@ metadata and emit stable `titan_game` JavaScript bindings.
 Build the CLI once in the Titan checkout, then launch a bounded paused runtime:
 
 ```sh
-cargo build --manifest-path "$TITAN_REPO/Cargo.toml" -p titan-cli
-cargo run --bin titan-game -- --serve --instance starter --allow-mutation --run-for-ms 120000
+cargo build --locked --manifest-path "$TITAN_REPO/Cargo.toml" -p titan-cli
+cargo run --locked --bin titan-game -- --serve --instance starter --allow-mutation --run-for-ms 120000
 ```
 
 In another terminal, set `TITAN_REPO` and `GAME_DIR` to those same directories:
@@ -157,9 +167,9 @@ provided. Do not include discovery bearer tokens in evidence.
 
 ```sh
 cargo fmt --all --check
-cargo test --all-targets
-cargo clippy --all-targets --all-features -- -D warnings
-cargo check --lib --target wasm32-unknown-unknown
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo check --locked --lib --target wasm32-unknown-unknown
 python3 scripts/build-browser.py
 node scripts/test-browser.mjs
 node --test web/inspector/bridge.test.mjs

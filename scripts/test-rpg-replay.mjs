@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const metadata = JSON.parse(await execFile('cargo', ['metadata', '--no-deps', '--format-version', '1'], {phase:'build',cwd:root, encoding:'utf8'}));
+const metadata = JSON.parse(await execFile('cargo', ['metadata', '--locked', '--no-deps', '--format-version', '1'], {phase:'build',cwd:root, encoding:'utf8'}));
 const {BrowserLiveRuntime, verify_recording_json} = createRequire(import.meta.url)(resolve(metadata.target_directory, 'titan/browser-node/titan_browser.js'));
 let sequence = 0;
 function raw(game, request) {
@@ -213,7 +213,7 @@ const evidence = resolve(metadata.target_directory,'rpg-replay-evidence');
 mkdirSync(evidence,{recursive:true});
 const path = resolve(evidence,'wasm-recording.json');
 writeFileSync(path,JSON.stringify(recording,null,2)+'\n');
-await execFile('cargo',['build','--example','replay_rpg'],{phase:'build',cwd:root,stdio:'inherit'});
+await execFile('cargo',['build', '--locked','--example','replay_rpg'],{phase:'build',cwd:root,stdio:'inherit'});
 const native = JSON.parse(await execFile(resolve(metadata.target_directory,'debug/examples/replay_rpg'),[path],{cwd:root,encoding:'utf8'}));
 assert.deepEqual(native.save,verified.save);
 assert.equal(native.checksum,verified.checksum);

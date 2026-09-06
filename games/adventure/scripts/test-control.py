@@ -23,11 +23,11 @@ def main(failures, log):
 
     for manifest, extra in [(GAME / 'Cargo.toml', ['--bin', 'titan-adventure']),
                             (REPO / 'Cargo.toml', ['-p', 'titan-cli'])]:
-        run(['cargo', 'build', '--manifest-path', str(manifest), *extra],
+        run(['cargo', 'build', '--locked', '--manifest-path', str(manifest), *extra],
             phase='build', stdout=log, stderr=log)
 
     def target(root):
-        result = run(['cargo', 'metadata', '--no-deps', '--format-version', '1',
+        result = run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1',
                       '--manifest-path', str(root / 'Cargo.toml')],
                      phase='build', capture_output=True, text=True)
         return Path(json.loads(result.stdout)['target_directory']) / 'debug'

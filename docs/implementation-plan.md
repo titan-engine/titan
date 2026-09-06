@@ -41,9 +41,9 @@ Each implementation increment must pass:
 
 ```sh
 cargo fmt --all --check
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
+cargo test --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 ```
 
 For shared host, protocol, input, or game changes, also run the existing native
@@ -60,7 +60,7 @@ python3 scripts/test-rpg-replay.py # add --gpu on desktop
 node scripts/test-rpg-replay.mjs
 python3 scripts/test-rpg-assets.py # add --gpu on macOS
 node scripts/test-rpg-assets.mjs
-cargo check -p titan --lib --no-default-features
+cargo check --locked -p titan --lib --no-default-features
 ```
 
 Preserve CI coverage for the starter and both games. Run
@@ -81,10 +81,10 @@ python3 scripts/test-build-tools.py
 python3 scripts/test-generated-assets.py
 python3 scripts/test-starter.py --browser
 cargo fmt --manifest-path games/arena/Cargo.toml --all --check
-cargo test --manifest-path games/arena/Cargo.toml --all-targets
-cargo clippy --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --locked --manifest-path games/arena/Cargo.toml --all-targets
+cargo clippy --locked --manifest-path games/arena/Cargo.toml --all-targets --all-features -- -D warnings
 python3 games/arena/scripts/test-control.py
-cargo check --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
+cargo check --locked --manifest-path games/arena/Cargo.toml --lib --target wasm32-unknown-unknown
 python3 games/arena/scripts/build-browser.py
 node games/arena/scripts/test-browser.mjs
 node --test games/arena/web/inspector/bridge.test.mjs
@@ -97,14 +97,14 @@ Collection-room package and player gates:
 
 ```sh
 cargo fmt --manifest-path games/collection-room/Cargo.toml --all --check
-cargo test --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
-cargo clippy --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --locked --manifest-path games/collection-room/Cargo.toml --all-targets --all-features
+cargo clippy --locked --manifest-path games/collection-room/Cargo.toml --all-targets --all-features -- -D warnings
 python3 games/collection-room/scripts/test-control.py
 python3 games/collection-room/scripts/build-browser.py
 node games/collection-room/scripts/test-browser.mjs
 node --test games/collection-room/web/play/*.test.mjs
 python3 games/collection-room/scripts/test-player.py # desktop GPU/window required
-cargo test -p titan-render-wgpu --test composition -- --ignored # native GPU
+cargo test --locked -p titan-render-wgpu --test composition -- --ignored # native GPU
 ```
 
 For actual browser GPU acceptance, serve the collection-room `web/` directory
@@ -115,8 +115,8 @@ Adventure cooperative room gates:
 
 ```sh
 cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
-cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
-cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --locked --manifest-path games/adventure/Cargo.toml --all-targets --all-features
+cargo clippy --locked --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
 python3 games/adventure/scripts/test-control.py
 python3 games/adventure/scripts/build-browser.py
 node games/adventure/scripts/test-browser.mjs

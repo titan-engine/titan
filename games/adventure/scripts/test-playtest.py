@@ -34,9 +34,9 @@ def main(evidence, log, output):
         return result
 
     def target(root, extra):
-        run(['cargo', 'build', '--manifest-path', str(root / 'Cargo.toml'), *extra],
+        run(['cargo', 'build', '--locked', '--manifest-path', str(root / 'Cargo.toml'), *extra],
             phase='build', stdout=log, stderr=log)
-        metadata = run(['cargo', 'metadata', '--no-deps', '--format-version', '1',
+        metadata = run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1',
                         '--manifest-path', str(root / 'Cargo.toml')],
                        capture_output=True, text=True, phase='build')
         return Path(json.loads(metadata.stdout)['target_directory']) / 'debug'

@@ -67,9 +67,9 @@ For Rust changes, run:
 
 ```sh
 cargo fmt --all --check
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
+cargo test --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32-unknown-unknown
 ```
 
 The WASM check requires `rustup target add wasm32-unknown-unknown` if it is not
