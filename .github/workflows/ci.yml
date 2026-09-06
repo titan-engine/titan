@@ -151,6 +151,7 @@ jobs:
           cargo test --manifest-path games/adventure/Cargo.toml --all-targets --all-features
           cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-features -- -D warnings
           python3 games/adventure/scripts/test-control.py
+          python3 games/adventure/scripts/test-playtest.py
 
       - name: Check and drive independent arena game
         run: |
