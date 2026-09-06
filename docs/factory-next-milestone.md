@@ -216,7 +216,7 @@ replay and relevant capture. Do not repeat the missing full-time claim from #93.
 Repeat bounded active and stalled fixtures within 96 cells, recording environment,
 profiles, cache/concurrency, command/inspection/capture phases separately and
 retaining partial failures. No performance pass threshold from one machine.
-Run applicable [quality gates](implementation-plan.md) and game checks, with
+Run applicable [quality gates](verification.md) and game checks, with
 actual browser GPU evidence distinguished from Node/WASM parity. Preserve all
 existing reference checksums and README art.
 

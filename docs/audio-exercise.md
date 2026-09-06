@@ -165,7 +165,7 @@ a mixer.
 
 These are planned checks, not results from this documentation investigation.
 Use the existing [runtime workflow](../.agents/skills/titan-workflow/SKILL.md)
-and [quality gates](implementation-plan.md); retain the three required PR jobs.
+and [quality gates](verification.md); retain the three required PR jobs.
 
 | Check | Required evidence |
 | --- | --- |

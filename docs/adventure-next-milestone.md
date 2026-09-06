@@ -99,7 +99,7 @@ priority does not imply approval or a blocking relationship.
 A–D are the recommended core. E and F are alternatives requiring an adjusted
 validation candidate; they are not additions implicitly approved with A–D.
 All inherit the merged first-slice baseline, reference preservation, public API
-boundaries and [quality gates](implementation-plan.md). Technical dependencies
+boundaries and [quality gates](verification.md). Technical dependencies
 below apply only if selected. No candidate is blocked on an umbrella proposal.
 
 ### A — Specify one simultaneous-condition room (P1, game design)

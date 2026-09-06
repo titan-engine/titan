@@ -93,7 +93,7 @@ cargo check --locked -p titan -p titan-protocol -p titan-browser --target wasm32
 The WASM check requires `rustup target add wasm32-unknown-unknown` if it is not
 installed. For documentation-only changes, check local links, formatting, and
 commands you changed. For tooling changes, run the relevant script tests.
-The [quality gates](docs/implementation-plan.md#constraints-and-quality-gates)
+The [quality gates](docs/verification.md#constraints-and-quality-gates)
 list additional native/browser and standalone-game checks by area. Ordinary
 tests run without a GPU; GPU checks are opt-in. Say which checks you could not
 run and why, so the maintainer can help cover them.
@@ -132,8 +132,8 @@ one manually initiated comparison when proposing an update (no scheduled matrix)
 ```sh
 rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
 rustc +stable --version
-CARGO_BUILD_JOBS=4 cargo +stable test --workspace --all-targets
-CARGO_BUILD_JOBS=4 cargo +stable clippy --workspace --all-targets --all-features -- -D warnings
+CARGO_BUILD_JOBS=4 cargo +stable test --locked --workspace --all-targets
+CARGO_BUILD_JOBS=4 cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
 ```
 
 Record the exact tested compiler and any diagnostic differences. These bounded

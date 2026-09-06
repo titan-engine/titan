@@ -30,7 +30,7 @@ ordinary PRs. Keep brainstorming and planning in local conversations or GitHub
 Discussions, never in tracked Markdown or another tracked format. Follow the
 [planning and issue intake policy](docs/workflow.md#planning-and-issue-intake)
 for concrete issues and accepted durable documentation. Read `docs/vision.md`, `docs/design-requirements.md` and relevant runtime
-skills before engine changes. Quality gates are in `docs/implementation-plan.md`.
+skills before engine changes. Quality gates are in `docs/verification.md`.
 Preserve reference checksums and the committed crisp README preview unless an
 intentional visual change is approved. Do not publish crates or create release
 tags without authorization.
