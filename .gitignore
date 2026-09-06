@@ -7,3 +7,6 @@
 
 # Generated opt-in 3D GPU verification bindings.
 /web/render-3d/pkg/
+
+# Generated adventure browser acceptance route
+/games/adventure/web/play/puzzle-solution.json

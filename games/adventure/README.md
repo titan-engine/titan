@@ -1,16 +1,16 @@
 # Two-character adventure
 
-A standalone movement prototype for [issue #82](https://github.com/titan-engine/titan/issues/82).
+A complete cooperative room for [issue #83](https://github.com/titan-engine/titan/issues/83).
 The same fixed-tick Rust simulation runs headlessly, in a native GPU window, and
-in an actual-WASM browser player. Jumper is narrow with a triangle marker;
-Strong is broad with a square marker. A yellow ground outline and the active
-name identify control independently of body color.
+in an actual-WASM browser player. Jumper has a triangle marker; Strong has a
+square marker. A yellow outline and the active name identify control.
 
-This increment provides a 12 × 8 metre practice room, jumping, swept static
-collision, switching, inspection and recording. A 1 m teaching ledge, 2 m high
-ledge, fixed 0.75 m practice step and ceiling exercise movement. The step is
-static; block pushing, plates, doors and progression belong to later issues. The [first-slice design](design.md) describes
-the intended puzzle rules, not features already present here.
+Jump Jumper onto the raised plate A, switch to Strong and cross the open door
+to plate B. Switch back, bring Jumper through to the exit, then bring Strong.
+Both complete footprints must be grounded in the exit together. Completion
+latches and freezes the room; R or Restart restores it. This increment contains
+only room 1: room 2, block movement and Continue are later implementation scope.
+The [first-slice design](design.md) specifies the wider intended sequence.
 
 ## Play locally
 
@@ -62,8 +62,8 @@ names, per-tick X/Z/ceiling/landing contacts, static solid bounds, recovery
 feedback, `active_character`, effective
 `consumed_input`, suppressed actions, session tick/generation and recording
 bounds. Recordings retain the raw logical input necessary to reproduce filtering;
-maximum length is 4096 ticks. Recordings use fixture `adventure-v2`; older
-flat-room recordings are rejected. The `origin` metadata preserves recovery
+maximum length is 4096 ticks. Recordings use fixture `adventure-v3`; older
+practice-room recordings are rejected. The `origin` metadata preserves recovery
 feedback and held-input gates for recordings started after a defensive reset. A truncated or invalid recording is rejected
 before changing the app. Restart resets the session, pending input and recording
 while retaining the monotonic host frame. Player replay supports pause, step,
@@ -85,11 +85,31 @@ lands on the highest crossed support. Ceiling contact stops upward velocity.
 Solid extents drive both collision and meshes; exterior walls use a 0.3 m visual
 cutaway with 4 m collision, and the foreground wall is omitted for visibility.
 
-To try the teaching ledge, walk Jumper north from its start for 50 ticks
-(to Z=3.5 m), then jump north for 22 ticks and release movement to land.
-Strong cannot reach that 1 m top. The static step supports practice of the
-remaining 1.25 m rise onto the high ledge. This practice arrangement combines
-geometry for movement verification; it is not either completed puzzle room.
+To reach plate A comfortably, move right for 8 ticks, north for 50, then jump
+north for 25 and release to land. The ledge is 1 m high, above Strong's 0.45 m
+jump. North and south partitions and the closed door collide to 4 m; the
+partition meshes use a cutaway so the far side remains visible.
+
+## Cooperative room rules
+
+Plate A is the 600 × 600 mm square centered at `(2000,1000,2000)`; B is centered
+at `(10000,0,5000)`. A character presses a plate only when grounded at its support
+height with its foot center inside (including boundaries). The inactive partner
+continues to hold it. Either plate requests the door open. Collision uses the
+previous tick's door state, so a fresh press permits passage on the next tick.
+
+With no plate pressed, positive body overlap with the doorway holds it fully
+open, including airborne bodies. Exact face contact alone permits closing.
+The door never crushes or shoves a character. Inspection exposes
+`puzzle.plates` with named occupants and `puzzle.door` with `open` and `state`:
+`closed`, `open_plate`, or `open_obstructed`. Plate and door symbols share a link
+mark; the HUD also reports pressed/open/obstructed states in text.
+
+`puzzle.exit.jumper` and `.strong` require grounded, complete 400 × 400 mm
+footprints inside X `[10000,12000]`, Z `[1000,3000]`. `puzzle.complete` latches
+only when both qualify on the same tick. Movement, switching and puzzle time
+then freeze. Restart remains available and reconstructs both characters,
+plates, door, exit indicators, completion and input/recording state.
 
 Ordinary missed jumps land safely. A defensive foot Y below -2 m reconstructs
 both characters on that tick, selects Jumper, clears velocity and pending input,
@@ -139,9 +159,15 @@ python3 games/adventure/scripts/test-control.py
 python3 games/adventure/scripts/build-browser.py
 node games/adventure/scripts/test-browser.mjs
 node games/adventure/scripts/test-movement.mjs
+node games/adventure/scripts/test-puzzle.mjs
 node --test games/adventure/web/play/*.test.mjs
 python3 games/adventure/scripts/test-player.py
 ```
+
+The [solution segments](tests/puzzle-solution.json) and
+[versioned recording](tests/puzzle-recording.json) complete the room using only
+normal input. The puzzle acceptance runner compares native and actual WASM
+traces for the solution and controlled adversarial fixtures.
 
 The [control fixture](tests/control-route.json) asserts every tick's selected
 character and both positions. The WASM test executes a fresh native CLI trace

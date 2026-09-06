@@ -17,6 +17,7 @@ pub const AXIAL_STEP: i32 = 60;
 pub const DIAGONAL_STEP: i32 = 42;
 pub const FIXTURE: &str = "adventure-v3";
 pub mod movement;
+mod presentation;
 pub mod puzzle;
 use movement::{Movement, SOLIDS};
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -154,6 +155,7 @@ fn setup(world: &mut World) {
         UiText::new("ACTIVE: JUMPER  [Q] SWITCH  [R] RESTART")
             .with_color(Color::rgb(255, 240, 190)),
     ));
+    presentation::setup(world);
     let mut assets = MeshAssets::new();
     let cube = assets.insert(Mesh::cube(1.0).unwrap()).unwrap();
     let floor = assets.insert(Mesh::floor(1.0).unwrap()).unwrap();
@@ -205,7 +207,13 @@ fn setup(world: &mut World) {
             continue;
         }
         let wall = solid.name.starts_with("wall-");
-        let height = if wall { 300 } else { solid.max.y - solid.min.y };
+        let height = if wall {
+            300
+        } else if solid.name.contains("partition") {
+            1200
+        } else {
+            solid.max.y - solid.min.y
+        };
         world.spawn_with((
             Name::new(solid.name),
             Position {
@@ -466,6 +474,7 @@ fn tick(world: &mut World) {
     sync_hud(world);
 }
 fn sync_hud(world: &mut World) {
+    presentation::sync(world);
     let active = world.resource::<Session>().unwrap().active;
     let id = world.iter::<Hud>().next().unwrap().0;
     world.get_mut::<UiText>(id).unwrap().text = format!(
@@ -546,13 +555,14 @@ pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
             }
         }
     }
+    presentation::append(world, &mut draws);
     RenderFrame3d::new(
         *world.resource::<PerspectiveCamera>().unwrap(),
         *world.resource::<Lighting3d>().unwrap(),
         world.resource::<MeshAssets>().unwrap(),
         draws,
         Frame3dLimits {
-            max_draws: 32,
+            max_draws: 96,
             max_geometry_bytes: 1024 * 1024,
         },
     )

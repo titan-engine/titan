@@ -136,6 +136,36 @@ try {
  for(let i=0;i<31;i++)tick();player.set_key('Space',false,false);player.set_key('ArrowUp',false,false);
  check(state().characters.strong.y===0&&state().characters.strong.z===3200,'Strong cannot mount 1m ledge and held Space does not repeat');
  await capture('strong-blocked');player.pause();
+ // Play the complete cooperative route on this same real GPU/WASM player.
+ player.restart();player.resume();
+ const solution=await (await fetch('puzzle-solution.json')).json();
+ const bindings={up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',jump:'Space',switch:'KeyQ'};
+ for(const segment of solution){
+   for(const [action,key] of Object.entries(bindings))player.set_key(key,segment.actions.includes(action),false);
+   for(let i=0;i<segment.ticks;i++)tick();
+   if(segment.checkpoint){
+     const puzzle=state().puzzle;
+     if(segment.checkpoint==='plate-a')check(puzzle.plates[0].pressed&&puzzle.door.state==='open_plate','raised plate opens door');
+     if(segment.checkpoint==='plate-b')check(puzzle.plates.every(p=>p.pressed),'inactive Jumper holds A while Strong reaches B');
+     if(segment.checkpoint==='exchange')check(!puzzle.plates[0].pressed&&puzzle.plates[1].pressed&&puzzle.door.open,'far plate holds passage after Jumper leaves ledge');
+     if(segment.checkpoint==='jumper-exit')check(puzzle.exit.jumper&&!puzzle.exit.strong&&!puzzle.complete,'one complete exit footprint does not finish');
+     if(segment.checkpoint==='complete')check(puzzle.complete&&puzzle.exit.jumper&&puzzle.exit.strong&&puzzle.door.state==='closed','both grounded exit footprints complete room and door closes');
+     await capture(`puzzle-${segment.checkpoint}`);
+   }
+ }
+ for(const key of Object.values(bindings))player.set_key(key,false,false);
+ const solved=state(),solvedRecording=player.recording();
+ player.set_key('ArrowLeft',true,false);player.set_key('Space',true,false);player.set_key('KeyQ',true,false);
+ for(let i=0;i<10;i++)tick();
+ check(state().session_tick===solved.session_tick&&JSON.stringify(state().characters)===JSON.stringify(solved.characters)&&state().active_character===solved.active_character,'completion freezes movement, switching and puzzle clock');
+ player.load_recording(solvedRecording);player.resume();
+ for(let i=0;i<JSON.parse(solvedRecording).frames.length;i++)tick();
+ check(state().puzzle.complete&&JSON.stringify(state().characters)===JSON.stringify(solved.characters)&&player.paused(),'complete solution recording replays in actual GPU player');
+ await capture('puzzle-solution-replay');
+ for(const [width,height] of [[1280,720],[960,540]]){player.resize(width,height);check(player.frame(0),`completed room presents at ${width}x${height}`);}
+ player.restart();
+ check(!state().puzzle.complete&&!state().puzzle.door.open&&state().puzzle.plates.every(p=>!p.pressed),'restart after completion reconstructs all devices');
+ await capture('puzzle-restarted');
  let invalid=false;try{await BrowserPlayer.create(document.createElement('canvas'),'invalid');}catch{invalid=true;}check(invalid,'invalid backend reports an actionable error');
  if(timedOut)throw Error('browser GPU acceptance exceeded 60 seconds');
  publish({status:'passed',backend,checks,live,replay,final:state()});
