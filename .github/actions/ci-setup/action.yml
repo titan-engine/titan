@@ -1,0 +1,52 @@
+name: Prepare CI toolchain
+description: Install pinned tools and identify a bounded workload cache
+inputs:
+  platform:
+    required: true
+    description: native, wasm, or macos
+  workload:
+    required: true
+    description: Independent acceptance workload
+outputs:
+  key:
+    value: ${{ steps.cache.outputs.key }}
+    description: Immutable cache generation
+  restore-prefix:
+    value: ${{ steps.cache.outputs.restore-prefix }}
+    description: Same workload and dependency graph fallback
+  paths:
+    value: ${{ steps.cache.outputs.paths }}
+    description: Build outputs and downloads only
+runs:
+  using: composite
+  steps:
+    - name: Install supported Python
+      uses: actions/setup-python@v6
+      with:
+        python-version-file: .python-version
+
+    - name: Install supported Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: .node-version
+
+    - name: Install pinned Rust
+      shell: python3 scripts/ci-deadline.py {0}
+      run: |
+        # rustup reads the channel, components and targets from rust-toolchain.toml.
+        rustup toolchain install
+        # External copied games must use the same toolchain as this checkout.
+        rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
+        rustc --version
+        cargo --version
+        python3 --version
+        node --version
+
+    - name: Identify workload cache
+      id: cache
+      shell: python3 scripts/ci-deadline.py {0}
+      env:
+        CI_PLATFORM: ${{ inputs.platform }}
+        CI_WORKLOAD: ${{ inputs.workload }}
+        CI_MANIFESTS: ${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+      run: python3 scripts/ci-cache.py

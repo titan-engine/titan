@@ -244,10 +244,12 @@ protection and active rulesets when diagnosing blocked integration.
 
 CI runs on PRs, `merge_group: checks_requested`, pushes to main, and manual dispatch. Feature-branch pushes do not
 also start a duplicate push run. Superseded runs cancel only within the same PR;
-main and merge-group runs remain independent. Build/download caches are separated by platform,
-job and toolchain, with manifest/lockfile keys. Runtime diagnostic/discovery data
-is excluded. Cache misses affect speed, not whether verification runs. All stack
+main and merge-group runs remain independent. Independent workspace, game and copied-project workloads run on separate runners.
+The three existing required check names are aggregate gates: every necessary
+shard must succeed, including after upstream failures or cancellation. All stack
 layers retain full required gates; no stack-top-only exception is configured.
+See [CI workload and cache verification](verification.md#ci-workloads-and-cache-measurement)
+for the command map, cache boundaries, refresh policy and timing procedure.
 
 ```sh
 gh issue create --title 'Concrete outcome' --body-file /tmp/issue.md --label investigation
