@@ -35,10 +35,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install stable Rust
+      - name: Install supported Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - name: Install supported Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Install pinned Rust
         run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy
-          rustup default stable
+          # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+          python3 --version
+          node --version
 
       - name: Identify Rust build cache
         id: rust-cache
@@ -196,10 +208,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install stable Rust with WebAssembly target
+      - name: Install supported Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - name: Install supported Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Install pinned Rust
         run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
-          rustup default stable
+          # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+          python3 --version
+          node --version
 
       - name: Identify Rust build cache
         id: rust-cache
@@ -303,10 +327,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install stable Rust
+      - name: Install supported Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - name: Install supported Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Install pinned Rust
         run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+          python3 --version
+          node --version
 
       - name: Identify Rust build cache
         id: rust-cache

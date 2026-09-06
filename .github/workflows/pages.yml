@@ -24,10 +24,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Install stable Rust with WebAssembly target
+      - name: Install supported Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - name: Install supported Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Install pinned Rust
         run: |
-          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
-          rustup default stable
+          # rustup reads the channel, components and targets from rust-toolchain.toml.
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+          python3 --version
+          node --version
       - name: Build allowlisted static site
         run: |
           python3 scripts/test-pages.py
