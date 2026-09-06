@@ -244,9 +244,8 @@ captures and verifies interactive replay on the inspected player.
 
 With the browser server running, visit `/play/test.html?backend=webgpu` and
 `?backend=webgl2`. Each must independently report a pass; Node WASM execution
-alone establishes no browser GPU behavior. See [verification evidence](verification.md)
-for the exercised environment and limitations. Build outputs and runtime
-diagnostics are ignored, and no external RPG support module is imported.
+alone establishes no browser GPU behavior. Historical platform observations and
+their limitations are recorded below. Build outputs and runtime diagnostics are ignored, and no external RPG support module is imported.
 
 ## Bounded source variations
 
@@ -255,7 +254,61 @@ in [game/puzzle.rs](src/game/puzzle.rs) define plate bounds; room-specific
 solids are in [game.rs](src/game.rs). Inspect `state.puzzle_geometry` to confirm
 the compiled bounds. Work in a disposable copy for an experiment, rebuild the
 game, adapt ordinary input routes, and verify both completion and replay.
-The [independent plate variation](evidence/playtest-86/variation-notes.md)
-retains an exact patch, route and reproduction command. The
-[iteration procedure](../../docs/agent-iteration.md) defines measurement and
+The historical plate variation below retains an immutable patch, route and
+reproduction command. The [iteration procedure](../../docs/agent-iteration.md) defines measurement and
 diagnostic reporting; this example adds no runtime editing or new mechanics.
+
+## Historical exercise provenance
+
+The independent #86 evaluation measured gameplay source
+`02272893a0d91af2b1ac6b5159644b70ab46108c` on 2026-09-06, macOS / Apple M5 Pro.
+Its [original report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md)
+and adjacent native/WebGPU/WebGL2 identity-bearing reports and inspected PNGs
+remain available at evidence revision `e4ff0dff2d02dfffa6bc085286798886a92e30e7`.
+Native Metal presented 4,311 frames; actual browser WebGPU and WebGL2 each
+passed 209 checks independently. Three perturbed semantic scenarios replayed
+34 checkpoints. These bounded agent checks found no gameplay defect; they do
+not establish human discoverability, current GUI behavior, portable pixel
+identity or exhaustive freedom from softlocks. The fixed view and held-switch
+release gesture were observed limitations. The current commands above remain
+authoritative for reruns; the native playtest runner uses solution routes as
+navigation templates, adding excursions, waits, recovery and transition probes.
+It writes its state/operation report to ignored
+`games/adventure/target/playtest-86/semantic.json` by default. Native GPU captures
+use ignored root `target/adventure-gpu-evidence/`; save browser downloads and their
+capture identities to ignored output such as root `target/evidence/adventure/`.
+Check custom output paths with `git check-ignore` before running.
+
+The unfamiliar-author variation moved room-1 plate B south 600 mm and completed
+a 579-tick ordinary-input route with final-state replay, invalid-recording
+rejection and room-2 preservation. It measured the same source with the
+[original patch and route](https://github.com/titan-engine/titan/tree/3e584a023d346805c23c2bf11162c87dee5042ed/games/adventure/evidence/playtest-86).
+The [method and limitations](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/variation-notes.md)
+support #97's assessment: full-task monotonic timing was missed, the observed
+UTC interval was 244 seconds, and successful command phases totalled 15.044
+seconds with uncertain cache warmth. This is one CPU-only authoring sample,
+not a full-task latency or browser/GPU result. Reproduce outside the checkout:
+
+```sh
+scratch=$(mktemp -d)
+evidence_root=$(mktemp -d)
+git archive 3e584a023d346805c23c2bf11162c87dee5042ed games/adventure/evidence/playtest-86 | tar -x -C "$evidence_root"
+evidence="$evidence_root/games/adventure/evidence/playtest-86"
+git archive 02272893a0d91af2b1ac6b5159644b70ab46108c | tar -x -C "$scratch"
+patch -d "$scratch" -p1 < "$evidence/variation.patch"
+CARGO_BUILD_JOBS=4 python3 "$evidence/variation-reproduce.py" "$scratch" "$scratch/results"
+```
+
+The later #124 contact-pushing correction has separate
+[human recording, final state and capture provenance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/push-124/human-result.json)
+and [platform verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/verification.md#contact-pushing-correction-124).
+On 2026-09-06 the maintainer completed room 2 at tick 1042 with ordinary keyboard
+input in the native Metal release player on Apple M5 Pro; inspection was read-only.
+The implementation revision is `bf9835541d5acfe789f20d8a37cfc28aef6ca743`;
+the played build had the same gameplay code before the HUD plus-sign became AND
+and focused tests were added. The 1165-frame recording includes frozen completion
+frames and matched native/actual-WASM final-state replay. The separately recorded
+platform pass reports native Metal and 229 checks each in actual WebGPU/WebGL2.
+This is one maintainer playtest, not a broader usability study. Use the current
+block/sequence and player commands above for new checks; historical recordings
+and their original reproduction context remain at the linked evidence revision.

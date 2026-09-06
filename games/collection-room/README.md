@@ -234,11 +234,14 @@ without retaining the runtime borrow. `handle` remains an immediate-only
 convenience for semantic calls. Native requests use the same owned dispatch and
 deferred reply boundary. GPU players advertise capture; CPU-only hosts keep it unsupported.
 
-[Recorded player acceptance](evidence/player-acceptance.json) verifies native Metal
-on Apple M5 Pro, actual browser WebGPU, and Chromium WebGL2 via ANGLE Metal.
-The actual native run presented 388 GPU frames and verified a real 800 × 500
-window resize as well as zero-size suspension. Device loss was not physically
-forced; supported failure-policy branches have unit coverage.
+The [historical player acceptance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/collection-room/evidence/player-acceptance.json)
+measured source `e1a2b9314bc05767a2d46af8b4d3799d89ebca71` on 2026-09-05,
+macOS / Apple M5 Pro; its evidence is preserved at
+`e4ff0dff2d02dfffa6bc085286798886a92e30e7`. Native Metal presented 388 frames
+and verified an actual 800 × 500 resize and zero-size suspension. Actual browser
+WebGPU and Chromium WebGL2 via ANGLE Metal passed separately. This is historical
+platform provenance; use the commands above for current acceptance. Physical
+device loss was not forced and other operating systems were not locally GPU-verified.
 
 
 Capture acceptance retains a native `evidence.json` and adjacent PNGs beneath
@@ -246,7 +249,8 @@ Capture acceptance retains a native `evidence.json` and adjacent PNGs beneath
 The native harness reuses bounded process deadlines and sanitized failure evidence;
 `TITAN_ACCEPTANCE_FAIL=collection-room-player:capture` exercises its failure path.
 The actual browser test pages display each image with accepted provenance and a
-**Download capture evidence JSON** link. Save both backend results, then compare:
+**Download capture evidence JSON** link. Save both backend results under ignored
+root `target/evidence/collection-room/` or outside the checkout, then compare:
 
 ```sh
 python3 games/collection-room/scripts/compare-captures.py \
@@ -270,7 +274,7 @@ also require the warm ECS HUD pixels. Inspect those actual images in addition to
 reading the numeric comparison. The ordinary native/actual-WASM CI remains GPU
 independent; GPU player and cross-backend image checks are explicit desktop runs.
 
-The [recorded acceptance](evidence/player-acceptance.json) covers captures on Metal,
+The [historical acceptance](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/collection-room/evidence/player-acceptance.json) covers captures on Metal,
 WebGPU and WebGL2. All ten cross-backend pose comparisons measured zero RGB
 difference on Apple M5 Pro; the declared tolerances remain authoritative across
 adapters. Physical device loss was not forced; bounded backend map failure and

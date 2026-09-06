@@ -2,7 +2,7 @@
 
 Status: selected rules for [issue #80](https://github.com/titan-engine/titan/issues/80),
 implemented as the bounded sequence in [#85](https://github.com/titan-engine/titan/issues/85).
-See [verification](verification.md) for runtime evidence and its limitations. The bounded outcome is one
+See [verification](README.md#historical-exercise-provenance) for runtime evidence and its limitations. The bounded outcome is one
 player, two freely switchable characters and two cooperative rooms. Names
 **Jumper** and **Strong** are functional labels, not a narrative commitment.
 
