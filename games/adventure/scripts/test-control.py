@@ -88,7 +88,7 @@ def main(failures, log):
             entity = next(entity for entity in entities if entity['name'] == character)
             detail = call('entity', entity['id']['index'], entity['id']['generation'])['response']
             key = next(key for key in detail['components'] if key.endswith('::Position'))
-            assert detail['components'][key] == initial['characters'][character]
+            assert all(detail['components'][key][axis] == initial['characters'][character][axis] for axis in ('x', 'y', 'z'))
             assert all(not detail['component_fields'][key][axis]['writable'] for axis in ('x', 'z'))
         route = json.loads((GAME / 'tests/control-route.json').read_text())
         for sample in route:
@@ -96,8 +96,10 @@ def main(failures, log):
             call('input', frame, '--actions', json.dumps({a: {'kind': 'button', 'value': True} for a in sample['actions']}))
             call('step', 1)
             current = state()
-            for key in ('characters', 'active_character'):
-                assert current[key] == sample[key], (key, current, sample)
+            assert current['active_character'] == sample['active_character'], (current, sample)
+            for name, position in sample['characters'].items():
+                assert all(current['characters'][name][axis] == value for axis, value in position.items()), (current, sample)
+                assert current['characters'][name]['y'] == 0, current
             trace.append(current)
         recording = call('query', 'recording')['response']['value']
         expected = state()

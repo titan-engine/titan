@@ -154,7 +154,9 @@ fn load(app: &mut App, recording: Recording) -> Result<(), ProtocolError> {
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
+    game::validate_origin(&recording.origin)?;
     game::restart(app);
+    game::apply_origin(app, &recording.origin);
     paused(app, true);
     app.world_mut().resource_mut::<Control>().unwrap().replay = Some(Playback {
         frames,
@@ -475,6 +477,7 @@ fn key_action(key: &str) -> Option<Action> {
         "KeyS" | "ArrowDown" => Some(Action::Down),
         "KeyA" | "ArrowLeft" => Some(Action::Left),
         "KeyD" | "ArrowRight" => Some(Action::Right),
+        "Space" => Some(Action::Jump),
         "KeyQ" => Some(Action::Switch),
         "KeyR" => Some(Action::Restart),
         _ => None,
@@ -497,6 +500,7 @@ pub fn reference_recording() -> Recording {
         }
     }
     Recording {
+        origin: Default::default(),
         format_version: 1,
         fixture: game::FIXTURE.into(),
         frames,
@@ -545,6 +549,47 @@ mod tests {
         p.set_key("KeyD", true, false);
         p.tick();
         assert_eq!(state(&p)["characters"]["strong"]["x"], 3620);
+    }
+    #[test]
+    fn jump_taps_switching_focus_and_restart_do_not_create_stale_jumps() {
+        let mut p = session();
+        p.resume();
+        p.set_key("Space", true, false);
+        p.set_key("Space", false, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 170);
+        p.set_key("Space", true, false);
+        p.set_key("KeyQ", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 330);
+        assert_eq!(state(&p)["characters"]["strong"]["y"], 0);
+        for _ in 0..40 {
+            p.tick();
+        }
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 0);
+        assert_eq!(state(&p)["characters"]["strong"]["y"], 0);
+        p.set_key("Space", false, false);
+        p.set_key("Space", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["strong"]["y"], 90);
+        p.pause();
+        let frozen = state(&p)["characters"].clone();
+        p.tick();
+        assert_eq!(state(&p)["characters"], frozen);
+        p.resume();
+        p.set_key("Space", true, true);
+        for _ in 0..30 {
+            p.tick();
+        }
+        assert_eq!(state(&p)["characters"]["strong"]["y"], 0);
+        p.restart();
+        p.set_key("Space", true, true);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 0);
+        p.set_key("Space", false, false);
+        p.set_key("Space", true, false);
+        p.tick();
+        assert_eq!(state(&p)["characters"]["jumper"]["y"], 170);
     }
     #[test]
     fn replay_and_live_share_the_same_game() {

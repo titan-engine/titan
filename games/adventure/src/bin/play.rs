@@ -95,7 +95,7 @@ mod native {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
+                        "play [--paused] [--verify-surface-lifecycle] [--recording PATH] [--frames N] [--run-for-ms MS] [--inspect [--allow-control] [--project DIR] [--instance ID]]\nWASD/arrows move; Space jump; Q switch; P pause/resume; N single tick while paused; R restart; L leave replay; Escape quit.\nRecordings start paused and replay actual fixed ticks. --inspect attaches authenticated local inspection to this played instance; remote control requires --allow-control. Captures freeze a fresh 960x540 scene and ECS overlay without advancing a tick.\n--frames counts successfully presented GPU frames; --run-for-ms bounds wall time."
                     );
                     return Ok(());
                 }

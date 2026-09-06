@@ -1,7 +1,59 @@
+# Jumping and collision verification
+
+Issue #82 was exercised on 2026-09-06 on macOS / Apple M5 Pro. The practice
+room combines movement fixtures; it does not implement puzzle progression.
+The design's movement, gravity, body/support rules and jump values are retained.
+Jumper clears the 1 m teaching ledge and Strong does not. The fixed 0.75 m step
+and 2 m ledge exercise the later block-assisted jump without adding block moves.
+
+![Jumper supported on the teaching ledge](evidence/jumping-native.png)
+
+The native Metal player presented 609 GPU frames in the movement acceptance
+run, including captures at Jumper's 1530 mm apex, grounded at Y=1000, Strong's
+450 mm apex and blocked at the ledge face Z=3200. Inspection confirmed
+support height agrees with the mesh, the active outline follows the foot height,
+and both characters remain visible. Initial, repeated, reset and read-only
+captures agree (`8a01b23469b2d61d` on this backend). Existing RPG/arena references
+and the committed repository README preview are unchanged.
+
+The actual browser GPU acceptance page independently passed WebGPU and WebGL2.
+It exercises both apices, a teaching-ledge landing, safe walk-off, Strong's
+blocked attempt, held-Space behavior, keyboard switching/release gates, replay,
+reset/capture invalidation, and 960 × 540 / 1280 × 720 presentation. Browser
+landing captures were visually inspected alongside the native result. These are
+actual GPU/WASM checks; Node results alone do not establish browser rendering.
+
+The optional `movement-acceptance` runner constructs isolated controlled
+fixtures for positive footprint support versus edge-only contact, highest
+crossed landing and nearest ceiling, high-speed obstacle sweeps, X-then-Z slide,
+no step-up/coyote/buffer, both character height gates, each static block socket,
+character noncollision/non-support, midair switching, and defensive below-floor
+recovery of either character. `node scripts/test-movement.mjs` builds and runs
+the same runner natively and in actual WASM: 29 scenarios and 1,309 complete
+per-tick states matched exactly.
+These fixture helpers are absent from ordinary builds and introduce no player
+teleport command. Both intermediate/final socket launches are accepted; the
+initial socket remains too far from the high ledge even with generous edge
+support. No ability-value tuning was needed.
+
+Package formatting, tests, Clippy, native CLI, actual-WASM control and browser
+key checks complement the visual checks. Workspace format/tests/Clippy/core WASM
+checks and existing native/WASM RPG control, replay and asset loops also passed.
+Run commands are in the [game guide](README.md). The movement conformance runner
+is included in required CI, alongside the existing native player check.
+
+Limits: this is a bounded automated prototype check, not extended human playtest
+feedback. Release/repress switching remains the initial documented policy.
+Jumper's narrow body is 350 mm wide inside its 400 mm collider; Strong's body
+fills the shared 400 mm footprint. Both bodies are 900 mm high. Exterior walls
+retain the documented cutaway treatment; foreground collision has no wall mesh.
+No general physics, block pushing, plates, doors, or puzzle sequence is claimed.
+GPU checksums express same-backend consistency, not a portable pixel promise.
+
 # Control foundation verification
 
 The control foundation was exercised on 2026-09-06 on macOS / Apple M5 Pro.
-This is evidence for issue #81; jumping and puzzle progression are absent.
+The historical section below records issue #81 before jumping was added.
 
 ![Native GPU initial room](evidence/initial-native.png)
 

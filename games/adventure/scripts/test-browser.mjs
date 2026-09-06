@@ -90,7 +90,11 @@ if (!process.argv.includes('--wasm-worker')) {
       ok(game, { type: 'inject_input', frame, actions: Object.fromEntries(sample.actions.map(a => [a, {kind: 'button', value: true}])) });
       ok(game, { type: 'step', frames: 1 });
       const current = state(game);
-      for (const key of ['characters', 'active_character']) assert.deepEqual(current[key], sample[key], `tick ${index + 1} ${key}`);
+      assert.equal(current.active_character, sample.active_character);
+      for (const [name, position] of Object.entries(sample.characters)) {
+        for (const [axis, value] of Object.entries(position)) assert.equal(current.characters[name][axis], value, `tick ${index + 1} ${name}.${axis}`);
+        assert.equal(current.characters[name].y, 0);
+      }
       assert.deepEqual(current, native[index], `full native/WASM state at tick ${index + 1}`);
     }
     const expected = state(game);
