@@ -88,7 +88,7 @@ New/updated open Titan issues automatically enter the project and default to
 Ready. Sub-issues are automatically included. Closing an issue sets Done; use the
 closure reason to distinguish implemented work from work retired as not planned
 or duplicate. Verify the exact resulting main revision before reporting an
-implementation complete. Linking a PR does not change status or ownership. Moving a card to Done does
+implementation complete, using the accepted evidence described below. Linking a PR does not change status or ownership. Moving a card to Done does
 not itself close its issue. Reopened work must be triaged explicitly. PRs appear
 through the Linked pull requests field rather than duplicate execution cards.
 Set In review explicitly when the linked implementation is ready.
@@ -117,7 +117,8 @@ Set In review explicitly when the linked implementation is ready.
    or force-push main. Return scope changes and releases to the maintainer.
    An explicit request for maintainer review before merge takes precedence over
    autonomous enqueueing; leave that PR open until the review is complete.
-7. Verify CI for the exact resulting main SHA. Link the result in the PR/issue,
+7. Verify CI for the exact resulting main SHA, using full CI or the accepted
+   exact-SHA queue evidence below. Link the SHA and accepted run in the PR/issue,
    ensure the issue is completed, and release its worktree when no longer needed.
    While checks run, continue another eligible issue if independent work exists.
 
@@ -240,9 +241,75 @@ Keep the queue requirement active before disabling legacy strict branch freshnes
 never remove required checks to make an entry merge. Inspect both legacy branch
 protection and active rulesets when diagnosing blocked integration.
 
+## Exact-main verification and cache warming
+
+A successful **Exact main revision verified** job records the full main SHA and
+its accepted CI run in the job summary. Completion reports must link that SHA
+and run. Successful PR-head CI alone is insufficient; a matching tree, ancestor,
+or a queue run for another SHA is also insufficient. When the summary accepts
+queue evidence, do not wait for a second full main execution. Browser demos
+publication remains a separate main-only deployment with its existing build gates.
+
+The main-push selector requires one unambiguous completed successful
+`merge_group` run from this repository's `.github/workflows/ci.yml` workflow ID,
+for the exact full main SHA. It checks the workflow contents at that SHA, the
+latest run attempt, the **CI revision** job's successful step naming the executed
+workflow SHA, and every expected required job and named verification step. The
+revision job checks both `github.workflow_sha` and the checkout SHA. Missing,
+pending, failed, cancelled, incomplete, ambiguous or inaccessible evidence means
+full CI. A failed selector job also starts full CI; no empty output grants reuse.
+The final result fails unless accepted queue evidence or the full fallback passes.
+
+PR and queue required jobs are unconditional. The separate main workflow's
+selection, summary and reusable full-suite job names do not replace their required
+check names. No branch protection or queue rules are changed. The verification
+commands are shared by calling the same `ci.yml` at the same commit; they do not
+branch on event or ref. Cache scope, cancellation and diagnostic artifact names
+can differ without changing verification. The selector deliberately rejects an
+unrecognized gate layout or event-dependent verification. When changing the gate
+contract (including parallel CI), update its extraction/tests before expecting
+reuse; a contract it cannot prove continues to run full CI. Mutable runner images
+and existing action aliases remain environmental variation, just as between two
+full runs; this policy proves revision and command equivalence, not hermeticity.
+
+Default-branch caches cannot be assumed to come from queue runs. Full verification
+on cache-input changes (Cargo manifests/locks, pinned tool versions, workflows,
+composite actions and CI cache tooling) warms main immediately. A weekly Monday
+04:23 UTC full run refreshes default-branch caches; ordinary fallback runs warm
+them too. `workflow_dispatch` on **Main verification** or **CI** at `main` forces
+full verification and permits manual warming after eviction. Existing immutable
+cache keys still control writes: a full run populates a missing key, not an
+existing cache entry. Restore prefixes remain available between warmings. Browser
+demos keeps its independent main build/deploy and cache policy.
+
+Evaluate savings over a complete warming interval, including full warming/fallback
+jobs and the selector/summary jobs, rather than counting only skipped suites.
+For the historical same-SHA pair in issue #119, the
+[queue run](https://github.com/titan-engine/titan/actions/runs/34026940070)
+used 21.90 runner-minutes and the
+[main run](https://github.com/titan-engine/titan/actions/runs/34027341007)
+used 24.85 runner-minutes (sums of required job start/end durations); main required
+wall time was 11m23s. These are baseline measurements, not measured savings of
+this implementation. At those costs, `n` otherwise redundant main suites and `w`
+additional warmings would save `24.85 × (n − w)` runner-minutes minus decision and
+summary overhead; low merge frequency may yield no net saving. Record actual
+run timings and cache effects before making a maintained performance claim.
+
+Live rollout verification requires a merged revision containing this workflow:
+link its actual queue run and main summary demonstrating reuse, then a forced
+full main run demonstrating fallback/full execution. Reuse needs a push without
+cache-input changes after the workflow has landed, because workflow changes
+intentionally choose warming. Do not claim these live paths were demonstrated
+by unit tests, a branch manual run, or historical CI runs. Keep issue #119 open
+until this public evidence and interval measurements are recorded. A maintainer
+review-before-merge request still takes precedence over collecting rollout evidence.
+
 ## CI and routine CLI use
 
-CI runs on PRs, `merge_group: checks_requested`, pushes to main, and manual dispatch. Feature-branch pushes do not
+CI runs in full on PRs, `merge_group: checks_requested`, and manual dispatch.
+Main pushes use **Main verification** to select exact-SHA queue evidence or call
+the same CI workflow in full. Scheduled and manual Main verification runs always
+run the full suite. Feature-branch pushes do not
 also start a duplicate push run. Superseded runs cancel only within the same PR;
 main and merge-group runs remain independent. Build/download caches are separated by platform,
 job and toolchain, with manifest/lockfile keys. Runtime diagnostic/discovery data
