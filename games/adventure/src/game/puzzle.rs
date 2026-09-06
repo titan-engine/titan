@@ -29,6 +29,19 @@ pub const PLATES: [Rect; 2] = [
         y: 0,
     },
 ];
+pub fn plates(room: u8) -> [Rect; 2] {
+    let mut plates = PLATES;
+    if room == 2 {
+        plates[0] = Rect {
+            min_x: 5200,
+            max_x: 5800,
+            min_z: 1700,
+            max_z: 2300,
+            y: 2000,
+        };
+    }
+    plates
+}
 pub const EXIT: Rect = Rect {
     min_x: 10000,
     max_x: 12000,
@@ -79,10 +92,13 @@ impl Default for PuzzleState {
 }
 impl PuzzleState {
     pub fn sample(&mut self, bodies: [(Position, Movement); 2]) {
+        self.sample_room(bodies, 1);
+    }
+    pub fn sample_room(&mut self, bodies: [(Position, Movement); 2], room: u8) {
         if self.complete {
             return;
         }
-        for (plate, rect) in self.plates.iter_mut().zip(PLATES) {
+        for (plate, rect) in self.plates.iter_mut().zip(plates(room)) {
             plate.occupants = bodies
                 .iter()
                 .enumerate()

@@ -814,3 +814,197 @@ fn exit_requires_both_full_grounded_footprints_and_completion_freezes_until_rest
     );
     assert_eq!(pos(&a, "jumper"), initial_position(0));
 }
+
+#[test]
+fn room_two_reset_replay_and_input_edges() {
+    let mut a = app();
+    select_room(&mut a, 2).unwrap();
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Switch]);
+    for _ in 0..33 {
+        tick_with(&mut a, &mut t, &[Action::Right]);
+    }
+    tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    assert_eq!(status(&a)["block"]["socket"], 1);
+    assert_eq!(
+        pos(&a, "strong"),
+        Position {
+            x: 5480,
+            y: 0,
+            z: 6500
+        }
+    );
+    for _ in 0..16 {
+        tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    }
+    assert_eq!(status(&a)["block"]["moves"], 1);
+    tick_with(&mut a, &mut t, &[]);
+    tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    assert_eq!(status(&a)["block"]["socket"], 2);
+    let before = status(&a);
+    let rec = recording(&a).unwrap();
+    select_room(&mut a, 1).unwrap();
+    replay(&mut a, rec).unwrap();
+    let after = status(&a);
+    for key in [
+        "room",
+        "block",
+        "characters",
+        "puzzle",
+        "session_tick",
+        "active_character",
+    ] {
+        assert_eq!(before[key], after[key], "{key}");
+    }
+    tick_with(&mut a, &mut t, &[Action::Restart]);
+    assert_eq!(status(&a)["room"], 2);
+    assert_eq!(status(&a)["block"]["socket"], 0);
+    assert_eq!(status(&a)["active_character"], "jumper");
+    assert!(select_room(&mut a, 3).is_err());
+    assert_eq!(status(&a)["room"], 2);
+}
+#[test]
+fn room_two_recovery_restores_block_and_room() {
+    let mut a = app();
+    select_room(&mut a, 2).unwrap();
+    a.world_mut()
+        .resource_mut::<Session>()
+        .unwrap()
+        .block
+        .socket = 2;
+    fixture_set_character(
+        &mut a,
+        1,
+        Position {
+            x: 3500,
+            y: -2001,
+            z: 6500,
+        },
+        -10,
+        false,
+    );
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    let s = status(&a);
+    assert_eq!(s["room"], 2);
+    assert_eq!(s["block"]["socket"], 0);
+    assert_eq!(s["recovery_message_ticks"], 120);
+    assert_eq!(pos(&a, "strong"), initial_position(1));
+    let recording = recording(&a).unwrap();
+    select_room(&mut a, 1).unwrap();
+    replay(&mut a, recording).unwrap();
+    assert_eq!(status(&a)["room"], 2);
+    assert_eq!(status(&a)["recovery_message_ticks"], 120);
+}
+
+#[test]
+fn room_two_push_uses_resolved_axes_and_rejections_allow_ordinary_movement() {
+    let mut a = app();
+    select_room(&mut a, 2).unwrap();
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Switch]);
+    fixture_set_character(
+        &mut a,
+        1,
+        Position {
+            x: 5500,
+            y: 0,
+            z: 6500,
+        },
+        0,
+        true,
+    );
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Interact, Action::Up, Action::Left, Action::Right],
+    );
+    assert_eq!(status(&a)["block"]["socket"], 1);
+    tick_with(&mut a, &mut t, &[]);
+    fixture_set_character(
+        &mut a,
+        1,
+        Position {
+            x: 5500,
+            y: 0,
+            z: 5500,
+        },
+        0,
+        true,
+    );
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Interact, Action::Up, Action::Jump],
+    );
+    assert_eq!(status(&a)["block"]["last_rejection"], "not_grounded");
+    assert_eq!(
+        pos(&a, "strong"),
+        Position {
+            x: 5500,
+            y: 90,
+            z: 5440
+        }
+    );
+    assert_eq!(status(&a)["block"]["socket"], 1);
+}
+#[test]
+fn dynamic_block_support_stays_stable_and_prevents_push() {
+    let mut a = app();
+    select_room(&mut a, 2).unwrap();
+    fixture_set_character(
+        &mut a,
+        0,
+        Position {
+            x: 5500,
+            y: 750,
+            z: 5500,
+        },
+        0,
+        true,
+    );
+    fixture_set_character(
+        &mut a,
+        1,
+        Position {
+            x: 5500,
+            y: 0,
+            z: 6500,
+        },
+        0,
+        true,
+    );
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Switch]);
+    for _ in 0..40 {
+        tick_with(&mut a, &mut t, &[]);
+    }
+    assert_eq!(status(&a)["characters"]["jumper"]["support"], "heavy-block");
+    tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    assert_eq!(status(&a)["block"]["last_rejection"], "block_occupied");
+    assert_eq!(status(&a)["block"]["socket"], 0);
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 5500,
+            y: 750,
+            z: 5500
+        }
+    );
+    // Switch-held E cannot become a fresh push after changing control target.
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Interact, Action::Up, Action::Switch],
+    );
+    assert_eq!(status(&a)["active_character"], "jumper");
+    assert_eq!(status(&a)["block"]["last_rejection"], "block_occupied");
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 5500,
+            y: 750,
+            z: 5500
+        }
+    );
+}
