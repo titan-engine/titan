@@ -74,7 +74,7 @@ observations; there are no machine-dependent CI performance budgets.
 
 Measured 2026-09-05 at 16:28 UTC on macOS 27.0 arm64, 18 logical CPUs,
 Rust 1.98.1 (48a229cea), release profile, empty `RUSTFLAGS`, ten churn cycles.
-The [raw report](evidence/sparse-churn-baseline.json) records clean source commit
+The [raw report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/evidence/sparse-churn-baseline.json) records clean source commit
 `22fa36f7a3d9c03644ea0cec2641268328c35f5d`. Three fresh processes for each of six
 configurations all passed the semantic checks and agreed on checksums. Local
 workspace verification was running concurrently; power mode and background load

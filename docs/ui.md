@@ -95,33 +95,8 @@ rectangle at `(4, 4)` with size `152 × 5`; world pixels outside it are identica
 | --- | --- |
 | ![RPG before](ui/rpg-before.png) | ![RPG with UI](ui/rpg-after.png) |
 
-## Verification
-
-[Check results](ui/checks.json) record the completed local gates. Workspace and
-arena tests, strict Clippy, WASM compilation, actual-WASM control loops, native
-control and live-player checks, browser input/bridge tests, copied-starter tests
-and macOS bundle checks passed. Seven focused engine UI tests cover rendering,
-read-only inspection, ordering, coordinates and gesture cancellation. Arena
-tests additionally cover UI state updates, paused restart, cleared pending dash,
-recording reset and mixed physical/controlled pointer sources.
-
-The arena's initial `e096abf94fd12c24` and winning `b5cf61da6f50efd7` software
-checksums remain unchanged. The RPG's new software reference matches native GPU
-readback exactly with tolerance zero. Its actual browser player completed the
-eleven-tick reference route and displayed `SHARDS 3/3  SHRINE ACTIVE`.
-
-Physical pointer checks used the in-game label, not the surrounding host Restart
-button: a paused native lost run reset to HP 3/time 00; the final browser build
-reset a paused HP 1/time 4.4 run to HP 3/time 0. Browser inspection then reported
-18 entities at the unchanged host frame 266, with zero ticks in the new recording
-and all three UI entities named and positioned correctly.
-
-- [Native arena after UI restart](ui/arena-native.png)
-- [Browser arena after UI restart](ui/arena-browser.png)
-- [Browser RPG completed quest](ui/rpg-browser.png)
-
-The UI increment is included in the published `v0.3.0` source tag. The subsequent [quest journal](journal.md) adds explicit column placement,
-bounded bitmap text and scoped keyboard focus. General layout and typography
-remain future work. The arena now also exercises
-[interactive playback of saved recordings](arena-replay.md); during playback its
-in-game restart button is disabled and host playback controls remain available.
+For current checks, use the [verification guide](verification.md). The
+[historical UI acceptance report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/ui.md#verification)
+records the original native/browser exercise; those observations do not verify
+later revisions. The [quest journal](journal.md) demonstrates explicit column
+placement, bounded bitmap text and scoped keyboard focus.

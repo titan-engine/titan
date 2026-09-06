@@ -89,7 +89,7 @@ cargo run --manifest-path games/arena/Cargo.toml --bin play
 
 Avoid the coral pursuers for 20 seconds. Move with arrows/WASD; R restarts.
 For a macOS app bundle, browser play and deterministic replay commands, see the
-[arena README](games/arena/README.md). The [independent exercise](docs/arena-exercise.md)
+[arena README](games/arena/README.md). The [independent exercise](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-exercise.md)
 records a failed run, diagnosis, tuning fix and native/browser evidence.
 The arena also supports [live-player inspection and recording replay](docs/arena-replay.md)
 in its native window and browser canvas.

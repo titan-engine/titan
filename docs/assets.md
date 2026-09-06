@@ -125,7 +125,7 @@ Browser canvas inspection for the two-image exercise confirms the reference
 scene, tree-only replacement with the player preserved, a named invalid-tree
 error, and successful Retry after repair. Native GPU evidence uses exact
 software/readback comparison and relocated bundle execution with each resource.
-[Earlier single-image evidence](assets/checks.json) records the original regression
+[Earlier single-image evidence](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/assets/checks.json) records the original regression
 suite; issue #8 and its PR record the two-image verification. CI includes the
 native/browser/bundle checks.
 

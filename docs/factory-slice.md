@@ -206,7 +206,7 @@ ordered operations are explicit to support deterministic tests and later work.
 All rows describe state **after** the named tick. `-` is an empty slot. Labels
 such as A/B identify items only for explaining traces; unique runtime item IDs
 are not required. These fixtures specify expected behavior;
-[finished verification](evidence/factory-verification/README.md) records runtime
+[historical finished verification](https://github.com/titan-engine/titan/blob/17723e62334a19763f8cf81b2f31cc840b4d6289/docs/evidence/factory-verification/README.md) records runtime
 evidence and its limitations.
 
 ### Snapshot capacity and one-hop movement

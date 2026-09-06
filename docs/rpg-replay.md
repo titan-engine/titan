@@ -105,16 +105,6 @@ python3 scripts/test-rpg-replay.py --gpu
 node scripts/test-rpg-replay.mjs
 ```
 
-[Local check results](replay/local-checks.json) include workspace/arena gates,
-external starter/browser and macOS bundle regressions. The real browser file
-chooser loaded the retained native recording with inspection read-only, stepped
-and restarted it, then completed at 9/9 with a match. Exiting preserved host time,
-returned to a fresh quest and cleared stale inspection output.
-
-![RPG playback completed in the browser](replay/rpg-browser-controls.png)
-
-[Completed quest canvas](replay/rpg-browser-canvas.png) and
-[arena playback after migration](replay/arena-browser-controls.png) retain the
-visible integration evidence. Rendering algorithms and reference images were
-unchanged; native GPU players were exercised instead of rerunning the optional
-offscreen GPU suite.
+The [historical acceptance report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/rpg-replay.md#acceptance)
+retains the original native/browser results and captures. It does not establish
+verification of later code.

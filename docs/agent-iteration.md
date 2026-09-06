@@ -121,6 +121,16 @@ limitations summary; retain or attach fixtures/patches/images according to the
 [evidence lifecycle](acceptance-evidence.md). Capture failures and corrections in
 the run bundle, not chronological task logs in repository docs.
 
-The [initial measurements](evidence/agent-iteration/README.md) are observations
-at one pinned revision. They establish a starting point, not portable performance
-or a finished-game acceptance claim.
+## Historical skeleton baseline
+
+The [original observations and reproduction instructions](https://github.com/titan-engine/titan/blob/1b1f138da009e589521df7d3e155e711562a8375/docs/evidence/agent-iteration/README.md)
+measured source `0468ffe00b2cb109acc33591dc382839196ce7fe` on 2026-09-06;
+`1b1f138da009e589521df7d3e155e711562a8375` contains the reports and harnesses.
+Adventure and factory rule edits, scenario construction and intentional rejection
+recovery produced usable command feedback. Each headless task used a private
+empty Cargo target with shared registry caches and concurrent builds. Full
+handoff-to-verification authoring time was not measured: command-phase timings
+exclude reading, reasoning, harness authoring and coordination. The separate
+native adventure capture run included cached builds and a Cargo lock wait;
+no new browser/WASM run was measured. These skeleton observations do not establish
+finished-game acceptance, unfamiliar-author productivity or portable performance.

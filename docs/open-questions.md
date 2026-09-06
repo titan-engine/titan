@@ -12,7 +12,7 @@ These choices require evidence from game iteration:
 - Does full native lifecycle ownership become a repeated customization burden,
   beyond the small surface and input responsibilities now identified?
 - Will larger games make build latency a practical constraint? The [dash
-  measurements](arena-dash.md) put browser packaging/rebuild first among measured
+  measurements](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-dash.md) put browser packaging/rebuild first among measured
   stages (1.227s with cached dependencies), with inspection around 6ms. This small
   workload does not establish clean-build costs or justify engine optimization.
 - Will further games need different live-host customization? Arena now proves

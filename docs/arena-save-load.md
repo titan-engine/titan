@@ -56,7 +56,7 @@ Unknown fields, unsupported versions/seeds, missing slots, invalid positions and
 inconsistent gameplay counters are rejected. Candidate data and the initialized
 target's required components/resources are checked before assignments begin.
 This is validation for the current arena rules, not a compatibility promise for
-future game revisions. See [an exported example](save-load/browser-save.json).
+future game revisions. See [an exported example](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/save-load/browser-save.json).
 
 A successful load reuses the initialized game's entity and asset handles, installs
 the gameplay state, recomputes HUD text and refreshes extraction. It clears held
@@ -73,24 +73,12 @@ remains outside this game-owned format.
 
 ## Verification
 
-[Local check results](save-load/checks.json) cover root/arena Rust gates, native
-CLI and actual native-window control, actual WASM, browser input/file-read tests
-and relocated starter/macOS bundle checks. No rendering algorithm changed;
-existing arena and RPG reference checksums remain valid.
+Game tests restore mid-dash and contact-cooldown snapshots and compare complete
+exports and pixels after identical input. Session and actual-WASM tests cover
+permission, pause, stale-input cancellation and failed-load nonmutation. See the
+[game guide](../games/arena/README.md) for current commands and
+[replay guide](arena-replay.md) for snapshot recording origins.
 
-Game tests restore both mid-dash and contact-cooldown snapshots, then feed
-identical input through later spawns and contact. Complete exports and exact
-rendered pixels match. They also cover fresh and terminal states, preservation
-of host time/handles/assets, derived HUD updates and rejection without changing
-pending input or pointer gestures. Session and WASM tests exercise permission,
-pause, stale-input cancellation and failed-load revisions. The subsequent
-[replay checks](arena-replay.md) cover valid snapshot recording origins.
-
-The browser file chooser restored an exported lost run after a reset: HP 0,
-elapsed 310 ticks, host frame still 310. This verifies the file workflow;
-deterministic mid-dash continuation is covered by game and actual-WASM tests.
-The retained save/load evidence predates snapshot-backed recording support.
-
-No generic ECS serializer was required. The concrete shared tooling gap was
-bounded CLI argument files; the save representation and state-installation policy
-remain in the game.
+The [historical save/load report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-save-load.md#verification)
+records the original file-chooser exercise, which predates snapshot-backed
+recording support. Save representation and installation policy remain game-owned.

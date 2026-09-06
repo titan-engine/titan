@@ -108,47 +108,16 @@ before installing a recording; incremental import validation is not a seek API.
 The measured worst-case behavior and follow-up assessment are recorded in
 [arena replay import responsiveness](replay-import-responsiveness/README.md).
 
-## Verification evidence
-
-[Local checks](arena-replay/checks.json) cover 31 Rust tests, strict Clippy,
-formatting, WASM compilation, 19 browser input/file tests, actual WASM, native
-headless control and the real native GPU player. No rendering algorithm changed;
-existing arena reference checksums remain valid. The optional offscreen GPU test
-was not rerun; the actual GPU player acceptance passed.
+## Example recording and verification
 
 The [mid-dash recording](arena-replay/snapshot-recording.json) starts at gameplay
-tick 1 and contains eight subsequent ticks. Headless and visible playback match
-its complete final save and pixels. Acceptance also covers contact-cooldown
-origins, held edges, malformed-import nonmutation, blocked live/remote input,
-monotonic host frames through playback restart and automatic EOF pause.
-Historical v1 evidence is tested through both verification and visible-session
-playback.
+tick 1 and contains eight subsequent ticks. Try it with:
 
-The real browser file chooser loaded that native-generated recording with
-inspection read-only. Single-step advanced 0/8 to 1/8; restarting returned to
-0/8; Resume completed at 8/8 with a state/image match. Exit restored a paused
-fresh live game. The screenshot retains the completed playback controls.
+```sh
+cargo run --locked --manifest-path games/arena/Cargo.toml --bin replay -- docs/arena-replay/snapshot-recording.json
+```
 
-![Browser playback complete](arena-replay/browser-complete.png)
-
-The first arena exercise was game-owned and passed CI at `fb9b1d5`. The arena
-now adopts [shared engine recording/playback primitives](replay.md) alongside
-the RPG. Snapshot origins and playback policy remain in each game session; the
-hosts supply local controls. Existing arena recording files remain compatible.
-
-### Bounded controls exercise (#7)
-
-The 2026-09-05 acceptance run passed workspace/arena tests and strict Clippy,
-WASM builds, native control loops, actual-WASM replay tests, browser input tests,
-RPG replay/assets regressions, copied-starter checks and macOS bundle checks.
-The native GPU live-player script also passed forward/backward reconstruction,
-paused speed changes, input isolation and exact completion comparisons.
-
-The real browser GPU fixture’s **Seeking and speed** scenario passed ¼× and 4×
-frame pacing, zero-elapsed rendering, bounded seek updates, backward/forward
-reconstruction and EOF verification after a speed change to ½×. It completed
-at 1200/1200 with checksum `b5cf61da6f50efd7`; the rendered winning canvas was
-visually inspected. A floating-point subtraction issue found by this scenario
-was fixed by calculating each update’s tick budget once. Canonical initial and
-RPG references remain `e096abf94fd12c24` and `f7a298f62ad75c1c`. No reference
-image or README preview changed.
+The [game guide](../games/arena/README.md) owns current acceptance commands.
+The [historical replay acceptance report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/arena-replay.md#verification-evidence)
+records the original file-chooser and seek/speed GUI exercises; it does not
+establish verification of current code.

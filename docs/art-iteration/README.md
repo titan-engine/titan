@@ -39,13 +39,12 @@ Both recordings inject the same right-2, down-3, right-6 input sequence through
 separate CLI processes. The resulting two entities are the player and active
 shrine. Existing Rust semantic assertions independently verify the three pickups.
 
-Validation passed: formatting, workspace tests, strict Clippy, WASM target check,
-native separate-process control loop (including field edits and diagnostics),
-actual release WASM control loop, and browser bridge tests. The opt-in native
-GPU RPG readback matched `190a92085def5677` exactly on both `Rgba8Unorm` and
-`Rgba8UnormSrgb`, with `TITAN_GPU_TOLERANCE=0`. The real browser GPU
-player was also launched and its reference replay visibly completed at frame
-11 with three shards and an active shrine.
+These are historical software captures: the original source is
+`375303cbd0104fb7b2b0d1cc3caa0f86ba174490` and the meadow source is
+`abe2bf327ee056fee965f1cd2692671c45db76df`, as recorded in the adjacent identity
+JSON. The [original validation report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/art-iteration/README.md#evidence)
+records the native/browser checks for that art iteration; it does not verify
+later revisions. The four original-resolution images support this comparison.
 
 ## Reproduce
 

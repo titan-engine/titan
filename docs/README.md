@@ -7,8 +7,7 @@ The README owns supported capabilities and getting started; this index owns
 navigation. Reference guides own API contracts and usage, and each game directory
 owns its game rules and controls. [Verification](verification.md) owns quality
 gates; [workflow](workflow.md) owns contribution and integration policy. Issues
-own pending work and approval status. Historical reports below describe only
-the revisions they verified.
+own pending work and approval status. Historical observations describe only the revisions they measured.
 
 ## Try Titan
 
@@ -58,21 +57,9 @@ the revisions they verified.
 - [Maintainer and agent workflow](workflow.md) and
   [agent runtime skill](../.agents/skills/titan-workflow/SKILL.md).
 
-## Verification and milestone evidence
+## Methods and examples
 
-These reports explain how particular changes were checked. Use the guides above
-for current instructions; measurements and environments describe specific runs.
-
-- [Finished factory verification](evidence/factory-verification/README.md) — independent
-  player exercises, unfamiliar-author variation and bounded scaling evidence.
-- [Shared agent iteration procedure](agent-iteration.md) and
-  [initial skeleton measurements](evidence/agent-iteration/README.md).
-- [Starter verification](starter-verification.md)
-  and [public API boundary audit](starter-audit.md).
-- [Arena development exercise](arena-exercise.md), [verification](arena-verification.md),
-  and [snapshot verification](arena-save-load.md).
-- [Host setup audit](host-setup-audit.md) and [workflow verification](host-workflow-verification.md).
-- [ECS-only subsystem boundary audit](subsystem-audit/README.md).
-- [Art iteration](art-iteration/README.md) and [quest journal](journal.md).
-
-- [Inspection failure repair evidence](inspection-repair/README.md).
+- [Agent iteration procedure](agent-iteration.md) — bounded tasks and honest timing.
+- [Inspection failure regression cases](inspection-repair/README.md).
+- [Public API boundaries](starter-audit.md) and [historical ECS boundary conclusions](subsystem-audit/README.md).
+- [Art comparison](art-iteration/README.md) and [quest journal](journal.md).

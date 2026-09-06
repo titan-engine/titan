@@ -59,25 +59,9 @@ is unchanged. A new initial open-journal software capture has checksum
 
 ## Verification
 
-The existing native/WASM replay acceptance scripts now exercise keyboard and
-pointer journal navigation, read-only policy, modal step/input/field rejection,
-pause restoration, snapshot reset, and export while the panel is open. Those
-recordings replay in fresh native and actual-WASM games with identical gameplay
-state and canonical pixels. Existing CI jobs run these scripts without a new
-optional test path.
-
-Focused Rust tests cover hidden/disabled focus targets, canceled/mixed pointer
-sources, queued movement, restored pause policy, and completed-playback isolation.
-Browser tests exercise the real shared input binder and prevent held-key repeat
-resurrection after close or focus loss. The opt-in RPG GPU readback test compares
-both closed and open views against software with tolerance zero, using unorm and
-sRGB targets.
-
-Physical keyboard and pointer checks in the native app and actual browser GPU
-canvas opened the journal, selected shrine details and closed it. The text stayed
-within its panel, focus was visible, and world position stayed `(2, 2)` while
-navigating. Native inspection correlated the open state at frame 975 and the
-resumed state at frame 1429. Exact-pixel assertions remain separate from these
-human-interface checks.
-
-Full local gates and revision evidence are recorded in [checks](journal/checks.json).
+The native/WASM replay acceptance scripts exercise journal navigation, policy,
+pause restoration, reset and canonical replay pixels. See the
+[verification guide](verification.md) for current commands.
+The [original acceptance report](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/docs/journal.md#verification)
+records its native/browser GUI observations and source evidence; the illustration
+above is retained from that run, not a fresh verification claim.
