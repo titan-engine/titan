@@ -780,6 +780,11 @@ mod tests {
         assert_eq!(replay.replay_status()["complete"], true);
         assert!(replay.step().is_err());
         // Explicit host restart still exits playback and cancels owned captures.
+        // Use a separate session: the earlier test producer intentionally never completes.
+        let mut replay = session();
+        replay
+            .load_replay(game::recording(live.app()).unwrap())
+            .unwrap();
         let hold = Arc::new(Mutex::new(None));
         let out = hold.clone();
         replay.register_capture(move |_, _, done| {
