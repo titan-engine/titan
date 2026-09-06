@@ -30,7 +30,7 @@ cargo run --manifest-path games/adventure/Cargo.toml --features player --bin pla
 python3 games/adventure/scripts/build-macos-app.py --name "Titan Adventure" --bundle-id dev.titan.adventure
 ```
 
-WASD/arrows move, Space jumps, Q switches, E plus north/south pushes with Strong,
+WASD/arrows move, Space jumps, Q switches, hold E plus north/south to push with Strong (release E after each push),
 R restarts the displayed room and P pauses/resumes. N steps a paused
 player. Native Escape closes the window. The browser requires canvas focus;
 Escape releases it and pauses. Losing focus pauses and clears pending input;
@@ -143,17 +143,21 @@ and moves between north/south sockets at Z 5500, 4500 and 3500. Socket markers
 are flat guides; only the block provides support. The door, far plate and exit
 use the room 1 rules.
 
-Select Strong, approach `(5500,0,6500)` and press E with north. A valid push
+Select Strong, align centrally with the south face and hold E with north.
+Either key order works: walk against the block then tap E, or hold the
+combination while approaching. A valid push
 moves the block one socket immediately and consumes Strong's movement for that
-tick. Release E and approach the next stance to push again. Jump Jumper onto
+tick. Release E after each successful push, then hold E and approach again. Jump Jumper onto
 the block, release jump and land, then jump north onto the ledge and plate A.
 Exchange the door-holding role at B as in room 1. Either moved socket permits
 the ledge jump; the initial socket is too far away. Strong cannot jump onto
 the block or reach A, and Jumper cannot push.
 
-Strong must stand on the floor within 100 mm of the point 1 m behind the block.
-Pushes require one effective north/south direction and a fresh E press, with
-no jump request. Both characters must be clear of the entire swept volume;
+Strong must stand on the floor within 250 mm laterally of the block centre
+and 650–1100 mm behind it in the push direction (650 mm is natural contact).
+Pushes require held E and one effective north/south direction, with no jump
+request. Failed requests retry while held, so approach needs no timing; success
+locks E until release/repress, preventing automatic repeated pushes. Both characters must be clear of the entire swept volume;
 characters supported by the block prevent moving it. Positive overlap blocks
 movement, while exact face contact is clear. Rejected pushes leave the block
 unchanged; ordinary movement/jumping still runs. Inspection's `block` reports

@@ -35,7 +35,7 @@ impl BlockState {
             Some("not_grounded")
         } else if count != 1 || dx != 0 || dz == 0 {
             Some("invalid_direction")
-        } else if (p.x - 5500).pow(2) + (p.z - (z - dz * 1000)).pow(2) > 100 * 100 {
+        } else if (p.x - 5500).abs() > 250 || !(650..=1100).contains(&((z - p.z) * dz)) {
             Some("invalid_stance")
         } else if (dz < 0 && self.socket == 2) || (dz > 0 && self.socket == 0) {
             Some("rail_end")
@@ -103,6 +103,37 @@ mod tests {
         ]
     }
     #[test]
+    fn forgiving_stance_has_explicit_contact_and_alignment_bounds() {
+        for (x, distance, accepted) in [
+            (5500, 650, true),
+            (5250, 650, true),
+            (5750, 1100, true),
+            (5500, 649, false),
+            (5500, 1101, false),
+            (5751, 650, false),
+            (5249, 1000, false),
+            (5500, -650, false),
+        ] {
+            for dz in [-1, 1] {
+                let mut block = BlockState {
+                    socket: 1,
+                    ..Default::default()
+                };
+                let mut b = bodies(4500 - dz * distance);
+                b[1].0.x = x;
+                assert_eq!(
+                    block.push(1, (0, dz, 1), false, b, &[]),
+                    accepted,
+                    "x={x} distance={distance} dz={dz}"
+                );
+                if !accepted {
+                    assert_eq!(block.last_rejection, Some("invalid_stance"));
+                    assert_eq!((block.socket, block.moves), (1, 0));
+                }
+            }
+        }
+    }
+    #[test]
     fn rejection_priority_and_atomicity() {
         let mut block = BlockState::default();
         let mut b = bodies(6500);
@@ -119,7 +150,7 @@ mod tests {
             assert!(!block.push(1, direction, false, b, &[]));
             assert_eq!(block.last_rejection, Some("invalid_direction"));
         }
-        b[1].0.x += 101;
+        b[1].0.x += 251;
         assert!(!block.push(1, (0, -1, 1), false, b, &[]));
         assert_eq!(block.last_rejection, Some("invalid_stance"));
         assert_eq!((block.socket, block.moves), (0, 0));
@@ -176,7 +207,7 @@ mod tests {
         let mut block = BlockState::default();
         let solids = super::super::room_solids(2);
         let mut b = bodies(6500);
-        b[1].0.x += 100; // Inclusive circular stance tolerance.
+        b[1].0.x += 250; // Inclusive lateral stance tolerance.
         assert!(block.push(1, (0, -1, 1), false, b, &solids));
         assert_eq!((block.socket, block.moves), (1, 1));
         assert!(block.push(1, (0, 1, 1), false, bodies(3500), &solids));

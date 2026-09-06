@@ -1266,3 +1266,37 @@ fn invalid_completion_origin_is_rejected_before_mutation_and_legacy_origin_defau
     assert!(replay(&mut a, r).is_err());
     assert_eq!(status(&a), before);
 }
+
+#[test]
+fn successful_push_accepts_between_tick_release_repress_edge() {
+    let mut a = app();
+    select_room(&mut a, 2).unwrap();
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Switch]);
+    fixture_set_character(
+        &mut a,
+        1,
+        Position {
+            x: 5500,
+            y: 0,
+            z: 6150,
+        },
+        0,
+        true,
+    );
+    tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    for _ in 0..30 {
+        tick_with(&mut a, &mut t, &[Action::Interact, Action::Up]);
+    }
+    assert_eq!(status(&a)["block"]["moves"], 1);
+    let fresh = RecordedButtons {
+        active: vec!["interact".into(), "up".into()],
+        pressed: vec!["interact".into()],
+        released: vec![],
+    }
+    .decode(&SCHEMA)
+    .unwrap();
+    a.world_mut().insert_resource(fresh);
+    a.advance_fixed(1);
+    assert_eq!(status(&a)["block"]["moves"], 2);
+}

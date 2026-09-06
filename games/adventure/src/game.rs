@@ -536,7 +536,7 @@ fn tick(world: &mut World) {
         - i32::from(session.consumed.is_active(&Action::Up));
     let target = session.active;
     let jump = session.consumed.just_pressed(&Action::Jump);
-    let push = session.consumed.just_pressed(&Action::Interact);
+    let push = session.consumed.is_active(&Action::Interact);
     let direction_count = usize::from(dx != 0) + usize::from(dz != 0);
     let room = session.room;
     session.recovery_message_ticks = session.recovery_message_ticks.saturating_sub(1);
@@ -570,6 +570,11 @@ fn tick(world: &mut World) {
         && session
             .block
             .push(target, (dx, dz, direction_count), jump, bodies, &solids);
+    if pushed {
+        // Retry a held request during approach, but require release/repress after
+        // success. Reuse the recorded input gate so reset/replay stay identical.
+        session.blocked.insert(Action::Interact);
+    }
     if room == 2 {
         solids.push(session.block.solid());
     }
