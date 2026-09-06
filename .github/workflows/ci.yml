@@ -47,7 +47,8 @@ jobs:
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
           rustup toolchain install
-          rustup show active-toolchain
+          # External copied games must use the same toolchain as this checkout.
+          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
           rustc --version
           cargo --version
           python3 --version
@@ -221,7 +222,8 @@ jobs:
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
           rustup toolchain install
-          rustup show active-toolchain
+          # External copied games must use the same toolchain as this checkout.
+          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
           rustc --version
           cargo --version
           python3 --version
@@ -341,7 +343,8 @@ jobs:
         run: |
           # rustup reads the channel, components and targets from rust-toolchain.toml.
           rustup toolchain install
-          rustup show active-toolchain
+          # External copied games must use the same toolchain as this checkout.
+          rustup default "$(rustup show active-toolchain | cut -d ' ' -f 1)"
           rustc --version
           cargo --version
           python3 --version
