@@ -31,7 +31,8 @@ class MeasurementTests(unittest.TestCase):
         run, jobs = self.fixture()
         jobs[0]['steps'] = [dict(name=name, conclusion='success',
                                  started_at='2026-09-06T10:00:10Z', completed_at='2026-09-06T10:00:15Z')
-                            for name in ('Restore build cache', 'Save build cache')]
+                            for name in ('Restore workload cache', 'Save workload cache',
+                                         'Verify generated asset cache across processes')]
         result = measurement.summarize(run, jobs, 'Native checks\tstep\tCache Size: ~1 MB (123 B)\n')
         row = result['jobs'][0]
         self.assertEqual(row['cache_restore_seconds'], 5)

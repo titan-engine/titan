@@ -28,13 +28,15 @@ def summarize(run, jobs, logs):
                  if (m := re.search(r'Cache Size:.*\((\d+) B\)', line))]
         # Actions reports this size on restoration. A missing value is unknown,
         # not zero. Save sizes can be read separately from the cache API.
-        cache_steps = [s for s in job['steps'] if 'cache' in s['name'].lower()
-                       and s.get('conclusion') != 'skipped'
+        # Match transfer actions, not acceptance tests that happen to test caches.
+        # Include the two pre-sharding action names for baseline comparisons.
+        legacy = {'Cache Cargo downloads and Rust builds', 'Cache matching wasm-bindgen CLI'}
+        timed_steps = [s for s in job['steps'] if s.get('conclusion') != 'skipped'
                        and s.get('started_at') and s.get('completed_at')]
-        save_steps = [s for s in cache_steps if 'save' in s['name'].lower()
-                      or s['name'].startswith('Post ')]
-        restore_steps = [s for s in cache_steps if s not in save_steps
-                         and 'identify' not in s['name'].lower()]
+        save_steps = [s for s in timed_steps if s['name'] == 'Save workload cache'
+                      or s['name'].removeprefix('Post ') in legacy and s['name'].startswith('Post ')]
+        restore_steps = [s for s in timed_steps if s['name'] == 'Restore workload cache'
+                         or s['name'] in legacy]
         rows.append({
             'name': job['name'], 'conclusion': job['conclusion'],
             'start_offset_seconds': seconds(start, job['started_at']),
