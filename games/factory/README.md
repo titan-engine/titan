@@ -103,7 +103,7 @@ After building and serving WASM, open
 the actual DOM controls and GPU player, diagnoses and repairs five route failure
 classes, and checks pause/step, repeats across reset, scrolled-canvas pointer
 mapping and completion. The dedicated fixture hook exists only with `?test=1`;
-it is absent from normal play. See [runtime evidence](evidence/README.md).
+it is absent from normal play. See [historical platform verification](#historical-platform-verification).
 
 For bounded native GPU acceptance, run `cargo run --bin play -- --test-construction`.
 It places three kinds through physical-to-logical pointer mapping, rotates,
@@ -307,7 +307,27 @@ fresh actual-browser checks.
 The native harness uses bounded build/runtime processes and retains sanitized
 failure diagnostics under the repository's `target/acceptance-failures`.
 Node executes real compiled WASM for simulation and protocol checks; it does not
-prove browser GPU rendering. Player verification is documented with its [runtime evidence](evidence/README.md). Existing RPG and arena reference images/checksums are unchanged.
+prove browser GPU rendering. See [historical platform verification](#historical-platform-verification)
+for the recorded environment and limitations. Existing RPG and arena reference
+images/checksums are unchanged.
 
 Fresh independent finished-slice playtesting, larger-fixture measurements and the
 disposable authoring variation are documented in the [#93 verification report](../../docs/evidence/factory-verification/README.md).
+
+## Historical platform verification
+
+The [original interface verification](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/factory/evidence/README.md#construction-interface-and-bottleneck-diagnosis)
+measured source `9bbac0b5ee750cd365221c5c40db9c153d191704` on 2026-09-06,
+macOS Apple Silicon. Adjacent JSON and inspected native/browser PNGs preserve actual presentation and manual wrong-facing/disconnected repairs.
+Native used Metal; the actual WASM browser player used its default supported GPU
+backend. This does not establish an independent WebGPU/WebGL2 matrix or portable
+pixel identity. Earlier construction, transport and production observations in
+that report describe their earlier increments, not fresh HEAD acceptance.
+
+Current player commands and browser acceptance pages above exercise construction,
+transport, production and interface repair. Keep new native reports, browser
+JSON and inspected screenshots together under ignored root
+`target/evidence/factory/` (create it before shell redirection), or outside the
+checkout; verify alternative destinations with `git check-ignore`. The maintained
+native repair verifier uses only the promoted checkpoint fixture documented
+above. Historical screenshots and full state logs are not runtime prerequisites.

@@ -11,10 +11,10 @@ are page/window titles, readable browser status and R restart.
 
 ## Diagnosed failed attempt
 
-[The retained response](../games/arena/evidence/failed-attempt.json) points to
-[the relocated bounded bundle](../games/arena/evidence/failed-run/bundle.json),
-with [API metadata](../games/arena/evidence/failed-run/api.txt) and
-[capture](../games/arena/evidence/failed-run/capture.png). The response's absolute
+[The retained response](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/arena/evidence/failed-attempt.json) points to
+[the relocated bounded bundle](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/arena/evidence/failed-run/bundle.json),
+with [API metadata](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/arena/evidence/failed-run/api.txt) and
+[capture](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/arena/evidence/failed-run/capture.png). The response's absolute
 ignored target path was changed to `failed-run/bundle.json` during archival;
 the diagnostic payload itself is unchanged. No discovery tokens were copied.
 

@@ -1,9 +1,0 @@
-Titan protocol schema 1
-component titan::ecs::builtin::Name
-component titan_game::game::Enemy
-component titan_game::game::Player
-component titan_game::game::Position
-  x: i32 [writable] (min=0, max=153, unit=pixel, Arena sprite pixel coordinate)
-  y: i32 [writable] (min=18, max=105, unit=pixel, Arena sprite pixel coordinate)
-command restart — Reset the scene and pending input; the host frame stays monotonic.
-command verify_survival — Check the completed run survived; failures retain diagnostic state.

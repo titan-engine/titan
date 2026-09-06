@@ -42,7 +42,7 @@ reviews retained evidence; it adds no new gameplay, GPU or human playtest claim.
 | [#83](https://github.com/titan-engine/titan/issues/83), [PR #112](https://github.com/titan-engine/titan/pull/112) | Grounded character plates, OR-controlled door with safe obstruction, both complete footprints at exit; 24 scenarios/1,646 states. Existing blocks do not press plates. New weight/latched devices must have separate rules, preserving old device behavior. |
 | [#84](https://github.com/titan-engine/titan/issues/84), [PR #115](https://github.com/titan-engine/titan/pull/115) | Strong-only atomic rail pushes, support/obstruction/rejection reasons; 27 scenarios/2,650 states. Both one-push and two-push solutions are valid. Do not force the suggested two-push route through an artificial socket condition. |
 | [#85](https://github.com/titan-engine/titan/issues/85), [PR #121](https://github.com/titan-engine/titan/pull/121) | Explicit Start/Continue/Play again, phase-aware replay and input/capture reset; six sequence scenarios/11,487 states. Preserve this short sequence while testing an optional third room. |
-| [#86](https://github.com/titan-engine/titan/issues/86), [PR #122](https://github.com/titan-engine/titan/pull/122) | [Finished evaluation](../games/adventure/evidence/playtest-86/README.md): three perturbed scenarios, 34 checkpoint recording replays, native Metal and actual browser WebGPU/WebGL2 evidence, unfamiliar plate variation. Findings below bound the next experiment. |
+| [#86](https://github.com/titan-engine/titan/issues/86), [PR #122](https://github.com/titan-engine/titan/pull/122) | [Finished evaluation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/README.md): three perturbed scenarios, 34 checkpoint recording replays, native Metal and actual browser WebGPU/WebGL2 evidence, unfamiliar plate variation. Findings below bound the next experiment. |
 | [#95](https://github.com/titan-engine/titan/issues/95), [PR #109](https://github.com/titan-engine/titan/pull/109) | [Iteration procedure](agent-iteration.md) and [historical skeleton notes](evidence/agent-iteration/adventure-notes.md) separate command phases from full authoring time. Skeleton measurements do not establish finished-puzzle iteration speed. |
 
 The #86 evaluation passed native Metal presentation (4,311 frames), 209 actual
@@ -62,7 +62,7 @@ the ledge, but completion remains possible and R restores it. Leaving B too earl
 is recoverable by returning to B. Missed jumps land safely. None of these is
 evidence that lives, mid-room checkpoints or a pull ability are required.
 
-The [unfamiliar variation](../games/adventure/evidence/playtest-86/variation-notes.md)
+The [unfamiliar variation](https://github.com/titan-engine/titan/blob/e4ff0dff2d02dfffa6bc085286798886a92e30e7/games/adventure/evidence/playtest-86/variation-notes.md)
 shifted room 1's B plate south 600 mm and completed an adapted 579-tick route,
 checked room 2 unchanged, rejected invalid recording without mutation, replayed
 selected final-state fields and cleaned up its owned host. Source search found
