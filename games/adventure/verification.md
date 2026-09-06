@@ -1,3 +1,66 @@
+# Cooperative room verification
+
+Issue #83 was exercised on 2026-09-06 on macOS / Apple M5 Pro. Room 1 now
+replaces the earlier movement practice layout. The wider two-room sequence and
+block manipulation remain future scope.
+
+![Both plates held across the doorway](evidence/puzzle-plate-b-native.png)
+
+The versioned `adventure-v3` recording contains 559 raw input frames and reaches
+latched completion without fixture mutation. Its segment route holds A with
+inactive Jumper, takes Strong through to B, transfers the hold to B, then brings
+both complete grounded footprints into the exit. A separate replay checks every
+recorded tick's complete state. The native and actual-WASM puzzle runner agrees
+exactly across 24 scenarios and 1,646 states. The 34 movement scenarios and
+1,363 matching states remain intact.
+
+Adversarial checks cover Strong's height gate, solo Jumper stopping at the
+full-height door after leaving A, inclusive plate center boundaries at the
+correct support height, grounded versus airborne and shared occupants,
+previous-tick door collision, grounded/airborne body obstruction, edge-only
+clearance, simultaneous grounded complete exit footprints, completion freezing,
+and full restart/recovery with queued and held input. Both characters' defensive
+fall cases reconstruct the entire room. Fixture mutation is available only in
+the acceptance build, never through player inspection.
+
+The native Metal player presented 1,729 GPU frames. WebGPU and WebGL2 each
+passed 111 checks in the actual browser. All three players execute the
+complete route on their played simulation, capture each cooperation checkpoint,
+replay to completion, verify the completion freeze, and restart. A separate
+normal-input route leaves an inactive character in the doorway while releasing
+the last plate, then clears the body. It verifies and captures
+`open_obstructed` followed by `closed`, complementing `open_plate` on the solution.
+
+![Browser completion with both exit indicators](evidence/puzzle-complete-webgpu.png)
+
+Captures were visually inspected: both character markers remain visible, both
+plates share the door's paired-stripe symbol, the open passage is clear, the
+closed gate is distinct from the partitions, and the HUD reports plate states,
+all three door reasons, both exit indicators and Room complete. Native OS resize
+and browser presentation at 960 × 540 and 1280 × 720 pass; capture size remains
+960 × 540. Direct GUI use additionally exercised Q switching, movement, pause
+and R reconstruction. The browser's focused canvas and visible restart controls
+use the same player state as inspection.
+
+Selected images and their capture identity, checksum and semantic state are
+retained in [puzzle evidence](evidence/puzzle-evidence.json). Full bounded local
+native/browser reports complement the committed samples. The repository's
+historical RPG/arena checksums and crisp README preview are unchanged.
+
+Package formatting, all-feature tests and Clippy, native CLI, actual-WASM control,
+browser key tests and the puzzle/movement runners passed. Workspace format,
+tests, Clippy, core WASM and no-default-feature checks passed, as did existing
+native/WASM RPG control, replay and asset loops. Required CI includes the new
+puzzle conformance runner and the extended actual native GPU test.
+
+Limits: this is a bounded prototype play/acceptance pass, not extended human
+usability feedback. Release/repress switching retains the approved initial
+policy and no movement values changed. The 4 m collision partitions and door
+use 1.2 m visual cutaways; `puzzle_geometry` exposes their actual bounds. GPU
+checksums establish consistency within a backend, not portable pixel identity.
+
+The historical evidence below describes the earlier layouts at their revisions.
+
 # Jumping and collision verification
 
 Issue #82 was exercised on 2026-09-06 on macOS / Apple M5 Pro. The practice
