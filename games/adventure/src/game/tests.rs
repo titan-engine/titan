@@ -13,6 +13,7 @@ fn pos(app: &App, name: &str) -> Position {
     let s = status(app);
     Position {
         x: s["characters"][name]["x"].as_i64().unwrap() as i32,
+        y: s["characters"][name]["y"].as_i64().unwrap() as i32,
         z: s["characters"][name]["z"].as_i64().unwrap() as i32,
     }
 }
@@ -27,7 +28,14 @@ fn switching_blocks_held_actions_until_release_and_accepts_fresh_actions() {
     assert_eq!(pos(&a, "strong"), initial_position(1));
     tick_with(&mut a, &mut t, &[Action::Right, Action::Switch, Action::Up]);
     assert_eq!(status(&a)["active_character"], "strong");
-    assert_eq!(pos(&a, "strong"), Position { x: 3500, z: 6440 });
+    assert_eq!(
+        pos(&a, "strong"),
+        Position {
+            x: 3500,
+            y: 0,
+            z: 6440
+        }
+    );
     tick_with(&mut a, &mut t, &[]);
     tick_with(&mut a, &mut t, &[Action::Right]);
     assert_eq!(pos(&a, "strong").x, 3560);
@@ -40,17 +48,45 @@ fn diagonal_cancelled_axes_and_bounds_are_exact() {
     let mut a = app();
     let mut t = InputTracker::default();
     tick_with(&mut a, &mut t, &[Action::Up, Action::Right]);
-    assert_eq!(pos(&a, "jumper"), Position { x: 1542, z: 6458 });
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 1542,
+            y: 0,
+            z: 6458
+        }
+    );
     tick_with(&mut a, &mut t, &[Action::Left, Action::Right]);
-    assert_eq!(pos(&a, "jumper"), Position { x: 1542, z: 6458 });
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 1542,
+            y: 0,
+            z: 6458
+        }
+    );
     for _ in 0..250 {
         tick_with(&mut a, &mut t, &[Action::Up, Action::Left]);
     }
-    assert_eq!(pos(&a, "jumper"), Position { x: 200, z: 200 });
-    for _ in 0..300 {
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 200,
+            y: 0,
+            z: 200
+        }
+    );
+    for _ in 0..400 {
         tick_with(&mut a, &mut t, &[Action::Down, Action::Right]);
     }
-    assert_eq!(pos(&a, "jumper"), Position { x: 11800, z: 7800 });
+    assert_eq!(
+        pos(&a, "jumper"),
+        Position {
+            x: 11800,
+            y: 0,
+            z: 7800
+        }
+    );
     assert_eq!(pos(&a, "strong"), initial_position(1));
 }
 #[test]
@@ -141,7 +177,7 @@ fn recording_is_bounded_and_restart_restores_a_fresh_origin() {
 fn scene_has_distinct_markers_fixed_camera_and_active_indicator() {
     let a = app();
     let scene = extract(a.world()).unwrap();
-    assert_eq!(scene.draws().len(), 12);
+    assert_eq!(scene.draws().len(), 16);
     assert_eq!(scene.camera().position(), Vec3::new(6.0, 14.0, 17.0));
     assert!((scene.camera().vertical_fov_radians() - 50.0f32.to_radians()).abs() < 0.00001);
     assert!(
@@ -188,7 +224,14 @@ fn fresh_press_unlocks_only_released_action_and_replays_exactly() {
     .unwrap();
     a.world_mut().insert_resource(input);
     a.advance_fixed(1);
-    assert_eq!(pos(&a, "strong"), Position { x: 3560, z: 6500 });
+    assert_eq!(
+        pos(&a, "strong"),
+        Position {
+            x: 3560,
+            y: 0,
+            z: 6500
+        }
+    );
     let before = status(&a);
     assert_eq!(
         before["blocked_actions"],
@@ -205,4 +248,344 @@ fn fresh_press_unlocks_only_released_action_and_replays_exactly() {
     ] {
         assert_eq!(before[key], after[key], "{key}");
     }
+}
+
+#[test]
+fn jumps_have_exact_distinct_apices_and_holding_never_repeats() {
+    for (index, expected) in [(0, 1530), (1, 450)] {
+        let mut a = app();
+        a.world_mut().resource_mut::<Session>().unwrap().active = index;
+        let mut t = InputTracker::default();
+        let mut apex = 0;
+        for _ in 0..90 {
+            tick_with(&mut a, &mut t, &[Action::Jump]);
+            apex = apex.max(pos(&a, character_name(index)).y);
+        }
+        assert_eq!(apex, expected);
+        assert_eq!(pos(&a, character_name(index)).y, 0);
+        tick_with(&mut a, &mut t, &[]);
+        tick_with(&mut a, &mut t, &[Action::Jump]);
+        assert!(pos(&a, character_name(index)).y > 0);
+    }
+}
+#[test]
+fn inactive_airborne_character_lands_without_horizontal_motion_or_held_jump_transfer() {
+    let mut a = app();
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Jump, Action::Right]);
+    let x = pos(&a, "jumper").x;
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Jump, Action::Right, Action::Switch],
+    );
+    for _ in 0..45 {
+        tick_with(&mut a, &mut t, &[Action::Jump, Action::Right]);
+    }
+    assert_eq!(pos(&a, "jumper"), Position { x, y: 0, z: 6500 });
+    assert_eq!(pos(&a, "strong"), initial_position(1));
+}
+#[test]
+fn jump_in_air_is_not_buffered_and_characters_do_not_support_each_other() {
+    let mut a = app();
+    let mut t = InputTracker::default();
+    fixture_set_character(&mut a, 1, initial_position(0), 0, true);
+    tick_with(&mut a, &mut t, &[Action::Jump]);
+    tick_with(&mut a, &mut t, &[]);
+    for _ in 0..60 {
+        tick_with(&mut a, &mut t, &[Action::Jump]);
+    }
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    assert_eq!(pos(&a, "strong"), initial_position(0));
+}
+#[test]
+fn defensive_fall_resets_both_and_clears_pending_and_gates_held_input() {
+    let mut a = build_recovery_fixture();
+    let mut t = InputTracker::default();
+    fixture_set_character(
+        &mut a,
+        0,
+        Position {
+            x: 1800,
+            y: 0,
+            z: 6500,
+        },
+        0,
+        true,
+    );
+    a.world_mut()
+        .resource_mut::<ScheduledInput>()
+        .unwrap()
+        .frames
+        .insert(100, vec![(Action::Right, ActionValue::PRESSED)]);
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Right, Action::Jump, Action::Switch],
+    );
+    let s = status(&a);
+    assert_eq!(s["session_generation"], 1);
+    assert_eq!(s["session_tick"], 0);
+    assert_eq!(s["recorded_ticks"], 0);
+    assert_eq!(s["pending_inputs"], 0);
+    assert_eq!(s["active_character"], "jumper");
+    assert_eq!(s["recovery_message_ticks"], 120);
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    assert_eq!(pos(&a, "strong"), initial_position(1));
+    tick_with(
+        &mut a,
+        &mut t,
+        &[Action::Right, Action::Jump, Action::Switch],
+    );
+    assert_eq!(pos(&a, "jumper"), initial_position(0));
+    tick_with(&mut a, &mut t, &[]);
+    tick_with(&mut a, &mut t, &[Action::Right, Action::Jump]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    assert_eq!(pos(&a, "jumper").y, 170);
+}
+#[test]
+fn ledges_block_walking_but_jumper_can_land_on_teaching_ledge() {
+    for (index, expected_y) in [(0, 1000), (1, 0)] {
+        let mut a = app();
+        let mut t = InputTracker::default();
+        fixture_set_character(
+            &mut a,
+            index,
+            Position {
+                x: 2000,
+                y: 0,
+                z: 3500,
+            },
+            0,
+            true,
+        );
+        a.world_mut().resource_mut::<Session>().unwrap().active = index;
+        for _ in 0..10 {
+            tick_with(&mut a, &mut t, &[Action::Up]);
+        }
+        assert_eq!(pos(&a, character_name(index)).z, 3200);
+        tick_with(&mut a, &mut t, &[Action::Up, Action::Jump]);
+        for _ in 0..20 {
+            tick_with(&mut a, &mut t, &[Action::Up]);
+        }
+        for _ in 0..30 {
+            tick_with(&mut a, &mut t, &[]);
+        }
+        assert_eq!(pos(&a, character_name(index)).y, expected_y);
+        assert!(
+            status(&a)["characters"][character_name(index)]["grounded"]
+                .as_bool()
+                .unwrap()
+        );
+    }
+}
+#[test]
+fn support_requires_positive_overlap_and_walkoff_gets_gravity_immediately() {
+    use movement::*;
+    for (x, expected) in [(3199, 1000), (3200, 990)] {
+        let mut p = Position {
+            x: 3100,
+            y: 1000,
+            z: 2000,
+        };
+        let mut m = Movement::default();
+        advance(&mut p, &mut m, x - 3100, 0, false, 180, &SOLIDS);
+        assert_eq!(p.y, expected);
+        assert_eq!(m.grounded, x == 3199);
+    }
+}
+#[test]
+fn swept_contacts_choose_nearest_ceiling_highest_support_and_slide_x_then_z() {
+    use movement::*;
+    let mut p = Position {
+        x: 2000,
+        y: 3000,
+        z: 2000,
+    };
+    let mut m = Movement {
+        velocity_y: -5000,
+        grounded: false,
+        support: None,
+        collisions: Default::default(),
+    };
+    advance(&mut p, &mut m, 0, 0, false, 180, &SOLIDS);
+    assert_eq!(p.y, 1000);
+    assert_eq!(m.support, Some("teaching-ledge"));
+    let mut p = Position {
+        x: 10000,
+        y: 0,
+        z: 5000,
+    };
+    let mut m = Movement::default();
+    advance(&mut p, &mut m, 0, 0, true, 3000, &SOLIDS);
+    assert_eq!(p.y, 400);
+    assert_eq!(m.velocity_y, 0);
+    assert_eq!(m.collisions.ceiling, Some("practice-ceiling"));
+    let mut p = Position {
+        x: 500,
+        y: 0,
+        z: 2000,
+    };
+    let mut m = Movement::default();
+    advance(&mut p, &mut m, 5000, 60, false, 180, &SOLIDS);
+    assert_eq!(p.x, 800);
+    assert_eq!(p.z, 2060);
+    assert_eq!(m.collisions.x, Some("teaching-ledge"));
+}
+
+#[test]
+fn fresh_jump_edge_between_ticks_is_preserved_after_landing() {
+    let mut a = app();
+    let mut t = InputTracker::default();
+    for _ in 0..45 {
+        tick_with(&mut a, &mut t, &[Action::Jump]);
+    }
+    assert_eq!(pos(&a, "jumper").y, 0);
+    let fresh = RecordedButtons {
+        active: vec!["jump".into()],
+        pressed: vec!["jump".into()],
+        released: vec![],
+    }
+    .decode(&SCHEMA)
+    .unwrap();
+    a.world_mut().insert_resource(fresh);
+    a.advance_fixed(1);
+    assert_eq!(pos(&a, "jumper").y, 170);
+    let before = status(&a);
+    let r = recording(&a).unwrap();
+    replay(&mut a, r).unwrap();
+    assert_eq!(status(&a)["characters"], before["characters"]);
+}
+#[test]
+fn post_recovery_recording_restores_held_gates_and_message_and_validates_before_reset() {
+    let mut a = build_recovery_fixture();
+    let mut t = InputTracker::default();
+    tick_with(&mut a, &mut t, &[Action::Right, Action::Jump]);
+    for _ in 0..5 {
+        tick_with(&mut a, &mut t, &[Action::Right, Action::Jump]);
+    }
+    let before = status(&a);
+    let r = recording(&a).unwrap();
+    replay(&mut a, r).unwrap();
+    for key in [
+        "characters",
+        "blocked_actions",
+        "recovery_message_ticks",
+        "session_tick",
+        "consumed_input",
+        "recorded_ticks",
+    ] {
+        assert_eq!(status(&a)[key], before[key], "{key}");
+    }
+    let mut r = recording(&a).unwrap();
+    r.origin.blocked_actions.push("invalid".into());
+    let before = status(&a);
+    assert!(replay(&mut a, r).is_err());
+    assert_eq!(status(&a), before);
+}
+
+fn inspect(app: &mut App, inspector: &mut Inspector, request: titan_protocol::Request) {
+    use titan_protocol::{RequestEnvelope, ResponseOutcome};
+    let response = inspector.handle(app, &RequestEnvelope::new("injected-regression", request));
+    assert!(
+        matches!(response.outcome, ResponseOutcome::Success { .. }),
+        "{response:?}"
+    );
+}
+fn injected(app: &mut App, inspector: &mut Inspector, actions: &[&str]) {
+    use titan_protocol::Request;
+    let frame = app.world().resource::<FixedTime>().unwrap().tick() + 1;
+    inspect(
+        app,
+        inspector,
+        Request::InjectInput {
+            frame,
+            actions: actions
+                .iter()
+                .map(|name| (name.to_string(), InputValue::Button(true)))
+                .collect(),
+        },
+    );
+    inspect(app, inspector, Request::Step { frames: 1 });
+}
+#[test]
+fn inspector_injected_holds_cannot_bypass_restart_or_recovery_release_gates() {
+    for boundary in ["key-restart", "command-restart", "fall"] {
+        let mut a = app();
+        let mut inspector =
+            configured_inspector(InspectionConfig::controlled("input-test", "adventure"));
+        if boundary == "key-restart" {
+            injected(
+                &mut a,
+                &mut inspector,
+                &["restart", "jump", "right", "switch"],
+            );
+        } else {
+            injected(&mut a, &mut inspector, &["jump", "right", "switch"]);
+            if boundary == "fall" {
+                fixture_set_character(
+                    &mut a,
+                    1,
+                    Position {
+                        x: 3500,
+                        y: -2000,
+                        z: 6500,
+                    },
+                    -10,
+                    false,
+                );
+                injected(&mut a, &mut inspector, &["jump", "right", "switch"]);
+            } else {
+                restart(&mut a);
+            }
+        }
+        let generation = status(&a)["session_generation"].clone();
+        // No sampled release: independent snapshots must still mean held.
+        let held = if boundary == "key-restart" {
+            vec!["restart", "jump", "right", "switch"]
+        } else {
+            vec!["jump", "right", "switch"]
+        };
+        for _ in 0..3 {
+            injected(&mut a, &mut inspector, &held);
+        }
+        assert_eq!(status(&a)["session_generation"], generation, "{boundary}");
+        assert_eq!(status(&a)["active_character"], "jumper", "{boundary}");
+        assert_eq!(pos(&a, "jumper"), initial_position(0), "{boundary}");
+        let expected = status(&a);
+        let r = recording(&a).unwrap();
+        replay(&mut a, r).unwrap();
+        for key in [
+            "characters",
+            "active_character",
+            "consumed_input",
+            "session_tick",
+        ] {
+            assert_eq!(status(&a)[key], expected[key], "{boundary}:{key}");
+        }
+        injected(&mut a, &mut inspector, &[]);
+        injected(&mut a, &mut inspector, &["jump", "right"]);
+        assert_eq!(pos(&a, "jumper").y, 170);
+        assert_eq!(pos(&a, "jumper").x, 1560);
+    }
+}
+
+#[test]
+fn clearing_pending_injection_preserves_release_gate_across_other_source_ticks() {
+    let mut a = app();
+    let mut inspector =
+        configured_inspector(InspectionConfig::controlled("clear-test", "adventure"));
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    // This is the input-source clear used by player pause/resume. An intervening
+    // keyboard/empty frame must not count as release by the injected source.
+    clear_scheduled_input(a.world_mut());
+    a.world_mut()
+        .insert_resource(InputFrame::<Action>::default());
+    a.advance_fixed(1);
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1560);
+    injected(&mut a, &mut inspector, &[]);
+    injected(&mut a, &mut inspector, &["right"]);
+    assert_eq!(pos(&a, "jumper").x, 1620);
 }

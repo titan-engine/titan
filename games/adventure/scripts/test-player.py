@@ -89,7 +89,7 @@ def main(failures):
         with log_path.open('w') as log:
             process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
-                                       '--run-for-ms', '30000'], project=GAME, instance=instance,
+                                       '--run-for-ms', '60000'], project=GAME, instance=instance,
                                       cwd=GAME, stdout=log, stderr=log)
             failures.record_process(process)
             try:
@@ -113,14 +113,16 @@ def main(failures):
                     call('input', frame, '--actions', json.dumps({action: {'kind': 'button', 'value': True} for action in sample['actions']}))
                 call('step', len(route))
                 expected = state()
-                assert expected['characters'] == route[-1]['characters'] and expected['active_character'] == route[-1]['active_character'], expected
+                assert expected['active_character'] == route[-1]['active_character'], expected
+                for name, position in route[-1]['characters'].items():
+                    assert all(expected['characters'][name][axis] == value for axis, value in position.items()), expected
                 win_capture = capture('moved')
                 assert win_capture['checksum'] != initial_capture['checksum']
                 recording = call('query', 'recording')['response']['value']
                 invoke('load_replay', {'recording': recording})
                 assert playback()['position'] == 0
                 call('step', 1)
-                assert state()['characters']['jumper'] == {'x': 1560, 'z': 6500}
+                assert all(state()['characters']['jumper'][axis] == value for axis, value in {'x': 1560, 'y': 0, 'z': 6500}.items())
                 invoke('resume')
                 deadline = time.monotonic() + 10
                 while not playback()['complete']:
@@ -145,6 +147,33 @@ def main(failures):
                 invoke('switch')
                 assert state()['active_character'] == 'strong'
                 assert capture('switched')['checksum'] != initial_capture['checksum']
+                invoke('restart')
+                def move(actions, ticks):
+                    frame = call('status')['response']['current_frame']
+                    for offset in range(1, ticks + 1):
+                        call('input', frame + offset, '--actions', json.dumps({a: {'kind': 'button', 'value': True} for a in actions}))
+                    call('step', ticks)
+                move(['up'], 50)
+                move(['up', 'jump'], 17)
+                assert state()['characters']['jumper']['y'] == 1530
+                capture('jump-apex')
+                move(['up', 'jump'], 5)
+                move([], 14)
+                assert state()['characters']['jumper']['y'] == 1000 and state()['characters']['jumper']['grounded']
+                capture('ledge-landed')
+                move(['down'], 30)
+                move([], 20)
+                assert state()['characters']['jumper']['y'] == 0 and state()['characters']['jumper']['grounded']
+                invoke('restart')
+                invoke('switch')
+                move(['left'], 25)
+                move(['up'], 50)
+                move(['up', 'jump'], 9)
+                assert state()['characters']['strong']['y'] == 450
+                capture('strong-apex')
+                move(['up', 'jump'], 31)
+                assert state()['characters']['strong']['y'] == 0 and state()['characters']['strong']['z'] == 3200
+                capture('strong-blocked')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)

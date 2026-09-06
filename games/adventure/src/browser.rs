@@ -6,6 +6,13 @@ use titan::{
 };
 use wasm_bindgen::prelude::*;
 
+/// Isolated deterministic fixtures, compiled only into the acceptance build.
+#[cfg(feature = "movement-acceptance")]
+#[wasm_bindgen]
+pub fn movement_acceptance() -> String {
+    crate::acceptance::run().to_string()
+}
+
 #[wasm_bindgen]
 pub struct BrowserRuntime {
     session: BrowserSession,

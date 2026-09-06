@@ -8,7 +8,13 @@ publish = false
 
 [features]
 default = []
+movement-acceptance = []
 player = ["dep:titan-render-wgpu", "dep:winit", "dep:pollster", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:js-sys"]
+
+[[bin]]
+name = "acceptance"
+path = "src/bin/acceptance.rs"
+required-features = ["movement-acceptance"]
 
 [[bin]]
 name = "play"

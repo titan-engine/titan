@@ -1,4 +1,4 @@
-const gameplay = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyR']);
+const gameplay = new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyR','Space']);
 /** Physical codes preserve aliases; blur/focus cancellation discards buffered taps. */
 export function bindKeys({canvas,key,clear,pause=()=>{},shortcut,window=globalThis.window,document=globalThis.document}) {
   const held = new Set();
@@ -6,7 +6,7 @@ export function bindKeys({canvas,key,clear,pause=()=>{},shortcut,window=globalTh
   window.addEventListener('keydown', event => {
     if (event.target !== canvas) return;
     if (!event.repeat && shortcut(event.code)) { event.preventDefault(); return; }
-    if (['Space','KeyE'].includes(event.code)) { event.preventDefault(); return; }
+    if (event.code === 'KeyE') { event.preventDefault(); return; }
     if (!gameplay.has(event.code)) return;
     event.preventDefault(); held.add(event.code); key(event.code,true,event.repeat);
   });

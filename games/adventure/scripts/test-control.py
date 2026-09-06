@@ -88,7 +88,7 @@ def main(failures, log):
             entity = next(entity for entity in entities if entity['name'] == character)
             detail = call('entity', entity['id']['index'], entity['id']['generation'])['response']
             key = next(key for key in detail['components'] if key.endswith('::Position'))
-            assert detail['components'][key] == initial['characters'][character]
+            assert all(detail['components'][key][axis] == initial['characters'][character][axis] for axis in ('x', 'y', 'z'))
             assert all(not detail['component_fields'][key][axis]['writable'] for axis in ('x', 'z'))
         route = json.loads((GAME / 'tests/control-route.json').read_text())
         for sample in route:
@@ -96,8 +96,10 @@ def main(failures, log):
             call('input', frame, '--actions', json.dumps({a: {'kind': 'button', 'value': True} for a in sample['actions']}))
             call('step', 1)
             current = state()
-            for key in ('characters', 'active_character'):
-                assert current[key] == sample[key], (key, current, sample)
+            assert current['active_character'] == sample['active_character'], (current, sample)
+            for name, position in sample['characters'].items():
+                assert all(current['characters'][name][axis] == value for axis, value in position.items()), (current, sample)
+                assert current['characters'][name]['y'] == 0, current
             trace.append(current)
         recording = call('query', 'recording')['response']['value']
         expected = state()
@@ -116,6 +118,33 @@ def main(failures, log):
         assert state()['active_character'] == 'jumper'
         invoke('switch')
         assert state()['active_character'] == 'strong'
+        # Inject one complete snapshot at a time: reconstruction must not
+        # manufacture edges when the next host frame continues the same hold.
+        def sample(actions):
+            frame = call('status')['response']['current_frame'] + 1
+            call('input', frame, '--actions', json.dumps({a: {'kind': 'button', 'value': True} for a in actions}))
+            call('step', 1)
+            return state()
+        for held in ('restart', 'jump', 'switch'):
+            invoke('restart')
+            sample([])
+            first = sample(list(dict.fromkeys(['restart', held])))
+            continuing = sample([held])
+            assert continuing['session_generation'] == first['session_generation'], (held, continuing)
+            assert continuing['active_character'] == 'jumper' and continuing['characters']['jumper']['y'] == 0, (held, continuing)
+            sample([])
+            fresh = sample([held])
+            if held == 'restart':
+                assert fresh['session_generation'] == first['session_generation'] + 1
+            elif held == 'jump':
+                assert fresh['characters']['jumper']['y'] == 170
+            else:
+                assert fresh['active_character'] == 'strong'
+            recording = call('query', 'recording')['response']['value']
+            expected_after_boundary = state()
+            invoke('replay', {'recording': recording})
+            for key in ('characters', 'active_character', 'consumed_input', 'session_tick'):
+                assert state()[key] == expected_after_boundary[key], (held, key)
         call('capture', error='unsupported')
     finally:
         try:

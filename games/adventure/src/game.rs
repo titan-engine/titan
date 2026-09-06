@@ -15,11 +15,13 @@ use titan_protocol::{
 pub const MAX_RECORDING_TICKS: usize = 4096;
 pub const AXIAL_STEP: i32 = 60;
 pub const DIAGONAL_STEP: i32 = 42;
-pub const FIXTURE: &str = "adventure-v1";
-const PLAYER_HALF: i32 = 200;
+pub const FIXTURE: &str = "adventure-v2";
+pub mod movement;
+use movement::{Movement, SOLIDS};
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Position {
     pub x: i32,
+    pub y: i32,
     pub z: i32,
 }
 #[derive(Component)]
@@ -43,20 +45,24 @@ pub enum Action {
     Right,
     Switch,
     Restart,
+    Jump,
 }
-pub(crate) const SCHEMA: [(Action, &str); 6] = [
+pub(crate) const SCHEMA: [(Action, &str); 7] = [
     (Action::Up, "up"),
     (Action::Down, "down"),
     (Action::Left, "left"),
     (Action::Right, "right"),
     (Action::Switch, "switch"),
     (Action::Restart, "restart"),
+    (Action::Jump, "jump"),
 ];
 #[derive(Default)]
 struct ScheduledInput {
     enabled: bool,
     frames: BTreeMap<u64, Vec<(Action, ActionValue)>>,
     tracker: InputTracker<Action>,
+    held: BTreeSet<Action>,
+    blocked: BTreeSet<Action>,
 }
 struct PendingSwitch;
 struct Session {
@@ -65,6 +71,8 @@ struct Session {
     recording: InputRecording<Action>,
     truncated: bool,
     active: usize,
+    recovery_message_ticks: u32,
+    origin: RecordingOrigin,
     blocked: BTreeSet<Action>,
     consumed: InputFrame<Action>,
     effective_tracker: InputTracker<Action>,
@@ -77,6 +85,8 @@ impl Session {
             recording: InputRecording::new(RecordingHeader::new(16_666_667, 81, 0x81)),
             truncated: false,
             active: 0,
+            recovery_message_ticks: 0,
+            origin: RecordingOrigin::default(),
             blocked: BTreeSet::new(),
             consumed: InputFrame::default(),
             effective_tracker: InputTracker::default(),
@@ -86,9 +96,17 @@ impl Session {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Empty {}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordingOrigin {
+    pub blocked_actions: Vec<String>,
+    pub recovery_message_ticks: u32,
+}
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Recording {
+    #[serde(default)]
+    pub origin: RecordingOrigin,
     pub format_version: u32,
     pub fixture: String,
     pub frames: Vec<RecordedButtons>,
@@ -102,6 +120,7 @@ struct ReplayArgs {
 fn initial_position(index: usize) -> Position {
     Position {
         x: if index == 0 { 1500 } else { 3500 },
+        y: 0,
         z: 6500,
     }
 }
@@ -166,7 +185,11 @@ fn setup(world: &mut World) {
     world.insert_resource(Lighting3d::new(Vec3::new(-1.0, 3.0, 2.0), 0.3, 0.7).unwrap());
     world.spawn_with((
         Name::new("floor"),
-        Position { x: 6000, z: 4000 },
+        Position {
+            x: 6000,
+            y: 0,
+            z: 4000,
+        },
         Visual {
             mesh: floor,
             scale: Vec3::new(12.0, 1.0, 8.0),
@@ -174,19 +197,32 @@ fn setup(world: &mut World) {
             color: BaseColor::rgb(50, 68, 85),
         },
     ));
-    for (name, x, z, sx, sz) in [
-        ("wall-west", -100, 4000, 0.2, 8.4),
-        ("wall-east", 12100, 4000, 0.2, 8.4),
-        ("wall-north", 6000, -100, 12.0, 0.2),
-    ] {
+    for solid in &SOLIDS[1..] {
+        if solid.name == "wall-south" {
+            continue;
+        }
+        let wall = solid.name.starts_with("wall-");
+        let height = if wall { 300 } else { solid.max.y - solid.min.y };
         world.spawn_with((
-            Name::new(name),
-            Position { x, z },
+            Name::new(solid.name),
+            Position {
+                x: (solid.min.x + solid.max.x) / 2,
+                y: solid.min.y,
+                z: (solid.min.z + solid.max.z) / 2,
+            },
             Visual {
                 mesh: cube,
-                scale: Vec3::new(sx, 0.3, sz),
-                height: 0.15,
-                color: BaseColor::rgb(85, 105, 130),
+                scale: Vec3::new(
+                    (solid.max.x - solid.min.x) as f32 / 1000.0,
+                    height as f32 / 1000.0,
+                    (solid.max.z - solid.min.z) as f32 / 1000.0,
+                ),
+                height: height as f32 / 2000.0,
+                color: if wall {
+                    BaseColor::rgb(85, 105, 130)
+                } else {
+                    BaseColor::rgb(110, 130, 150)
+                },
             },
         ));
     }
@@ -195,14 +231,15 @@ fn setup(world: &mut World) {
             Name::new(character_name(index)),
             Character { index },
             initial_position(index),
+            Movement::default(),
             Visual {
                 mesh: cube,
-                scale: if index == 0 {
-                    Vec3::new(0.35, 0.95, 0.35)
-                } else {
-                    Vec3::new(0.65, 0.65, 0.65)
-                },
-                height: if index == 0 { 0.475 } else { 0.325 },
+                scale: Vec3::new(
+                    if index == 0 { 0.35 } else { 0.4 },
+                    0.9,
+                    if index == 0 { 0.35 } else { 0.4 },
+                ),
+                height: 0.45,
                 color: if index == 0 {
                     BaseColor::rgb(65, 215, 235)
                 } else {
@@ -212,6 +249,7 @@ fn setup(world: &mut World) {
         ));
     }
     world.insert_resource(Markers { cube, triangle });
+    sync_hud(world);
 }
 struct Markers {
     cube: MeshHandle,
@@ -224,6 +262,7 @@ fn reset_world(world: &mut World) {
         .collect();
     for (id, index) in ids {
         *world.get_mut::<Position>(id).unwrap() = initial_position(index);
+        *world.get_mut::<Movement>(id).unwrap() = Movement::default();
     }
     let generation = world
         .resource::<Session>()
@@ -244,18 +283,31 @@ pub fn restart(app: &mut App) {
     app.refresh_extracted();
 }
 pub(crate) fn clear_scheduled_input(world: &mut World) {
-    world.insert_resource(ScheduledInput::default());
+    let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
+    scheduled.frames.clear();
+    scheduled.enabled = false;
+    // Clearing pending work is not a physical release. Keep source-local gates
+    // across resets and pauses, including ticks supplied by another input source.
+    scheduled.blocked.extend(scheduled.held.iter().copied());
 }
 fn tick(world: &mut World) {
     crate::player::prepare_tick(world);
     let next = world.resource::<FixedTime>().unwrap().tick() + 1;
     let scheduled = world.resource_mut::<ScheduledInput>().unwrap();
     let frame = if scheduled.enabled {
-        Some(
-            scheduled
-                .tracker
-                .sample(scheduled.frames.remove(&next).unwrap_or_default()),
-        )
+        let values = scheduled.frames.remove(&next).unwrap_or_default();
+        let raw = scheduled.tracker.sample(values);
+        scheduled.held = raw.active_actions().map(|(a, _)| *a).collect();
+        scheduled.blocked.retain(|a| scheduled.held.contains(a));
+        let mut buttons = RecordedButtons::capture(&raw, &SCHEMA).unwrap();
+        for (action, name) in SCHEMA {
+            if scheduled.blocked.contains(&action) {
+                buttons.active.retain(|v| v != name);
+                buttons.pressed.retain(|v| v != name);
+                buttons.released.retain(|v| v != name);
+            }
+        }
+        Some(buttons.decode(&SCHEMA).unwrap())
     } else {
         None
     };
@@ -279,6 +331,12 @@ fn tick(world: &mut World) {
     let switch = input.just_pressed(&Action::Switch);
     if reset {
         reset_world(world);
+        let session = world.resource_mut::<Session>().unwrap();
+        session.blocked.extend(active);
+        // Preserve the reset edge in the canonical-origin recording for replay gating.
+        session.recording.push(input);
+        sync_hud(world);
+        return;
     }
     let session = world.resource_mut::<Session>().unwrap();
     // A fresh press also proves release/repress between fixed ticks. Preserve
@@ -286,10 +344,8 @@ fn tick(world: &mut World) {
     session
         .blocked
         .retain(|a| active.contains(a) && !input.just_pressed(a));
-    if reset || switch {
-        if !reset {
-            session.active = 1 - session.active;
-        }
+    if switch {
+        session.active = 1 - session.active;
         session.blocked.extend(active.iter().copied());
     }
     let effective: Vec<_> = active
@@ -298,11 +354,25 @@ fn tick(world: &mut World) {
         .map(|a| (*a, ActionValue::PRESSED))
         .collect();
     session.consumed = session.effective_tracker.sample(effective);
+    // Physical release/repress can occur between fixed ticks. Keep its genuine
+    // press edge even when the previous effective snapshot was already held.
+    let mut consumed = RecordedButtons::capture(&session.consumed, &SCHEMA).unwrap();
+    for (action, name) in SCHEMA {
+        if input.just_pressed(&action)
+            && session.consumed.is_active(&action)
+            && !consumed.pressed.iter().any(|v| v == name)
+        {
+            consumed.pressed.push(name.into());
+        }
+    }
+    session.consumed = consumed.decode(&SCHEMA).unwrap();
     let dx = i32::from(session.consumed.is_active(&Action::Right))
         - i32::from(session.consumed.is_active(&Action::Left));
     let dz = i32::from(session.consumed.is_active(&Action::Down))
         - i32::from(session.consumed.is_active(&Action::Up));
     let target = session.active;
+    let jump = session.consumed.just_pressed(&Action::Jump);
+    session.recovery_message_ticks = session.recovery_message_ticks.saturating_sub(1);
     session.tick += 1;
     if session.recording.len() < MAX_RECORDING_TICKS {
         session.recording.push(input);
@@ -314,23 +384,64 @@ fn tick(world: &mut World) {
     } else {
         AXIAL_STEP
     };
-    let id = world
+    let mut ids: Vec<_> = world
         .iter::<Character>()
-        .find(|(_, c)| c.index == target)
-        .unwrap()
-        .0;
-    let position = world.get_mut::<Position>(id).unwrap();
-    position.x = (position.x + dx * step).clamp(PLAYER_HALF, 12000 - PLAYER_HALF);
-    position.z = (position.z + dz * step).clamp(PLAYER_HALF, 8000 - PLAYER_HALF);
+        .map(|(id, c)| (c.index, id))
+        .collect();
+    ids.sort_by_key(|(index, _)| *index);
+    for (index, id) in ids {
+        let mut p = *world.get::<Position>(id).unwrap();
+        let mut m = *world.get::<Movement>(id).unwrap();
+        let controlled = index == target;
+        movement::advance(
+            &mut p,
+            &mut m,
+            if controlled { dx * step } else { 0 },
+            if controlled { dz * step } else { 0 },
+            controlled && jump,
+            if index == 0 { 180 } else { 100 },
+            &SOLIDS,
+        );
+        *world.get_mut::<Position>(id).unwrap() = p;
+        *world.get_mut::<Movement>(id).unwrap() = m;
+    }
+    if world
+        .iter::<Character>()
+        .any(|(id, _)| world.get::<Position>(id).unwrap().y < -2000)
+    {
+        reset_world(world);
+        let session = world.resource_mut::<Session>().unwrap();
+        session.blocked.extend(active);
+        session.recovery_message_ticks = 120;
+        session.origin = RecordingOrigin {
+            blocked_actions: session
+                .blocked
+                .iter()
+                .map(|a| {
+                    SCHEMA
+                        .iter()
+                        .find(|(known, _)| known == a)
+                        .unwrap()
+                        .1
+                        .into()
+                })
+                .collect(),
+            recovery_message_ticks: 120,
+        };
+    }
     sync_hud(world);
 }
 fn sync_hud(world: &mut World) {
     let active = world.resource::<Session>().unwrap().active;
     let id = world.iter::<Hud>().next().unwrap().0;
     world.get_mut::<UiText>(id).unwrap().text = format!(
-        "ACTIVE: {}  [Q] SWITCH  [R] RESTART",
+        "ACTIVE: {} [SPACE] JUMP [Q] SWITCH [R] RESET",
         character_name(active).to_uppercase()
     );
+    if world.resource::<Session>().unwrap().recovery_message_ticks > 0 {
+        world.get_mut::<UiText>(id).unwrap().text =
+            "FELL - ROOM RESET  [SPACE] JUMP  [Q] SWITCH".into();
+    }
 }
 pub fn extract_overlay(world: &World) -> RenderFrame {
     let mut frame = RenderFrame::new(320, 180, Color::rgba(0, 0, 0, 0));
@@ -348,7 +459,7 @@ pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
         draws.push(Draw3d {
             mesh: visual.mesh,
             transform: Transform3d::new(
-                Vec3::new(x, visual.height, z),
+                Vec3::new(x, p.y as f32 / 1000.0 + visual.height, z),
                 Quaternion::IDENTITY,
                 visual.scale,
             )
@@ -364,7 +475,7 @@ pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
                     markers.cube
                 },
                 transform: Transform3d::new(
-                    Vec3::new(x, 1.15, z),
+                    Vec3::new(x, p.y as f32 / 1000.0 + 1.05, z),
                     Quaternion::IDENTITY,
                     if character.index == 0 {
                         Vec3::ONE
@@ -389,7 +500,7 @@ pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
                     draws.push(Draw3d {
                         mesh: markers.cube,
                         transform: Transform3d::new(
-                            Vec3::new(x + ox, 0.045, z + oz),
+                            Vec3::new(x + ox, p.y as f32 / 1000.0 + 0.045, z + oz),
                             Quaternion::IDENTITY,
                             Vec3::new(sx, 0.04, sz),
                         )
@@ -418,6 +529,7 @@ fn invalid(message: &str) -> ProtocolError {
 pub fn recording(app: &App) -> Result<Recording, ProtocolError> {
     let s = app.world().resource::<Session>().unwrap();
     Ok(Recording {
+        origin: s.origin.clone(),
         format_version: 1,
         fixture: FIXTURE.into(),
         frames: s
@@ -445,7 +557,9 @@ pub fn replay(app: &mut App, recording: Recording) -> Result<(), ProtocolError> 
                 .map_err(|_| invalid("invalid recorded buttons"))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    validate_origin(&recording.origin)?;
     restart(app);
+    apply_origin(app, &recording.origin);
     for frame in frames {
         app.world_mut().insert_resource(frame);
         app.advance_fixed(1);
@@ -459,9 +573,13 @@ pub fn status(app: &App) -> serde_json::Value {
     let s = world.resource::<Session>().unwrap();
     let characters: BTreeMap<_, _> = world
         .iter::<Character>()
-        .map(|(id, c)| (character_name(c.index), *world.get::<Position>(id).unwrap()))
+        .map(|(id, c)| {
+            let p = world.get::<Position>(id).unwrap();
+            let m = world.get::<Movement>(id).unwrap();
+            (character_name(c.index), serde_json::json!({"x":p.x,"y":p.y,"z":p.z,"velocity_y":m.velocity_y,"grounded":m.grounded,"support":m.support,"collisions":m.collisions}))
+        })
         .collect();
-    serde_json::json!({"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
+    serde_json::json!({"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
 }
 fn field(type_name: &str, description: &str) -> FieldMetadata {
     FieldMetadata {
@@ -488,6 +606,13 @@ pub fn configured_inspector(config: InspectionConfig) -> Inspector {
             "z",
             field("i32", "Z coordinate in millimeters"),
             |p| p.z,
+        )
+        .unwrap();
+    inspector
+        .register_read_only_field::<Position, _>(
+            "y",
+            field("i32", "Foot height in millimeters"),
+            |p| p.y,
         )
         .unwrap();
     inspector
@@ -578,3 +703,77 @@ pub fn configured_inspector(config: InspectionConfig) -> Inspector {
 }
 #[cfg(test)]
 mod tests;
+
+/// Controlled invalid-origin fixture for cross-target defensive recovery acceptance.
+/// It is not exposed as a player command or mutable inspection field.
+#[cfg(any(test, feature = "movement-acceptance"))]
+pub fn build_recovery_fixture() -> App {
+    let mut app = build_game();
+    app.update_schedule(Startup);
+    let id = app
+        .world()
+        .iter::<Character>()
+        .find(|(_, c)| c.index == 1)
+        .unwrap()
+        .0;
+    app.world_mut().get_mut::<Position>(id).unwrap().y = -2000;
+    *app.world_mut().get_mut::<Movement>(id).unwrap() = Movement {
+        velocity_y: -10,
+        grounded: false,
+        support: None,
+        collisions: Default::default(),
+    };
+    app
+}
+
+#[cfg(any(test, feature = "movement-acceptance"))]
+pub(crate) fn fixture_set_character(
+    app: &mut App,
+    index: usize,
+    position: Position,
+    velocity_y: i32,
+    grounded: bool,
+) {
+    app.update_schedule(Startup);
+    let id = app
+        .world()
+        .iter::<Character>()
+        .find(|(_, c)| c.index == index)
+        .unwrap()
+        .0;
+    *app.world_mut().get_mut::<Position>(id).unwrap() = position;
+    *app.world_mut().get_mut::<Movement>(id).unwrap() = Movement {
+        velocity_y,
+        grounded,
+        support: None,
+        collisions: Default::default(),
+    };
+}
+
+pub(crate) fn validate_origin(origin: &RecordingOrigin) -> Result<(), ProtocolError> {
+    if origin.recovery_message_ticks != 0 && origin.recovery_message_ticks != 120 {
+        return Err(invalid("invalid recovery recording origin"));
+    }
+    let names: BTreeSet<_> = origin.blocked_actions.iter().collect();
+    if names.len() != origin.blocked_actions.len()
+        || names
+            .iter()
+            .any(|name| !SCHEMA.iter().any(|(_, known)| name.as_str() == *known))
+        || (origin.recovery_message_ticks == 0 && !names.is_empty())
+    {
+        return Err(invalid("invalid blocked actions in recording origin"));
+    }
+    Ok(())
+}
+pub(crate) fn apply_origin(app: &mut App, origin: &RecordingOrigin) {
+    let session = app.world_mut().resource_mut::<Session>().unwrap();
+    session.blocked = origin
+        .blocked_actions
+        .iter()
+        .map(|name| SCHEMA.iter().find(|(_, known)| name == known).unwrap().0)
+        .collect();
+    session.recovery_message_ticks = origin.recovery_message_ticks;
+    session.origin = origin.clone();
+    sync_hud(app.world_mut());
+    app.refresh_extracted();
+}
