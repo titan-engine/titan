@@ -1,0 +1,38 @@
+{
+  "initial_attempt": {
+    "revision": "e4800939606889669e8a9b04650cda4bce6df37d",
+    "runtime_timeout_seconds": 60,
+    "completed_fixtures": [
+      "reference_active",
+      "long_active",
+      "dense_active"
+    ],
+    "failed_fixture": "dense_stalled",
+    "error": "acceptance runtime phase exceeded 59.9998s wall-clock limit",
+    "semantic_failure_observed": false,
+    "partial_sample_data_retained": false,
+    "cleanup": "Acceptance process helper terminated owned child; TemporaryDirectory removed source and target. No runtime server/discovery registration existed."
+  },
+  "correction": "Keep the same fixtures and assertions; explicitly bound each three-repeat subprocess at 180 seconds, record completed fixtures incrementally and persist caught failure details. Rerun all workloads from a fresh private target. No game code changed. The initial report was only written at the end, so earlier passing sample timing/state was lost; retained evidence is the full rerun.",
+  "second_attempt": {
+    "runtime_timeout_seconds": 180,
+    "completed_fixtures": [
+      "reference_active",
+      "long_active",
+      "dense_active"
+    ],
+    "failed_fixture": "dense_stalled",
+    "error": "acceptance runtime phase exceeded 180s wall-clock limit",
+    "semantic_failure_observed": false,
+    "partial_sample_data_retained": true,
+    "cleanup": "Owned child terminated by acceptance helper; disposable archive and target removed."
+  },
+  "final_correction": "Increase aggregate hang bound to 300 seconds; use --resume to retain already measured active samples and rebuild the same pinned game/probe in a new private target for the dense stalled fixture only. No fixture or gameplay assertion changed.",
+  "final_attempt": {
+    "runtime_timeout_seconds": 300,
+    "fixture": "dense_stalled",
+    "subprocess_seconds": 273.9984455,
+    "result": "All three repeats completed; all conservation, full-state determinism and stable-stall assertions passed.",
+    "cleanup": "All probes exited normally; no server/discovery registration/window created; disposable archive and target removed on context exit."
+  }
+}

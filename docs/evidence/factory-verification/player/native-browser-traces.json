@@ -1,0 +1,22 @@
+{
+  "revision": "e4800939606889669e8a9b04650cda4bce6df37d",
+  "operation_boundaries": 3767,
+  "checkpoints": [
+    "ore-at-delivery",
+    "processor-repair",
+    "processor-removed",
+    "repaired-complete",
+    "reset",
+    "wrong-facing",
+    "facing-repaired-complete"
+  ],
+  "all_native_browser_semantic_states_equal": true,
+  "conservation_each_boundary": true,
+  "excluded_host_ui_fields": [
+    "frame",
+    "hover",
+    "preview",
+    "inspected",
+    "selection"
+  ]
+}

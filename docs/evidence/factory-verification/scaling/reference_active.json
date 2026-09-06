@@ -1,0 +1,72 @@
+{
+  "name": "reference_active",
+  "operations": [
+    {
+      "op": "place",
+      "x": 1,
+      "y": 3,
+      "facing": "E",
+      "kind": "extractor"
+    },
+    {
+      "op": "place",
+      "x": 2,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 3,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 4,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 5,
+      "y": 3,
+      "facing": "E",
+      "kind": "processor"
+    },
+    {
+      "op": "place",
+      "x": 6,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 7,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 8,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "place",
+      "x": 9,
+      "y": 3,
+      "facing": "E",
+      "kind": "conveyor"
+    },
+    {
+      "op": "advance",
+      "ticks": 600
+    }
+  ]
+}
