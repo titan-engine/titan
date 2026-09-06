@@ -1,8 +1,8 @@
 # First-slice design
 
 Status: selected rules for [issue #80](https://github.com/titan-engine/titan/issues/80),
-subject to maintainer PR review. This document specifies intended behavior;
-no adventure runtime or playtest result is claimed. The bounded outcome is one
+implemented as the bounded sequence in [#85](https://github.com/titan-engine/titan/issues/85).
+See [verification](verification.md) for runtime evidence and its limitations. The bounded outcome is one
 player, two freely switchable characters and two cooperative rooms. Names
 **Jumper** and **Strong** are functional labels, not a narrative commitment.
 
@@ -35,6 +35,7 @@ suppression policy below need hands-on validation for unnecessary friction.
 | Jump | Space | Press edge, grounded only; no auto-repeat, double jump or buffered landing jump. |
 | Switch | Q | One press immediately selects the other character, even in midair or during a block move. |
 | Push | E plus a cardinal direction | Strong only; one adjacent rail step per E press. |
+| Start / Continue / Play again | Enter or the visible game button | Explicit action only; starts the selected next room with Jumper. |
 | Restart room | R | Restore the current room immediately, including from completion UI. |
 | Pause/resume | P or visible host button | Freeze game ticks; no gameplay input accumulates while paused. |
 
