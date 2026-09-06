@@ -27,6 +27,26 @@ see [live-player inspection](browser.md#inspecting-the-actual-arena-player) and
 [asynchronous capture](inspection.md#asynchronous-capture-contract). Consult each
 game README for its actual player, restart, input and capture semantics.
 
+## Standalone starter boundary
+
+The minimal starter is an independent Cargo workspace with explicit package
+metadata and a replaceable `src/game.rs`. Its host adapters remain visible and
+editable in the copied package while they compose the shared APIs above. It does
+not import the RPG fixture or its support files.
+
+Game rules stay out of shared host tooling. For example, the RPG's interactive
+input emits tile-movement pulses every six ticks, while the starter samples its
+own continuous movement into complete future-frame input snapshots. Commands,
+validated fields, scene construction, replay policy and useful diagnostic state
+are likewise owned by each game.
+
+The starter's standalone `[workspace]` prevents accidental inheritance from the
+Titan workspace. A copied game configures its own Titan dependency and owns its
+own lockfile and target directory. `scripts/test-starter.py` copies the package
+to a temporary directory outside the checkout so repository-relative imports or
+paths cannot pass unnoticed. See the [starter guide](../starters/minimal/README.md#package-layout)
+for its file ownership and copy workflow.
+
 ## Build tooling
 
 `scripts/titan_build.py` is a public Python 3 helper shipped with the Titan

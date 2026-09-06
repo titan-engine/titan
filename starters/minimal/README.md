@@ -79,6 +79,13 @@ The package/library name is `titan-game` / `titan_game`; changing it also requir
 updating native imports. Browser builds derive the library artifact from Cargo
 metadata and emit stable `titan_game` JavaScript bindings.
 
+The copied host adapters compose public Titan APIs but remain part of this game;
+they do not depend on the RPG fixture or its support files. Shared surface,
+inspection, diagnostics and build helpers do not own the game's lifecycle,
+input rules, commands, scene or replay policy. The checkout's
+[`docs/host-tooling.md`](../../docs/host-tooling.md#standalone-starter-boundary)
+records that boundary in the canonical host guide.
+
 ## Controlled native run
 
 Build the CLI once in the Titan checkout, then launch a bounded paused runtime:

@@ -63,5 +63,6 @@ own pending work and its status. Historical observations describe only the revis
 
 - [Agent iteration procedure](agent-iteration.md) — bounded tasks and honest timing.
 - [Inspection failure regression cases](inspection-repair/README.md).
-- [Public API boundaries](starter-audit.md) and [historical ECS boundary conclusions](subsystem-audit/README.md).
+- [Shared host and standalone starter boundaries](host-tooling.md#host-boundaries)
+  and [historical ECS boundary conclusions](subsystem-audit/README.md).
 - [Art comparison](art-iteration/README.md) and [quest journal](journal.md).
