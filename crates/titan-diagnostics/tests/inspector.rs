@@ -194,3 +194,51 @@ fn recording_a_session_rejection_does_not_execute_the_request_again() {
     assert_eq!(bundle.timings_us["request"], 17);
     assert_eq!(bundle.history.requests.len(), 1);
 }
+
+#[test]
+fn diagnostic_components_use_aliases_without_merging_collisions() {
+    #[derive(titan::Component)]
+    struct Old;
+    #[derive(titan::Component)]
+    struct Moved;
+    for collision in [false, true] {
+        let root = Temp::new();
+        let (mut app, mut inspector) = setup();
+        let alias = std::any::type_name::<Old>();
+        inspector.register_component_alias::<Moved>(alias).unwrap();
+        app.world_mut().spawn_with((Moved,));
+        if collision {
+            app.world_mut().spawn_with((Old,));
+        }
+        let mut host = DiagnosticInspector::new(&root.0);
+        let result = host.handle(
+            &mut inspector,
+            &mut app,
+            &RequestEnvelope::new(
+                "missing",
+                Request::Invoke {
+                    name: "absent".into(),
+                    arguments: Default::default(),
+                },
+            ),
+            |_, _| None,
+        );
+        let bundle: DiagnosticBundle =
+            serde_json::from_slice(&std::fs::read(result.written.unwrap().manifest).unwrap())
+                .unwrap();
+        if collision {
+            assert!(!result.errors.is_empty());
+            assert!(bundle.api_summary.is_none());
+            assert!(bundle.world_state.get("entities").is_none());
+        } else {
+            assert!(result.errors.is_empty());
+            assert_eq!(
+                bundle.world_state["entities"][0]["components"],
+                serde_json::json!([alias])
+            );
+            let components = bundle.api_summary.unwrap().components;
+            assert_eq!(components.len(), 1);
+            assert_eq!(components[0].name, alias);
+        }
+    }
+}

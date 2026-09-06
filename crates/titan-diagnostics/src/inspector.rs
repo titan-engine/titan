@@ -79,35 +79,43 @@ impl DiagnosticInspector {
         bundle.history = self.history.snapshot();
         bundle.timings_us.insert("request".into(), elapsed_us);
         let world = app.world();
-        let entities: Vec<_> = world.entities().take(1000).map(|entity| {
-            let names = world.component_type_names(entity);
+        if let Err(error) = inspector.validate_component_aliases(world) {
+            result.errors.push(format!(
+                "describing diagnostic components: {}",
+                error.message
+            ));
+        } else {
+            let entities: Vec<_> = world.entities().take(1000).map(|entity| {
+            let mut names: Vec<_> = world.component_type_names(entity).into_iter().map(|name| inspector.component_name(name)).collect();
+            names.sort();
             serde_json::json!({"id": {"index": entity.index(), "generation": entity.generation()}, "name": world.get::<Name>(entity).map(Name::as_str), "components": names})
         }).collect();
-        let count = world.entities().count();
-        bundle.world_state = serde_json::json!({"entities": entities, "entity_count": count, "truncated": count > 1000});
-        let mut components: std::collections::BTreeMap<_, _> = world
-            .component_metadata()
-            .iter()
-            .map(|metadata| {
-                (
-                    metadata.type_name.to_owned(),
-                    ApiComponent::from_metadata(metadata),
-                )
-            })
-            .collect();
-        for (name, fields) in inspector.component_field_metadata() {
-            components
-                .entry(name.clone())
-                .or_insert_with(|| ApiComponent {
-                    name,
-                    ..Default::default()
+            let count = world.entities().count();
+            bundle.world_state = serde_json::json!({"entities": entities, "entity_count": count, "truncated": count > 1000});
+            let mut components: std::collections::BTreeMap<_, _> = world
+                .component_metadata()
+                .iter()
+                .map(|metadata| {
+                    let name = inspector.component_name(metadata.type_name).to_owned();
+                    let mut component = ApiComponent::from_metadata(metadata);
+                    component.name = name.clone();
+                    (name, component)
                 })
-                .fields = fields;
+                .collect();
+            for (name, fields) in inspector.component_field_metadata() {
+                components
+                    .entry(name.clone())
+                    .or_insert_with(|| ApiComponent {
+                        name,
+                        ..Default::default()
+                    })
+                    .fields = fields;
+            }
+            bundle.api_summary = Some(ApiSummary::new(
+                components.into_values().collect(),
+                inspector.command_metadata(),
+            ));
         }
-        bundle.api_summary = Some(ApiSummary::new(
-            components.into_values().collect(),
-            inspector.command_metadata(),
-        ));
         for error in &result.errors {
             bundle.logs.push(DiagnosticLog {
                 level: "warning".into(),
