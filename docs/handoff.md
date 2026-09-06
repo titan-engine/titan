@@ -36,8 +36,8 @@ not approval for a new feature or release.
 - The [opt-in parallel executor](executor.md) runs compatible typed systems in
   bounded native batches while retaining sequential defaults and a WASM fallback.
 
-Historical milestone briefs, captures and command records retain evidence for
-the revisions they describe. In particular, [milestone 2](second-milestone.md)
+Historical captures and verification reports retain evidence for
+the revisions they describe. The [arena verification](arena-verification.md)
 records the accepted v0.2.0 starter/arena exercise, and the
 [v0.4.0 notes](releases/v0.4.0.md) describe that release. Use the current guides
 above for behavior added since those snapshots.

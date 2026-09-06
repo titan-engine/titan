@@ -13,8 +13,6 @@ until Continue or Enter starts room 2 with Jumper and fresh puzzle state. Room 2
 adds a heavy block and a higher ledge requiring both abilities. Slice completion
 offers Restart room and Play again; Play again starts room 1. R always restores
 the displayed room. The [first-slice design](design.md) specifies the rules.
-The [next-milestone proposal](../../docs/adventure-next-milestone.md) awaits
-maintainer selection; further gameplay and engine work are not approved.
 
 ## Play locally
 

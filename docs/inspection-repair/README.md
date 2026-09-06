@@ -147,31 +147,3 @@ This is a qualitative navigation assessment, not a measured unaided-agent succes
 rate: the transcripts already include investigator-selected follow-up reads.
 Sanitized process/endpoint fields also omit potentially useful target distinctions.
 No claim is made that all agents discover these reads from the failure alone.
-
-## Bounded recommendation
-
-A small optional hint payload in the existing `error.details` map is warranted
-for these demonstrated navigation gaps. The candidate fields below are a design
-sketch for separate maintainer approval, not a new protocol contract:
-
-| Observed case | Candidate guidance | Producing layer |
-| --- | --- | --- |
-| `not_controlled` | `next_reads: [status, capabilities, commands]`; discover an advertised clock-control action | Shared inspector |
-| `mutation_disabled` | Read capabilities and consult host opt-in instructions; keep reads available | Policy owner, with a host-specific local documentation reference only when known |
-| CLI `ambiguous_target` | `next_reads: [instances]`, selector `--instance`; explicitly select the intended runtime | CLI discovery adapter |
-
-Hints should be bounded descriptive metadata, not executable repair commands.
-Keep existing codes, messages, retryability, identity, frame/revision semantics,
-and diagnostic paths. Native field policy and browser control policy share an
-error code but must keep their distinct explanations. Do not infer a universal
-permission-changing command, restart a game, or invoke `pause` without discovery
-and authorization. Unknown errors get no invented repair.
-
-The current protocol already accepts optional JSON-valued details. A later
-implementation should verify omission and unknown-key tolerance with existing
-clients, preservation of `diagnostic_bundle`, and equivalent shared hints across
-native and WASM while retaining host-specific differences. Use these cases to
-verify: unchanged rejection counters and fields; pause discovered before a
-successful controlled step; read-only browser controls still denied; native
-ambiguity still requires deliberate target selection. No protocol rewrite or
-new exhaustive error taxonomy is justified by this sample.

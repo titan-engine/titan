@@ -1,8 +1,9 @@
 # First conveyor factory slice
 
 This is the selected game design for [issue #88](https://github.com/titan-engine/titan/issues/88),
-not a claim that a factory game is implemented. It specifies the contract for
-independent implementation and verification. The [documentation index](README.md),
+implemented by the [standalone factory](../games/factory/README.md). It specifies
+the game contract and independent verification expectations. The
+[documentation index](README.md),
 [standalone starter](../starters/minimal/README.md), [vision](vision.md), and
 [requirements](design-requirements.md) supply the engine context. These rules
 belong to the game; they do not select a general engine transport framework.
@@ -204,8 +205,9 @@ ordered operations are explicit to support deterministic tests and later work.
 
 All rows describe state **after** the named tick. `-` is an empty slot. Labels
 such as A/B identify items only for explaining traces; unique runtime item IDs
-are not required. These fixtures are specifications for subsequent tests, not
-runtime evidence from this design-only change.
+are not required. These fixtures specify expected behavior;
+[finished verification](evidence/factory-verification/README.md) records runtime
+evidence and its limitations.
 
 ### Snapshot capacity and one-hop movement
 
@@ -273,10 +275,10 @@ Restart restores the empty challenge and another identical construction/advance
 sequence reproduces the trace. A rejected attempt to remove delivery must leave
 all counters and its west input unchanged.
 
-Independent implementation should assert the above traces and conservation at
+Verification must assert the above traces and conservation at
 every tick, including invalid edits, rotation of occupied structures, wrong-type
 inputs, out-of-bounds outputs, and reset from blocked and completed states.
-Run the same fixtures natively and in actual WASM when implementing transport
-and production. Follow [quality gates](implementation-plan.md) and the
+Run the same fixtures natively and in actual WASM for transport
+and production changes. Follow [quality gates](implementation-plan.md) and the
 [runtime workflow](../.agents/skills/titan-workflow/SKILL.md) for runtime evidence.
 This design does not change existing RPG/arena checksums or platform claims.

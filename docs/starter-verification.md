@@ -4,7 +4,7 @@ Verified on 2026-09-05 on macOS arm64 with Rust 1.98.1, Node.js 26.8.1,
 and Python 3.9.6. This was a bounded starter validation, not the independent
 arena-game exercise required by milestone 2.
 
-The verifier read `starters/minimal/README.md`, `docs/second-milestone.md`,
+The verifier read `starters/minimal/README.md`, [the historical milestone brief](https://github.com/titan-engine/titan/blob/bcf4b38a7616fb7306cca3699d78af2ea8deb9b8/docs/second-milestone.md),
 the Titan workflow skill, and its implementation-plan, CLI, and browser guides.
 No engine or game source inspection, RPG implementation/history, source edits,
 or undocumented setup assistance was needed.
