@@ -76,7 +76,8 @@ maximum length is 4096 ticks. Recordings use fixture `adventure-v3`; older
 practice-room recordings are rejected. The optional `room` field selects the recording origin room (absent means room 1).
 Recordings begun on Start retain the complete sequence through Continue and
 Play again; room-only recordings remain supported.
-The `origin` metadata preserves recovery
+The `origin.phase` field is `start` for a sequence recording and defaults to
+`playing` when absent in an existing room recording. `origin` also preserves recovery
 feedback and held-input gates for recordings started after a defensive reset. A truncated or invalid recording is rejected
 before changing the app. Restart resets the session, pending input and recording
 while retaining the monotonic host frame. Player replay supports pause, step,
@@ -179,7 +180,8 @@ cargo build -p titan-cli
 cargo run --manifest-path games/adventure/Cargo.toml -- --serve --instance adventure --run-for-ms 120000
 # In another terminal, using the directory the host was launched from:
 target/debug/titan --format json --instance adventure query state
-target/debug/titan --format json --instance adventure input 1 --actions '{"right":{"kind":"button","value":true}}'
+target/debug/titan --format json --instance adventure invoke confirm
+target/debug/titan --format json --instance adventure input 2 --actions '{"right":{"kind":"button","value":true}}'
 target/debug/titan --format json --instance adventure step 1
 target/debug/titan --format json --instance adventure invoke switch
 target/debug/titan --format json --instance adventure query recording

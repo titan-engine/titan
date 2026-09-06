@@ -646,12 +646,12 @@ fn sync_hud(world: &mut World) {
     let active = world.resource::<Session>().unwrap().active;
     let id = world.iter::<Hud>().next().unwrap().0;
     world.get_mut::<UiText>(id).unwrap().text = format!(
-        "ACTIVE: {} [SPACE] JUMP [Q] SWITCH [R] RESET",
+        "ACTIVE {} / SPACE JUMP / Q SWITCH / R RESTART",
         character_name(active).to_uppercase()
     );
     if world.resource::<Session>().unwrap().recovery_message_ticks > 0 {
         world.get_mut::<UiText>(id).unwrap().text =
-            "FELL - ROOM RESET  [SPACE] JUMP  [Q] SWITCH".into();
+            "FELL / ROOM RESET / SPACE JUMP / Q SWITCH".into();
     }
 }
 pub fn extract_overlay(world: &World) -> RenderFrame {

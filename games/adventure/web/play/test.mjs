@@ -7,6 +7,9 @@ const evidence=document.createElement('section');document.body.append(evidence);
 function publish(data){
  result.textContent=JSON.stringify(data,null,2);
  const bytes=JSON.stringify({...data,captures});
+ const metadata=document.createElement("script");metadata.type="application/json";metadata.id="capture-metadata";
+ metadata.textContent=JSON.stringify({...data,captures:Object.fromEntries(Object.entries(captures).map(([name,{artifact,...capture}])=>[name,capture]))});
+ evidence.append(metadata);
  if(bytes.length>40*1024*1024)throw Error('capture evidence exceeds 40 MiB');
  const link=document.createElement('a');link.textContent='Download capture evidence JSON';
  link.href=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
