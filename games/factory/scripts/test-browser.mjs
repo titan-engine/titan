@@ -48,3 +48,5 @@ game.free();
 console.log('Factory actual-WASM construction, rejection, deterministic sequence, read-only policy, capture and restart passed.');
 const {transportAcceptance}=await import('./transport-acceptance.mjs');
 await transportAcceptance({BrowserRuntime,root,target:metadata.target_directory,raw,ok,state});
+const {productionAcceptance}=await import('./production-acceptance.mjs');
+await productionAcceptance({BrowserRuntime,root,target:metadata.target_directory,raw,state});
