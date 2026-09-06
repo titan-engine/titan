@@ -1,0 +1,298 @@
+[
+  {
+    "actions": [
+      "confirm"
+    ],
+    "ticks": 1,
+    "checkpoint": "started"
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 8
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50
+  },
+  {
+    "actions": [
+      "jump",
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [],
+    "ticks": 20,
+    "checkpoint": "plate-a"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 108,
+    "checkpoint": "plate-b"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "down"
+    ],
+    "ticks": 50,
+    "checkpoint": "exchange"
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 142
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "jumper-exit"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "complete"
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "confirm"
+    ],
+    "ticks": 1,
+    "checkpoint": "continued"
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 33
+  },
+  {
+    "actions": [
+      "interact",
+      "up"
+    ],
+    "ticks": 1,
+    "checkpoint": "first-push"
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 17
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 66
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 17
+  },
+  {
+    "actions": [
+      "jump",
+      "up"
+    ],
+    "ticks": 17
+  },
+  {
+    "actions": [],
+    "ticks": 20,
+    "checkpoint": "block-support"
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 8
+  },
+  {
+    "actions": [
+      "jump",
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 8
+  },
+  {
+    "actions": [],
+    "ticks": 10,
+    "checkpoint": "plate-a"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 58,
+    "checkpoint": "plate-b"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 17
+  },
+  {
+    "actions": [
+      "down"
+    ],
+    "ticks": 50,
+    "checkpoint": "exchange"
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 67
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "jumper-exit"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "complete"
+  }
+]

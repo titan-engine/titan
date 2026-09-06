@@ -109,6 +109,8 @@ def main(failures):
                 # before testing capture's own no-tick/no-revision guarantee.
                 time.sleep(.5)
                 assert state()['session_tick'] == 0
+                start_capture = capture('start')
+                invoke('select_room', {'room': 1})
                 initial_capture = capture('initial')
                 assert capture('initial-repeat')['checksum'] == initial_capture['checksum']
                 route = json.loads((GAME / 'tests/control-route.json').read_text())
@@ -246,6 +248,9 @@ def main(failures):
                     solved_block = state()
                     assert solved_block['puzzle']['complete'], solved_block
                     block_recording = call('query', 'recording')['response']['value']
+                    invoke('confirm')
+                    assert state()['room'] == 1 and state()['phase'] == 'playing'
+                    capture(f'{route_name}-play-again')
                     arguments.write_text(json.dumps({'recording': block_recording}))
                     call('invoke', 'load_replay', '--arguments-file', arguments)
                     call('step', len(block_recording['frames']))
@@ -254,6 +259,38 @@ def main(failures):
                     invoke('restart')
                     assert state()['room'] == 2 and not state()['puzzle']['complete']
                 capture('block-reset')
+                # Replay the complete Start-origin sequence on the actual GPU host.
+                sequence_segments = json.loads((GAME / 'tests/sequence-solution.json').read_text())
+                sequence_recording = dict(block_recording, room=1,
+                    origin={'phase': 'start', 'blocked_actions': [], 'recovery_message_ticks': 0}, frames=[])
+                held = set()
+                for segment in sequence_segments:
+                    for _ in range(segment['ticks']):
+                        active = set(segment['actions'])
+                        sequence_recording['frames'].append({'active': sorted(active), 'pressed': sorted(active-held), 'released': sorted(held-active)})
+                        held = active
+                arguments.write_text(json.dumps({'recording': sequence_recording}))
+                call('invoke', 'load_replay', '--arguments-file', arguments)
+                assert state()['phase'] == 'start'
+                capture('sequence-start')
+                previous_generation = state()['session_generation']
+                for segment in sequence_segments:
+                    call('step', segment['ticks'])
+                    checkpoint = segment.get('checkpoint')
+                    if checkpoint in ('started', 'continued'):
+                        current = state()
+                        assert current['phase'] == 'playing' and current['session_tick'] == 0 and current['active_character'] == 'jumper'
+                        assert current['session_generation'] == previous_generation + 1
+                        previous_generation = current['session_generation']
+                        capture(f'sequence-{checkpoint}')
+                    elif checkpoint == 'complete':
+                        current = state()
+                        assert current['phase'] == ('room_complete' if current['room'] == 1 else 'slice_complete')
+                        capture(f"sequence-room-{current['room']}-complete")
+                assert playback()['complete'] and state()['phase'] == 'slice_complete'
+                invoke('restart')
+                assert state()['room'] == 2 and state()['phase'] == 'playing'
+                capture('sequence-restart-room')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)
@@ -282,7 +319,7 @@ def main(failures):
                 assert not call('capabilities')['response']['mutation_enabled']
                 rejected = call('invoke', 'switch', '--arguments', '{}', success=False)
                 assert rejected['error']['code'] == 'mutation_disabled'
-                assert capture('readonly')['checksum'] == initial_capture['checksum']
+                assert capture('readonly')['checksum'] == start_capture['checksum']
             finally:
                 processes.terminate(process)
         summary = {'native_gpu_frames': rendered, 'replay_ticks': len(route),

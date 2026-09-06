@@ -17,3 +17,6 @@ pub mod puzzle_acceptance;
 
 #[cfg(feature = "movement-acceptance")]
 pub mod block_acceptance;
+
+#[cfg(feature = "movement-acceptance")]
+pub mod sequence_acceptance;

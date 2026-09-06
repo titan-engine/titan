@@ -82,6 +82,7 @@ if (!process.argv.includes('--wasm-worker')) {
   const game = new BrowserRuntime(true);
   try {
     assert.equal(ok(game, { type: 'capabilities' }).mutation_enabled, true);
+    ok(game, invoke('select_room', {room: 1}));
     const initial = state(game);
     const route = JSON.parse(await readFile(resolve(root, 'tests/control-route.json'), 'utf8'));
     const native = JSON.parse(await readFile(process.argv[4], 'utf8'));
@@ -117,6 +118,7 @@ if (!process.argv.includes('--wasm-worker')) {
   for (const held of ['restart', 'jump', 'switch', 'right']) {
     const runtime = new BrowserRuntime(true);
     try {
+      ok(runtime, invoke('select_room', {room: 1}));
       const injectStep = actions => {
         ok(runtime, { type: 'inject_input', frame: state(runtime).frame + 1,
           actions: Object.fromEntries(actions.map(name => [name, {kind: 'button', value: true}])) });

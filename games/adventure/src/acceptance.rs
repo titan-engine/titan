@@ -42,6 +42,7 @@ fn advance(
 fn new_app() -> App {
     let mut app = game::build_game();
     app.update_schedule(Startup);
+    game::select_room(&mut app, 1).unwrap();
     app
 }
 fn tick(
@@ -403,7 +404,7 @@ pub fn run() -> Value {
             tick(&mut app, &mut tracker, &[Action::Jump], &mut trace);
         }
         assert_eq!(character(trace.last().unwrap(), "jumper")["y"], 0);
-        assert_eq!(trace.last().unwrap()["session_generation"], 0);
+        assert_eq!(trace.last().unwrap()["session_generation"], 1);
         scenarios.insert("no-double-jump-or-landing-buffer".into(), trace);
     }
     {
@@ -444,7 +445,7 @@ pub fn run() -> Value {
             &mut trace,
         );
         let reset = trace.last().unwrap();
-        assert_eq!(reset["session_generation"], 1);
+        assert_eq!(reset["session_generation"], 2);
         assert_eq!(reset["session_tick"], 0);
         assert_eq!(reset["recovery_message_ticks"], 0);
         for _ in 0..5 {
@@ -481,7 +482,7 @@ pub fn run() -> Value {
             &mut trace,
         );
         let reset = trace.last().unwrap().clone();
-        assert_eq!(reset["session_generation"], 1);
+        assert_eq!(reset["session_generation"], 2);
         assert_eq!(reset["session_tick"], 0);
         assert_eq!(reset["active_character"], "jumper");
         assert_eq!(reset["recorded_ticks"], 0);
@@ -525,7 +526,7 @@ pub fn run() -> Value {
         }
         let held_state = trace.last().unwrap();
         assert_eq!(
-            held_state["session_generation"], 1,
+            held_state["session_generation"], 2,
             "held {held} must not repeat reconstruction"
         );
         assert_eq!(held_state["active_character"], "jumper");
@@ -535,7 +536,7 @@ pub fn run() -> Value {
         injected_tick(&mut app, &mut inspector, &[held], &mut trace);
         let repressed = trace.last().unwrap();
         match held {
-            "restart" => assert_eq!(repressed["session_generation"], 2),
+            "restart" => assert_eq!(repressed["session_generation"], 3),
             "jump" => assert_eq!(character(repressed, "jumper")["y"], 170),
             "switch" => assert_eq!(repressed["active_character"], "strong"),
             _ => unreachable!(),
@@ -570,7 +571,7 @@ pub fn run() -> Value {
             &mut trace,
         );
         let reset = trace.last().unwrap();
-        assert_eq!(reset["session_generation"], 1);
+        assert_eq!(reset["session_generation"], 2);
         assert_eq!(reset["session_tick"], 0);
         assert_eq!(reset["recovery_message_ticks"], 120);
         assert_eq!(reset["pending_inputs"], 0);
@@ -583,7 +584,7 @@ pub fn run() -> Value {
             );
         }
         let held = trace.last().unwrap();
-        assert_eq!(held["session_generation"], 1);
+        assert_eq!(held["session_generation"], 2);
         assert_eq!(held["active_character"], "jumper");
         assert_eq!(character(held, "jumper")["x"], 1500);
         assert_eq!(character(held, "jumper")["y"], 0);

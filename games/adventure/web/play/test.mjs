@@ -46,6 +46,36 @@ try {
    image.src=value.artifact;image.width=960;image.height=540;figure.append(caption,image);evidence.append(figure);
    return value;
  };
+ await capture('start');
+ player.set_control_enabled(true);
+ const sequenceBindings={up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',jump:'Space',switch:'KeyQ',interact:'KeyE',confirm:'Enter',restart:'KeyR'};
+ const sequenceRoute=await (await fetch('sequence-solution.json')).json();
+ player.resume();
+ for(const segment of sequenceRoute){
+   for(const [action,key] of Object.entries(sequenceBindings))player.set_key(key,segment.actions.includes(action),false);
+   for(let i=0;i<segment.ticks;i++)player.frame(1000/60+0.000001);
+   if(segment.checkpoint==='started'||segment.checkpoint==='continued'){
+     check(state().phase==='playing'&&state().session_tick===0&&state().active_character==='jumper',`sequence ${segment.checkpoint}: fresh Jumper room`);
+     await capture(`sequence-${segment.checkpoint}`);
+   } else if(segment.checkpoint==='complete') {
+     check(state().phase===(state().room===1?'room_complete':'slice_complete'),'sequence completion requires explicit confirmation');
+     await capture(`sequence-room-${state().room}-complete`);
+   }
+ }
+ const sequenceSolved=state(),sequenceRecording=player.recording();
+ check(sequenceSolved.phase==='slice_complete','keyboard start-to-finish sequence completes');
+ player.set_key('Enter',true,false);player.frame(1000/60+0.000001);player.set_key('Enter',false,false);
+ check(state().room===1&&state().phase==='playing'&&state().session_tick===0,'Play again starts room 1');
+ await capture('sequence-play-again');
+ player.load_recording(sequenceRecording);player.resume();
+ for(let i=0;i<JSON.parse(sequenceRecording).frames.length;i++)player.frame(1000/60+0.000001);
+ check(state().phase==='slice_complete'&&JSON.stringify(state().characters)===JSON.stringify(sequenceSolved.characters),'full sequence GPU replay preserves transitions');
+ await capture('sequence-replay');
+ player.restart();
+ check(state().room===2&&state().phase==='playing'&&state().session_tick===0,'Restart room at final completion keeps displayed room');
+ await capture('sequence-restart-room');
+ for(const key of Object.values(sequenceBindings))player.set_key(key,false,false);
+ player.select_room(1);
  const initial=await capture('initial');
  check((await capture('initial-repeat')).checksum===initial.checksum,'read-only repeated capture pixels stable');
  player.set_control_enabled(true);
@@ -180,7 +210,7 @@ try {
  }
  check(state().puzzle.door.state==='closed','door closes after obstructing body clears');
  await capture('puzzle-cleared');player.pause();
- // Room 2 is selected explicitly until progression is implemented.
+ // Practice remains available to isolate both physical block routes.
  player.select_room(2); player.resume();
  player.set_key('KeyE',true,false); player.set_key('ArrowUp',true,false); tick();
  check(state().block.last_rejection==='wrong_character'&&state().block.socket===0,'Jumper push visibly rejected without moving block');
