@@ -89,7 +89,7 @@ def main(failures):
         with log_path.open('w') as log:
             process = processes.Popen([str(binary), '--paused', '--verify-surface-lifecycle', '--inspect', '--allow-control',
                                        '--project', str(GAME), '--instance', instance,
-                                       '--run-for-ms', '60000'], project=GAME, instance=instance,
+                                       '--run-for-ms', '120000'], project=GAME, instance=instance,
                                       cwd=GAME, stdout=log, stderr=log)
             failures.record_process(process)
             try:
@@ -174,6 +174,59 @@ def main(failures):
                 move(['up', 'jump'], 31)
                 assert state()['characters']['strong']['y'] == 0 and state()['characters']['strong']['z'] == 3200
                 capture('strong-blocked')
+                invoke('restart')
+                solution = json.loads((GAME / 'tests/puzzle-solution.json').read_text())
+                for segment in solution:
+                    move(segment['actions'], segment['ticks'])
+                    checkpoint = segment.get('checkpoint')
+                    if checkpoint:
+                        puzzle = state()['puzzle']
+                        if checkpoint == 'plate-a':
+                            assert puzzle['plates'][0]['pressed'] and puzzle['door']['state'] == 'open_plate'
+                        elif checkpoint == 'plate-b':
+                            assert all(p['pressed'] for p in puzzle['plates'])
+                        elif checkpoint == 'exchange':
+                            assert not puzzle['plates'][0]['pressed'] and puzzle['plates'][1]['pressed'] and puzzle['door']['open']
+                        elif checkpoint == 'jumper-exit':
+                            assert puzzle['exit']['jumper'] and not puzzle['exit']['strong'] and not puzzle['complete']
+                        elif checkpoint == 'complete':
+                            assert puzzle['complete'] and all(puzzle['exit'].values()) and puzzle['door']['state'] == 'closed'
+                        capture(f'puzzle-{checkpoint}')
+                solved = state()
+                solution_recording = call('query', 'recording')['response']['value']
+                move(['left', 'jump', 'switch'], 10)
+                frozen = state()
+                for key in ('session_tick', 'characters', 'active_character', 'puzzle'):
+                    assert frozen[key] == solved[key], key
+                # A JSON file avoids platform argument-size limits for the full route.
+                arguments = Path(directory) / 'solution-replay.json'
+                arguments.write_text(json.dumps({'recording': solution_recording}))
+                call('invoke', 'load_replay', '--arguments-file', arguments)
+                call('step', len(solution_recording['frames']))
+                assert state()['puzzle']['complete'] and state()['characters'] == solved['characters']
+                assert playback()['complete'] and playback()['paused']
+                capture('puzzle-solution-replay')
+                invoke('restart')
+                puzzle = state()['puzzle']
+                assert not puzzle['complete'] and not puzzle['door']['open'] and not any(p['pressed'] for p in puzzle['plates'])
+                capture('puzzle-restarted')
+                # Ordinary input also produces the hold-open obstruction reason.
+                for segment in solution[:4]:
+                    move(segment['actions'], segment['ticks'])
+                move(['switch'], 1)
+                move([], 1)
+                move(['up'], 25)
+                move(['right'], 67)
+                move(['switch'], 1)
+                move([], 1)
+                move(['down'], 50)
+                assert state()['puzzle']['door']['state'] == 'open_obstructed'
+                capture('puzzle-obstructed')
+                move(['switch'], 1)
+                move([], 1)
+                move(['right'], 15)
+                assert state()['puzzle']['door']['state'] == 'closed'
+                capture('puzzle-cleared')
                 time.sleep(.15)
             finally:
                 processes.terminate(process)

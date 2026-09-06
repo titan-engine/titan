@@ -1,0 +1,102 @@
+[
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 8
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50
+  },
+  {
+    "actions": [
+      "jump",
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [],
+    "ticks": 20,
+    "checkpoint": "plate-a"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 108,
+    "checkpoint": "plate-b"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "down"
+    ],
+    "ticks": 50,
+    "checkpoint": "exchange"
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 142
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "jumper-exit"
+  },
+  {
+    "actions": [
+      "switch"
+    ],
+    "ticks": 1
+  },
+  {
+    "actions": [],
+    "ticks": 1
+  },
+  {
+    "actions": [
+      "right"
+    ],
+    "ticks": 25
+  },
+  {
+    "actions": [
+      "up"
+    ],
+    "ticks": 50,
+    "checkpoint": "complete"
+  }
+]

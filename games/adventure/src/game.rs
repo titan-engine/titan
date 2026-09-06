@@ -15,8 +15,10 @@ use titan_protocol::{
 pub const MAX_RECORDING_TICKS: usize = 4096;
 pub const AXIAL_STEP: i32 = 60;
 pub const DIAGONAL_STEP: i32 = 42;
-pub const FIXTURE: &str = "adventure-v2";
+pub const FIXTURE: &str = "adventure-v3";
 pub mod movement;
+mod presentation;
+pub mod puzzle;
 use movement::{Movement, SOLIDS};
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Position {
@@ -67,6 +69,7 @@ struct ScheduledInput {
 struct PendingSwitch;
 struct Session {
     generation: u64,
+    puzzle: puzzle::PuzzleState,
     tick: u64,
     recording: InputRecording<Action>,
     truncated: bool,
@@ -81,6 +84,7 @@ impl Session {
     fn new(generation: u64) -> Self {
         Self {
             generation,
+            puzzle: puzzle::PuzzleState::default(),
             tick: 0,
             recording: InputRecording::new(RecordingHeader::new(16_666_667, 81, 0x81)),
             truncated: false,
@@ -151,6 +155,7 @@ fn setup(world: &mut World) {
         UiText::new("ACTIVE: JUMPER  [Q] SWITCH  [R] RESTART")
             .with_color(Color::rgb(255, 240, 190)),
     ));
+    presentation::setup(world);
     let mut assets = MeshAssets::new();
     let cube = assets.insert(Mesh::cube(1.0).unwrap()).unwrap();
     let floor = assets.insert(Mesh::floor(1.0).unwrap()).unwrap();
@@ -202,7 +207,13 @@ fn setup(world: &mut World) {
             continue;
         }
         let wall = solid.name.starts_with("wall-");
-        let height = if wall { 300 } else { solid.max.y - solid.min.y };
+        let height = if wall {
+            300
+        } else if solid.name.contains("partition") {
+            1200
+        } else {
+            solid.max.y - solid.min.y
+        };
         world.spawn_with((
             Name::new(solid.name),
             Position {
@@ -271,6 +282,7 @@ fn reset_world(world: &mut World) {
         .checked_add(1)
         .expect("session generation exhausted");
     world.insert_resource(Session::new(generation));
+    world.remove_resource::<PendingSwitch>();
     clear_scheduled_input(world);
     world.insert_resource(InputFrame::<Action>::default());
 }
@@ -339,6 +351,18 @@ fn tick(world: &mut World) {
         return;
     }
     let session = world.resource_mut::<Session>().unwrap();
+    if session.puzzle.complete {
+        // Preserve raw frames for deterministic replay, but completion freezes
+        // characters, puzzle state, active selection and the room clock.
+        session.consumed = InputFrame::default();
+        if session.recording.len() < MAX_RECORDING_TICKS {
+            session.recording.push(input);
+        } else {
+            session.truncated = true;
+        }
+        sync_hud(world);
+        return;
+    }
     // A fresh press also proves release/repress between fixed ticks. Preserve
     // this edge in the raw recording so replay makes the same decision.
     session
@@ -384,6 +408,12 @@ fn tick(world: &mut World) {
     } else {
         AXIAL_STEP
     };
+    // The solids are selected once before either character moves. Plate and
+    // obstruction sampling below determines collision for the following tick.
+    let mut solids = SOLIDS.to_vec();
+    if !session.puzzle.door.open {
+        solids.push(puzzle::DOOR);
+    }
     let mut ids: Vec<_> = world
         .iter::<Character>()
         .map(|(id, c)| (c.index, id))
@@ -400,7 +430,7 @@ fn tick(world: &mut World) {
             if controlled { dz * step } else { 0 },
             controlled && jump,
             if index == 0 { 180 } else { 100 },
-            &SOLIDS,
+            &solids,
         );
         *world.get_mut::<Position>(id).unwrap() = p;
         *world.get_mut::<Movement>(id).unwrap() = m;
@@ -429,9 +459,22 @@ fn tick(world: &mut World) {
             recovery_message_ticks: 120,
         };
     }
+    let mut bodies = [(initial_position(0), Movement::default()); 2];
+    for (id, c) in world.iter::<Character>() {
+        bodies[c.index] = (
+            *world.get::<Position>(id).unwrap(),
+            *world.get::<Movement>(id).unwrap(),
+        );
+    }
+    world
+        .resource_mut::<Session>()
+        .unwrap()
+        .puzzle
+        .sample(bodies);
     sync_hud(world);
 }
 fn sync_hud(world: &mut World) {
+    presentation::sync(world);
     let active = world.resource::<Session>().unwrap().active;
     let id = world.iter::<Hud>().next().unwrap().0;
     world.get_mut::<UiText>(id).unwrap().text = format!(
@@ -512,13 +555,14 @@ pub fn extract(world: &World) -> Result<RenderFrame3d, Frame3dError> {
             }
         }
     }
+    presentation::append(world, &mut draws);
     RenderFrame3d::new(
         *world.resource::<PerspectiveCamera>().unwrap(),
         *world.resource::<Lighting3d>().unwrap(),
         world.resource::<MeshAssets>().unwrap(),
         draws,
         Frame3dLimits {
-            max_draws: 32,
+            max_draws: 96,
             max_geometry_bytes: 1024 * 1024,
         },
     )
@@ -579,7 +623,7 @@ pub fn status(app: &App) -> serde_json::Value {
             (character_name(c.index), serde_json::json!({"x":p.x,"y":p.y,"z":p.z,"velocity_y":m.velocity_y,"grounded":m.grounded,"support":m.support,"collisions":m.collisions}))
         })
         .collect();
-    serde_json::json!({"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
+    serde_json::json!({"puzzle":s.puzzle,"puzzle_geometry":{"plates":puzzle::PLATES,"door":puzzle::DOOR,"exit":puzzle::EXIT},"solids":SOLIDS,"recovery_message_ticks":s.recovery_message_ticks,"fixture":FIXTURE,"frame":world.resource::<FixedTime>().unwrap().tick(),"session_generation":s.generation,"session_tick":s.tick,"characters":characters,"active_character":character_name(s.active),"consumed_input":RecordedButtons::capture(&s.consumed,&SCHEMA).unwrap(),"blocked_actions":s.blocked.iter().map(|a|SCHEMA.iter().find(|(v,_)|v==a).unwrap().1).collect::<Vec<_>>(),"recorded_ticks":s.recording.len(),"recording_valid":true,"recording_truncated":s.truncated,"pending_inputs":world.resource::<ScheduledInput>().unwrap().frames.len()})
 }
 fn field(type_name: &str, description: &str) -> FieldMetadata {
     FieldMetadata {

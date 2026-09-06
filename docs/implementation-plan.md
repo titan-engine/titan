@@ -111,7 +111,7 @@ For actual browser GPU acceptance, serve the collection-room `web/` directory
 and open `/play/test.html?backend=webgpu` and `?backend=webgl2`. Each must report
 its own pass; Node execution is CPU/WASM evidence only.
 
-Adventure control foundation gates:
+Adventure cooperative room gates:
 
 ```sh
 cargo fmt --manifest-path games/adventure/Cargo.toml --all --check
@@ -120,6 +120,8 @@ cargo clippy --manifest-path games/adventure/Cargo.toml --all-targets --all-feat
 python3 games/adventure/scripts/test-control.py
 python3 games/adventure/scripts/build-browser.py
 node games/adventure/scripts/test-browser.mjs
+node games/adventure/scripts/test-movement.mjs
+node games/adventure/scripts/test-puzzle.mjs
 node --test games/adventure/web/play/*.test.mjs
 python3 games/adventure/scripts/test-player.py # desktop GPU/window required
 ```
