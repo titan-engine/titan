@@ -1,12 +1,54 @@
 # Platformer shared level data
 
-This package owns the shared level data for Titan's sample platformer game. It
-contains a validated Rust model and text parser/writer for `.platformer` level
-files. The package is game-specific; Titan's reusable libraries and launcher do
-not know about platforms or spawn points.
+This package owns the shared level data and in-memory editing operations for
+Titan's sample platformer game. It contains a validated Rust model and text
+parser/writer for `.platformer` level files. The package is game-specific;
+Titan's reusable libraries and launcher do not know about platforms or spawn
+points.
 
 The sample game is not playable yet. This library does not provide a game
-binary, filesystem access, an editor, or level editing operations.
+binary, filesystem access, or an editor.
+
+## Editing
+
+Create an empty level with a finite spawn position:
+
+```rust
+let mut level = Level::new(SpawnPoint { x: 64.0, y: 64.0 })?;
+```
+
+`Level::new` starts the ID counter at `1`. Add a platform by supplying its
+lower-left corner and dimensions; the operation returns the allocated ID:
+
+```rust
+let id = level.add_platform(0.0, 0.0, 400.0, 32.0)?;
+```
+
+Use `update_platform_geometry` with a `PlatformGeometryUpdate` to replace only
+the fields that need to change. `None` preserves the current value:
+
+```rust
+level.update_platform_geometry(
+    id,
+    PlatformGeometryUpdate {
+        x: Some(16.0),
+        ..Default::default()
+    },
+)?;
+```
+
+`set_spawn` replaces the spawn position, and `remove_platform` deletes a
+platform. All editing operations validate the complete resulting state before
+mutation. Non-finite spawn coordinates, non-finite platform coordinates or
+bounds, and non-positive dimensions are rejected with `EditError`; unknown
+platform IDs are also rejected without changing the level.
+
+The counter advances after every successful addition and is never decremented,
+so deleted IDs are not reused. If the counter is `u64::MAX`, adding a platform
+fails instead of wrapping it.
+
+The `Level::spawn`, `Level::platforms`, and `Level::next_id` accessors inspect
+the current in-memory state. Platforms remain sorted by ascending ID.
 
 ## Format
 
@@ -31,10 +73,10 @@ nonzero even when there are no platforms. Unknown versions, records, duplicate r
 records, duplicate platform IDs, missing or extra fields, malformed numbers,
 and non-finite or otherwise invalid values are rejected.
 
-The Rust `Level` type implements `FromStr` and `Display`. Parsed platforms are
-stored and written in ascending ID order. Writing uses LF line endings and the
-canonical record order shown below; formatting and parsing preserve finite
-`f32` values.
+The Rust `Level` type implements `FromStr` and `Display` in addition to the
+editing operations above. Parsed platforms are stored and written in ascending
+ID order. Writing uses LF line endings and the canonical record order shown
+below; formatting and parsing preserve finite `f32` values.
 
 ## Valid example
 
