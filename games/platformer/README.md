@@ -6,8 +6,40 @@ parser/writer for `.platformer` level files. The package is game-specific;
 Titan's reusable libraries and launcher do not know about platforms or spawn
 points.
 
-The sample game is not playable yet. This library does not provide a game
-binary, filesystem access, or an editor.
+The sample game is not playable yet. The `persistence` module provides the
+shared filesystem operations for level files; this package does not provide a
+game binary or an editor.
+
+## Persistence
+
+Use `load_level` and `save_level` from `platformer::persistence` in both game
+commands and editor code so they share the same validation and file-handling
+behavior:
+
+```rust
+use platformer::persistence::{load_level, save_level, SaveMode};
+
+let level = load_level("levels/intro.platformer")?;
+save_level(
+    "levels/intro-copy.platformer",
+    &level,
+    SaveMode::CreateNew,
+)?;
+```
+
+`load_level` reads the complete file and then uses the `Level` parser, so it
+returns only a fully validated level. Parse and filesystem errors include the
+level path and, for parse failures, the source line and record.
+
+`save_level` serializes the level to a temporary file in the destination
+directory before publishing it. `SaveMode::CreateNew` uses no-overwrite
+publication and fails if the destination is occupied. `SaveMode::ReplaceExisting`
+requires a destination and replaces it only after the new contents have been
+written successfully. Failures before publication leave an existing
+destination untouched, and handled failures remove the temporary file when
+cleanup succeeds. Cleanup is best effort because a filesystem failure can prevent
+removal. Concurrent editing and guarantees against every power-loss scenario are outside
+this package's persistence policy.
 
 ## Editing
 
