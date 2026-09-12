@@ -100,6 +100,37 @@ Tools run in the foreground. Titan does not install signal handlers, detach a
 child, or keep a background service alive after the tool closes or is
 interrupted.
 
+## Dialogue tooling example
+
+The repository includes an unrelated game-owned dialogue example using the
+reusable `titan-tools` library. It defines `check <file>` and keeps the
+dialogue format and validation in the example rather than in Titan:
+
+```sh
+cargo run --locked -- --project games/dialogue game --help
+cargo run --locked -- --project games/dialogue game --json --help
+cargo run --locked -- --project games/dialogue game --json check sample.dialogue
+```
+
+The valid command response is one JSON envelope on standard output:
+
+```json
+{"schema_version":1,"ok":true,"result":{"records":2}}
+```
+
+Malformed dialogue input returns a nonzero status and an envelope such as:
+
+```json
+{"schema_version":1,"ok":false,"error":{"code":"invalid_document","message":"line 1: expected a speaker: text record"}}
+```
+
+These are tool responses, produced after the project binary starts. A missing
+project or manifest, unavailable Cargo executable, missing `titan-tools`
+target, or Cargo build failure occurs before a tool response exists; Titan or
+Cargo reports it on standard error with a nonzero status instead. See
+[`games/dialogue/README.md`](games/dialogue/README.md) for the document format,
+human and JSON help, and all response details.
+
 ## Getting involved
 
 Start with the [development constraints](docs/development.md) to understand the project’s direction and requirements, then read the [contribution guide](CONTRIBUTING.md) for issue planning, branches, and pull requests. Work is planned in [GitHub issues](https://github.com/titan-engine/titan/issues) before implementation. Choose an issue with an agreed scope, and keep each pull request focused on one understandable change.

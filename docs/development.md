@@ -26,9 +26,20 @@ Game logic will be written in Rust. A scripting layer may be considered later, b
 
 ## Game ownership and current tooling
 
-The repository ships a generic Titan launcher. It can select a project and invoke that project’s Cargo binary named `titan-tools` for game commands or editor actions; see `README.md` for launch details. The launcher does not embed the platformer template or know game-specific commands, data, or editor behavior.
+The repository ships a generic Titan launcher and the reusable `titan-tools`
+library. The launcher selects a project and invokes that project’s Cargo binary
+named `titan-tools` for game commands or editor actions; see `README.md` for
+launch details. Neither the launcher nor the library embeds the platformer
+template or knows game-specific commands, data, or editor behavior.
 
-Games own their data, validation, authoring operations, command definitions, editor behavior, and project generators. A game’s command and editor entry points call the same game-owned Rust operations through `titan-tools`. Titan provides the generic launcher; reusable engine libraries, a visual editor, sample-game gameplay, and project-generation tooling are planned, not current capabilities.
+Games own their data, validation, authoring operations, command definitions,
+editor behavior, and project generators. A game registers command descriptions
+and handlers with `titan-tools`; the library validates invocation arguments and
+provides the versioned human/JSON command entry point. A game's command and
+editor entry points call the same game-owned Rust authoring operations.
+Titan provides the
+generic launcher and reusable tooling support; a visual editor, sample-game
+gameplay, and project-generation tooling are planned, not current capabilities.
 
 ## Human and agent workflows
 
