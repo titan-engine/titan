@@ -4,7 +4,7 @@ This document records the decisions guiding Titan’s development. It describes 
 
 ## Rust and dependencies
 
-Titan will use Rust edition 2024, with a minimum supported Rust version close to the latest stable release. A specific minimum version will be chosen when the Rust workspace is added.
+Titan uses Rust edition 2024 and requires Rust 1.98.0 or newer. Keep the minimum supported Rust version close to the latest stable release and update the package metadata and build instructions together when it changes.
 
 Cargo dependencies are not allowed. This includes regular, development, build, optional, and target-specific dependencies.
 
@@ -48,7 +48,6 @@ English is the initial project language. Localization may be considered if contr
 
 ## Decisions still to make
 
-- The exact minimum supported Rust version.
 - How Rust game projects will build against Titan, including how that fits the Cargo dependency restriction if the engine is split into multiple crates.
 - The shader authoring approach and which backend-specific inputs, if any, to support.
 - The actual build and runtime requirements for each platform as support is implemented.
