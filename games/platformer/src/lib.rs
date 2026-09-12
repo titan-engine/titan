@@ -4,3 +4,4 @@
 //! or expose the Titan launcher or engine APIs.
 
 pub mod level;
+pub mod persistence;
