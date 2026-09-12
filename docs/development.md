@@ -1,12 +1,14 @@
 # Development constraints
 
-This document records the decisions guiding Titan’s development. It describes what we intend to build, not features that are already available.
+This document records the decisions guiding Titan’s development. It identifies shipped behavior where relevant and describes planned capabilities as plans, not existing features.
 
 ## Rust and dependencies
 
 Titan uses Rust edition 2024 and requires Rust 1.98.0 or newer. Keep the minimum supported Rust version close to the latest stable release and update the package metadata and build instructions together when it changes.
 
-Third-party Cargo dependencies are not allowed. Titan crates may depend on other crates in the same workspace through local paths, either directly or through `[workspace.dependencies]` and `workspace = true`. This applies equally to regular, development, build, optional, and target-specific dependencies. A local dependency may include a version requirement, but it must resolve to a crate inside the workspace. Registry and Git dependencies, paths outside the workspace, and dependency source overrides are not allowed.
+Within the Titan workspace, third-party Cargo dependencies are not allowed. Titan crates may depend on other crates in the same workspace through local paths, either directly or through `[workspace.dependencies]` and `workspace = true`. This applies equally to regular, development, build, optional, and target-specific dependencies. A local dependency may include a version requirement, but it must resolve to a crate inside the workspace. Registry and Git dependencies, paths outside the workspace, and dependency source overrides are not allowed for Titan workspace crates.
+
+This workspace rule applies to Titan’s own crates; it does not prohibit standalone games from consuming Titan. The agreed initial standalone build model is an ordinary Rust package outside Titan’s workspace. A generated project will own its game and authoring Rust source and use path dependencies on reusable Titan crates in a supplied Titan checkout. It will not depend on a platformer crate left in that checkout. Project-generation tooling is game-owned and planned.
 
 The Rust standard library is allowed. Prefer an equivalent API from `core` over `std` where practical, but do not complicate code to avoid the standard library. Keeping a future `no_std` mode possible is useful; implementing or guaranteeing one is not an early priority.
 
@@ -22,9 +24,15 @@ The first game will be a small, old-school 2D platformer. Use that game to guide
 
 Game logic will be written in Rust. A scripting layer may be considered later, but is not part of the initial plan.
 
+## Game ownership and current tooling
+
+The repository ships a generic Titan launcher. It can select a project and invoke that project’s Cargo binary named `titan-tools` for game commands or editor actions; see `README.md` for launch details. The launcher does not embed the platformer template or know game-specific commands, data, or editor behavior.
+
+Games own their data, validation, authoring operations, command definitions, editor behavior, and project generators. A game’s command and editor entry points call the same game-owned Rust operations through `titan-tools`. Titan provides the generic launcher; reusable engine libraries, a visual editor, sample-game gameplay, and project-generation tooling are planned, not current capabilities.
+
 ## Human and agent workflows
 
-The visual editor and CLI must provide access to the same game-authoring operations and work with the same project data. Their interactions do not need to be identical: dragging an object in the editor and setting its position through a command are two ways to make the same change.
+The planned visual editor and CLI will expose the same game-owned authoring operations and project data. Their interactions need not be identical: dragging an object in the editor and setting its position through a command are two ways to make the same change.
 
 Agents should be able to inspect and change a project through the CLI without driving the editor’s UI. Humans should be able to make those changes naturally in the editor. Neither interface should be an afterthought.
 
@@ -48,7 +56,6 @@ English is the initial project language. Localization may be considered if contr
 
 ## Decisions still to make
 
-- How Rust game projects will build against Titan.
 - The shader authoring approach and which backend-specific inputs, if any, to support.
 - The actual build and runtime requirements for each platform as support is implemented.
 
