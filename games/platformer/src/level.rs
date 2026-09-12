@@ -11,9 +11,10 @@ const HEADER_RECORD: &str = "platformer-level";
 
 /// A level spawn position.
 ///
-/// Values in a [`Level`] are finite because the parser validates them before
-/// constructing the level. This record is returned by value from [`Level::spawn`]
-/// so callers cannot mutate a level through it.
+/// Values stored in a [`Level`] are always finite. The constructor and editing
+/// operations validate spawn coordinates before storing them. This record is
+/// returned by value from [`Level::spawn`] so callers cannot mutate a level
+/// through it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpawnPoint {
     /// Horizontal position. Positive values point right.
@@ -40,11 +41,131 @@ pub struct Platform {
     pub height: f32,
 }
 
+/// A partial replacement for a platform's geometry.
+///
+/// A `None` field keeps the corresponding value already stored on the platform.
+/// The complete resulting rectangle is validated before an update is applied.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlatformGeometryUpdate {
+    /// Replacement horizontal position of the lower-left corner.
+    pub x: Option<f32>,
+    /// Replacement vertical position of the lower-left corner.
+    pub y: Option<f32>,
+    /// Replacement rectangle width.
+    pub width: Option<f32>,
+    /// Replacement rectangle height.
+    pub height: Option<f32>,
+}
+
+/// An error from an in-memory level editing operation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EditError {
+    /// The spawn position contains a non-finite coordinate.
+    InvalidSpawn,
+    /// The platform has non-finite coordinates, non-positive dimensions, or a
+    /// non-finite right or top bound.
+    InvalidPlatformGeometry,
+    /// No platform with the requested ID exists.
+    PlatformNotFound {
+        /// The ID that was not found.
+        id: u64,
+    },
+    /// The next platform ID is `u64::MAX`, so assigning it would wrap the
+    /// counter and cannot be performed.
+    PlatformIdExhausted,
+}
+
+impl fmt::Display for EditError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidSpawn => formatter.write_str("spawn coordinates must be finite"),
+            Self::InvalidPlatformGeometry => formatter.write_str(
+                "platform geometry must have finite coordinates, positive dimensions, and finite bounds",
+            ),
+            Self::PlatformNotFound { id } => write!(formatter, "platform ID {id} was not found"),
+            Self::PlatformIdExhausted => {
+                formatter.write_str("the platform ID counter is exhausted")
+            }
+        }
+    }
+}
+
+impl Error for EditError {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GeometryError {
+    NonFiniteX,
+    NonFiniteY,
+    NonFiniteWidth,
+    NonFiniteHeight,
+    NonPositiveWidth,
+    NonPositiveHeight,
+    NonFiniteRightBound,
+    NonFiniteTopBound,
+}
+
+impl GeometryError {
+    const fn parse_message(self) -> &'static str {
+        match self {
+            Self::NonFiniteX => "x must be finite",
+            Self::NonFiniteY => "y must be finite",
+            Self::NonFiniteWidth => "width must be finite",
+            Self::NonFiniteHeight => "height must be finite",
+            Self::NonPositiveWidth => "width must be strictly positive",
+            Self::NonPositiveHeight => "height must be strictly positive",
+            Self::NonFiniteRightBound => "x plus width must be finite",
+            Self::NonFiniteTopBound => "y plus height must be finite",
+        }
+    }
+}
+
+fn validate_spawn(spawn: SpawnPoint) -> Result<(), EditError> {
+    if spawn.x.is_finite() && spawn.y.is_finite() {
+        Ok(())
+    } else {
+        Err(EditError::InvalidSpawn)
+    }
+}
+
+fn validate_platform_geometry(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) -> Result<(), GeometryError> {
+    if !x.is_finite() {
+        return Err(GeometryError::NonFiniteX);
+    }
+    if !y.is_finite() {
+        return Err(GeometryError::NonFiniteY);
+    }
+    if !width.is_finite() {
+        return Err(GeometryError::NonFiniteWidth);
+    }
+    if !height.is_finite() {
+        return Err(GeometryError::NonFiniteHeight);
+    }
+    if width <= 0.0 {
+        return Err(GeometryError::NonPositiveWidth);
+    }
+    if height <= 0.0 {
+        return Err(GeometryError::NonPositiveHeight);
+    }
+    if !(x + width).is_finite() {
+        return Err(GeometryError::NonFiniteRightBound);
+    }
+    if !(y + height).is_finite() {
+        return Err(GeometryError::NonFiniteTopBound);
+    }
+    Ok(())
+}
+
 /// A completely validated platformer level.
 ///
-/// Levels can only be created by parsing a valid document. The platform slice
-/// is read-only and sorted by ID, so callers cannot invalidate the level's
-/// uniqueness, geometry, or ordering invariants through this API.
+/// Levels can be created by parsing a valid document or with [`Level::new`].
+/// The platform slice is read-only and sorted by ID, so callers cannot
+/// invalidate the level's uniqueness, geometry, or ordering invariants through
+/// this API.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Level {
     next_id: u64,
@@ -53,6 +174,19 @@ pub struct Level {
 }
 
 impl Level {
+    /// Creates an empty level with the supplied spawn position.
+    ///
+    /// The first platform receives ID `1`. A non-finite spawn coordinate is
+    /// rejected without constructing a level.
+    pub fn new(spawn: SpawnPoint) -> Result<Self, EditError> {
+        validate_spawn(spawn)?;
+        Ok(Self {
+            next_id: 1,
+            spawn,
+            platforms: Vec::new(),
+        })
+    }
+
     /// Returns the next platform ID reserved by this level.
     pub const fn next_id(&self) -> u64 {
         self.next_id
@@ -66,6 +200,87 @@ impl Level {
     /// Returns all platforms sorted by ascending ID.
     pub fn platforms(&self) -> &[Platform] {
         &self.platforms
+    }
+
+    /// Adds a platform and returns its newly allocated ID.
+    ///
+    /// The current next-ID counter is assigned, then advanced. IDs are never
+    /// reused after deletion. Geometry is validated before the level changes;
+    /// the operation fails with [`EditError::PlatformIdExhausted`] when the
+    /// counter is `u64::MAX` rather than wrapping it.
+    pub fn add_platform(
+        &mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> Result<u64, EditError> {
+        validate_platform_geometry(x, y, width, height)
+            .map_err(|_| EditError::InvalidPlatformGeometry)?;
+        let id = self.next_id;
+        let next_id = id.checked_add(1).ok_or(EditError::PlatformIdExhausted)?;
+        self.platforms.push(Platform {
+            id,
+            x,
+            y,
+            width,
+            height,
+        });
+        self.next_id = next_id;
+        Ok(id)
+    }
+
+    /// Removes the platform with `id`.
+    ///
+    /// The level is unchanged when the ID is unknown.
+    pub fn remove_platform(&mut self, id: u64) -> Result<(), EditError> {
+        let index = self
+            .platforms
+            .binary_search_by_key(&id, |platform| platform.id)
+            .map_err(|_| EditError::PlatformNotFound { id })?;
+        self.platforms.remove(index);
+        Ok(())
+    }
+
+    /// Applies a partial geometry update to the platform with `id`.
+    ///
+    /// Fields set to `None` preserve their existing values. The complete
+    /// resulting rectangle is validated before mutation, so an invalid update
+    /// leaves the level unchanged.
+    pub fn update_platform_geometry(
+        &mut self,
+        id: u64,
+        update: PlatformGeometryUpdate,
+    ) -> Result<(), EditError> {
+        let index = self
+            .platforms
+            .binary_search_by_key(&id, |platform| platform.id)
+            .map_err(|_| EditError::PlatformNotFound { id })?;
+        let current = self.platforms[index];
+        let x = update.x.unwrap_or(current.x);
+        let y = update.y.unwrap_or(current.y);
+        let width = update.width.unwrap_or(current.width);
+        let height = update.height.unwrap_or(current.height);
+        validate_platform_geometry(x, y, width, height)
+            .map_err(|_| EditError::InvalidPlatformGeometry)?;
+        self.platforms[index] = Platform {
+            id: current.id,
+            x,
+            y,
+            width,
+            height,
+        };
+        Ok(())
+    }
+
+    /// Replaces the level's spawn position.
+    ///
+    /// A non-finite coordinate is rejected without changing the existing
+    /// position.
+    pub fn set_spawn(&mut self, spawn: SpawnPoint) -> Result<(), EditError> {
+        validate_spawn(spawn)?;
+        self.spawn = spawn;
+        Ok(())
     }
 }
 
@@ -204,29 +419,8 @@ impl FromStr for Level {
                             format!("duplicate platform ID {id}"),
                         ));
                     }
-                    if width <= 0.0 {
-                        return Err(ParseError::new(
-                            line,
-                            record,
-                            "width must be strictly positive",
-                        ));
-                    }
-                    if height <= 0.0 {
-                        return Err(ParseError::new(
-                            line,
-                            record,
-                            "height must be strictly positive",
-                        ));
-                    }
-                    if !(x + width).is_finite() {
-                        return Err(ParseError::new(line, record, "x plus width must be finite"));
-                    }
-                    if !(y + height).is_finite() {
-                        return Err(ParseError::new(
-                            line,
-                            record,
-                            "y plus height must be finite",
-                        ));
+                    if let Err(error) = validate_platform_geometry(x, y, width, height) {
+                        return Err(ParseError::new(line, record, error.parse_message()));
                     }
 
                     platforms.push(Platform {
@@ -360,7 +554,7 @@ fn end_of_document_line(last_line: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::Level;
+    use super::{EditError, Level, Platform, PlatformGeometryUpdate, SpawnPoint};
 
     fn assert_rejected(document: &str) {
         assert!(
@@ -452,5 +646,117 @@ mod tests {
         assert_rejected("platformer-level 1\nnext-id 1\n");
         assert_rejected("platformer-level 1\nspawn 0 0\n");
         assert_rejected("\n\r\n");
+    }
+
+    #[test]
+    fn editing_validates_changes_before_mutation_and_preserves_unspecified_fields() {
+        assert_eq!(
+            Level::new(SpawnPoint {
+                x: f32::NAN,
+                y: 0.0,
+            }),
+            Err(EditError::InvalidSpawn)
+        );
+
+        let mut level = Level::new(SpawnPoint { x: 0.0, y: 0.0 }).expect("valid spawn");
+        let id = level
+            .add_platform(10.0, 20.0, 30.0, 40.0)
+            .expect("valid platform");
+        let snapshot = level.clone();
+
+        assert_eq!(
+            level.add_platform(0.0, 0.0, 0.0, 1.0),
+            Err(EditError::InvalidPlatformGeometry)
+        );
+        assert_eq!(level, snapshot);
+
+        assert_eq!(
+            level.update_platform_geometry(
+                id,
+                PlatformGeometryUpdate {
+                    x: Some(f32::MAX),
+                    width: Some(f32::MAX),
+                    ..Default::default()
+                },
+            ),
+            Err(EditError::InvalidPlatformGeometry)
+        );
+        assert_eq!(level, snapshot);
+
+        assert_eq!(
+            level.update_platform_geometry(99, PlatformGeometryUpdate::default()),
+            Err(EditError::PlatformNotFound { id: 99 })
+        );
+        assert_eq!(level, snapshot);
+
+        level
+            .update_platform_geometry(
+                id,
+                PlatformGeometryUpdate {
+                    x: Some(11.0),
+                    height: Some(41.0),
+                    ..Default::default()
+                },
+            )
+            .expect("valid partial update");
+        assert_eq!(
+            level.platforms(),
+            &[Platform {
+                id,
+                x: 11.0,
+                y: 20.0,
+                width: 30.0,
+                height: 41.0,
+            }]
+        );
+
+        let snapshot = level.clone();
+        assert_eq!(
+            level.set_spawn(SpawnPoint {
+                x: 0.0,
+                y: f32::INFINITY,
+            }),
+            Err(EditError::InvalidSpawn)
+        );
+        assert_eq!(level, snapshot);
+
+        level
+            .set_spawn(SpawnPoint { x: 5.0, y: 6.0 })
+            .expect("valid spawn update");
+        assert_eq!(level.spawn(), SpawnPoint { x: 5.0, y: 6.0 });
+    }
+
+    #[test]
+    fn editing_never_reuses_ids_or_wraps_the_counter() {
+        let mut level = Level::new(SpawnPoint { x: 0.0, y: 0.0 }).expect("valid level");
+        let first_id = level
+            .add_platform(0.0, 0.0, 1.0, 1.0)
+            .expect("first platform");
+        level.remove_platform(first_id).expect("existing platform");
+        let second_id = level
+            .add_platform(1.0, 1.0, 1.0, 1.0)
+            .expect("second platform");
+        assert_eq!((first_id, second_id), (1, 2));
+
+        let document = format!(
+            "platformer-level 1\nnext-id {}\nspawn 0 0\nplatform 1 0 0 1 1\n",
+            u64::MAX - 1
+        );
+        let mut boundary_level = document.parse::<Level>().expect("valid boundary level");
+        let allocated_id = boundary_level
+            .add_platform(1.0, 1.0, 1.0, 1.0)
+            .expect("last non-wrapping platform ID");
+        assert_eq!(allocated_id, u64::MAX - 1);
+        assert_eq!(boundary_level.next_id(), u64::MAX);
+        boundary_level
+            .remove_platform(allocated_id)
+            .expect("allocated platform");
+
+        let snapshot = boundary_level.clone();
+        assert_eq!(
+            boundary_level.add_platform(2.0, 2.0, 1.0, 1.0),
+            Err(EditError::PlatformIdExhausted)
+        );
+        assert_eq!(boundary_level, snapshot);
     }
 }
