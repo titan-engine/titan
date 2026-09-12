@@ -2,7 +2,7 @@
 
 Titan is a game engine being built in Rust for humans and AI agents to build games together. The goal is a visual editor for humans and a CLI that lets agents perform the same game-authoring tasks without automating the editor.
 
-The CLI provides help and version information and can launch game-owned command and editor tooling; there is no engine or editor implementation in this repository. The first game will be a small, old-school 2D platformer, with macOS supported first, then Linux and Windows.
+The CLI provides help and version information and can launch game-owned command and editor tooling; the repository also contains the reusable `titan-runtime` application lifecycle for Apple Silicon macOS. Rendering, a visual editor, and a playable sample game are not implemented yet. The first game will be a small, old-school 2D platformer, with macOS supported first, then Linux and Windows.
 
 ## Building on macOS
 
@@ -21,6 +21,21 @@ cargo build --locked
 cargo run --locked -- --help
 cargo run --locked -- --version
 ```
+
+## Running the native window example
+
+The reusable `titan-runtime` crate currently provides the first native macOS
+application and window lifecycle. It has no third-party Cargo dependencies
+and uses handwritten AppKit bindings:
+
+```sh
+MACOSX_DEPLOYMENT_TARGET=11.0 cargo run --locked -p titan-runtime --example window
+```
+
+The example opens a responsive, resizable window and exits through normal
+AppKit close or quit handling. See
+[`docs/macos-window.md`](docs/macos-window.md) for the supported macOS
+requirements, lifecycle, ownership, and ABI limitations.
 
 You can also run the executable directly:
 

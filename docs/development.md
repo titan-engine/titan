@@ -28,7 +28,7 @@ Game logic will be written in Rust. A scripting layer may be considered later, b
 
 The repository ships a generic Titan launcher. It can select a project and invoke that project’s Cargo binary named `titan-tools` for game commands or editor actions; see `README.md` for launch details. The launcher does not embed the platformer template or know game-specific commands, data, or editor behavior.
 
-Games own their data, validation, authoring operations, command definitions, editor behavior, and project generators. A game’s command and editor entry points call the same game-owned Rust operations through `titan-tools`. Titan provides the generic launcher; reusable engine libraries, a visual editor, sample-game gameplay, and project-generation tooling are planned, not current capabilities.
+Games own their data, validation, authoring operations, command definitions, editor behavior, and project generators. A game’s command and editor entry points call the same game-owned Rust operations through `titan-tools`. Titan provides the generic launcher and the initial `titan-runtime` native application lifecycle for Apple Silicon macOS. Rendering, a visual editor, sample-game gameplay, and project-generation tooling are planned, not current capabilities. See [`macos-window.md`](macos-window.md) for the runtime's scope and platform limits.
 
 ## Human and agent workflows
 
