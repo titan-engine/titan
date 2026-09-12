@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "games/platformer"]
+members = [".", "crates/titan-tools", "games/dialogue", "games/platformer"]
 resolver = "3"
 
 [package]
