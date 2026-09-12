@@ -41,7 +41,7 @@ cargo +stable build --locked
 
 ## Getting involved
 
-Start with the [development constraints](docs/development.md) to understand the project’s direction and requirements. Work is planned in [GitHub issues](https://github.com/titan-engine/titan/issues) before implementation. Choose an issue with an agreed scope, and keep each pull request focused on one understandable change.
+Start with the [development constraints](docs/development.md) to understand the project’s direction and requirements, then read the [contribution guide](CONTRIBUTING.md) for issue planning, branches, and pull requests. Work is planned in [GitHub issues](https://github.com/titan-engine/titan/issues) before implementation. Choose an issue with an agreed scope, and keep each pull request focused on one understandable change.
 
 ## License
 
