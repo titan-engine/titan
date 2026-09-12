@@ -6,7 +6,7 @@ This document records the decisions guiding Titan’s development. It describes 
 
 Titan uses Rust edition 2024 and requires Rust 1.98.0 or newer. Keep the minimum supported Rust version close to the latest stable release and update the package metadata and build instructions together when it changes.
 
-Cargo dependencies are not allowed. This includes regular, development, build, optional, and target-specific dependencies.
+Third-party Cargo dependencies are not allowed. Titan crates may depend on other crates in the same workspace through local paths, either directly or through `[workspace.dependencies]` and `workspace = true`. This applies equally to regular, development, build, optional, and target-specific dependencies. A local dependency may include a version requirement, but it must resolve to a crate inside the workspace. Registry and Git dependencies, paths outside the workspace, and dependency source overrides are not allowed.
 
 The Rust standard library is allowed. Prefer an equivalent API from `core` over `std` where practical, but do not complicate code to avoid the standard library. Keeping a future `no_std` mode possible is useful; implementing or guaranteeing one is not an early priority.
 
@@ -48,7 +48,7 @@ English is the initial project language. Localization may be considered if contr
 
 ## Decisions still to make
 
-- How Rust game projects will build against Titan, including how that fits the Cargo dependency restriction if the engine is split into multiple crates.
+- How Rust game projects will build against Titan.
 - The shader authoring approach and which backend-specific inputs, if any, to support.
 - The actual build and runtime requirements for each platform as support is implemented.
 
