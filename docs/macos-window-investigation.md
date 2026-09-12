@@ -81,7 +81,7 @@ For the investigated arm64 target, the SDK types map as follows:
 
 `BOOL` is target-dependent. Do not infer its Rust type only from `TARGET_OS_OSX`; verify the target's `__OBJC_BOOL_IS_BOOL` definition. The investigated `arm64-apple-macos` target uses C `bool`, which matches Rust `bool` at this FFI boundary.
 
-On arm64, call `objc_msgSend` for structure arguments and structure returns as well as scalar calls. The installed runtime header marks `objc_msgSend_stret` unavailable on arm64. The function pointer still has to include the exact `NSPoint` or `NSRect` type so the compiler applies the arm64 aggregate calling convention, including the indirect return convention for a 32-byte `NSRect`.
+On arm64, call `objc_msgSend` for structure arguments and structure returns as well as scalar calls. The installed runtime header marks `objc_msgSend_stret` unavailable on arm64. The function pointer still has to include the exact `NSPoint` or `NSRect` type so the compiler applies the arm64 aggregate calling convention. `NSRect` is a homogeneous aggregate of four doubles; its 32-byte size does not imply an indirect return. A target-compiled C probe returned its four components in `d0` through `d3`.
 
 These are the distinct message signatures exercised. `Id` and `Sel` below are opaque pointers; `Rect` and `Point` are the `#[repr(C)]` types above.
 
@@ -106,7 +106,7 @@ unsafe extern "C" fn(Id, Sel) -> *const c_char
 
 They cover allocation and initialization, application policy, the window initializer, setters, event retrieval and dispatch, `NSDate.dateWithTimeIntervalSinceNow:`, `NSString.stringWithUTF8String:`, event properties, `NSNotification.object`, and window geometry. Production code should give these signatures descriptive wrappers tied to their selectors rather than provide a caller-selectable return type.
 
-The runtime declarations needed to construct the delegate are:
+The runtime declarations needed to construct the delegate are below. `Imp` represents the runtime's erased implementation function pointer, `unsafe extern "C" fn()`. Cast the callback to that type only when registering it; its actual signature and Objective-C type encoding must agree.
 
 ```rust
 unsafe extern "C" fn objc_getClass(*const c_char) -> Id;
@@ -139,7 +139,7 @@ The following event properties were valid for the categories the experiment logg
 
 `windowDidResize:` and `windowWillClose:` are optional `NSWindowDelegate` callbacks. AppKit passes an `NSNotification *`, and the notification's `object` is the affected window. The callbacks are main-actor APIs in current Apple documentation. In the experiment they ran synchronously while the main thread dispatched AppKit events. The close callback changed only process-owned state; Objective-C releases happened after callback return.
 
-Live title-bar resize remains responsive because retrieved events are returned to AppKit. AppKit may run its own nested event-tracking work during `sendEvent:`. If Titan later performs its own modal pointer tracking instead of ordinary dispatch, Apple's event-retrieval documentation says to request the relevant drag and mouse-up masks in `NSEventTrackingRunLoopMode`, not the default mode used by this ordinary pump.
+Live resizing remains responsive because retrieved events are returned to AppKit. AppKit may run its own nested event-tracking work during `sendEvent:`. If Titan later performs its own modal pointer tracking instead of ordinary dispatch, Apple's event-retrieval documentation says to request the relevant drag and mouse-up masks in `NSEventTrackingRunLoopMode`, not the default mode used by this ordinary pump.
 
 ## Ownership and lifetime
 
