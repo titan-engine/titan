@@ -1,0 +1,125 @@
+name: macOS checks
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: macOS / Format
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install stable rustfmt
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup component add rustfmt --toolchain stable
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+
+  clippy:
+    name: macOS / Clippy
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install stable Clippy
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup component add clippy --toolchain stable
+      - name: Run Clippy with warnings denied
+        run: cargo +stable clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  stable:
+    name: macOS / Stable
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install current stable Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update
+      - name: Build workspace with stable Rust
+        run: cargo +stable build --workspace --locked
+      - name: Test workspace with stable Rust
+        run: cargo +stable test --workspace --locked
+
+  msrv:
+    name: macOS / MSRV
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install current stable Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update
+      - name: Read the declared MSRV
+        id: msrv
+        shell: bash
+        run: |
+          set -euo pipefail
+          msrv="$(
+            cargo +stable metadata --no-deps --format-version 1 |
+              python3 -c '
+          import json
+          import sys
+
+          versions = {
+              package["rust_version"]
+              for package in json.load(sys.stdin)["packages"]
+              if package.get("rust_version")
+          }
+          if len(versions) != 1:
+              raise SystemExit(
+                  f"expected one workspace rust-version, found {sorted(versions)!r}"
+              )
+          version = next(iter(versions))
+          print(version if version.count(".") == 2 else f"{version}.0")
+          '
+          )"
+          printf 'msrv=%s\n' "$msrv" >> "$GITHUB_OUTPUT"
+          printf 'Declared MSRV: %s\n' "$msrv"
+      - name: Install the declared MSRV
+        run: rustup toolchain install "${{ steps.msrv.outputs.msrv }}" --profile minimal --no-self-update
+      - name: Build workspace with the MSRV
+        run: cargo +"${{ steps.msrv.outputs.msrv }}" build --workspace --locked
+      - name: Test workspace with the MSRV
+        run: cargo +"${{ steps.msrv.outputs.msrv }}" test --workspace --locked
+
+  dependencies:
+    name: macOS / Dependency policy
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install current stable Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update
+      - name: Check workspace dependency policy
+        run: python3 scripts/check-dependencies.py
+      - name: Test dependency policy
+        run: python3 scripts/test_dependency_policy.py
