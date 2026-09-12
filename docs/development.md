@@ -35,7 +35,9 @@ template or knows game-specific commands, data, or editor behavior.
 Games own their data, validation, authoring operations, command definitions,
 editor behavior, and project generators. A game registers command descriptions
 and handlers with `titan-tools`; the library validates invocation arguments and
-provides the versioned human/JSON command entry point. Titan provides the
+provides the versioned human/JSON command entry point. A game's command and
+editor entry points call the same game-owned Rust authoring operations.
+Titan provides the
 generic launcher and reusable tooling support; a visual editor, sample-game
 gameplay, and project-generation tooling are planned, not current capabilities.
 
