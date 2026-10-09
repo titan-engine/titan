@@ -104,6 +104,23 @@ impl From<&MouseButtonInput> for MouseRecord {
     }
 }
 
+#[derive(Reflect)]
+struct CursorRecord {
+    window: u64,
+    position: [f32; 2],
+    delta: Option<[f32; 2]>,
+}
+
+impl From<&CursorMoved> for CursorRecord {
+    fn from(input: &CursorMoved) -> Self {
+        Self {
+            window: input.window.to_bits(),
+            position: input.position.to_array(),
+            delta: input.delta.map(|delta| delta.to_array()),
+        }
+    }
+}
+
 #[derive(Resource, Reflect, Default)]
 #[reflect(Resource)]
 struct MouseState {
@@ -119,6 +136,8 @@ struct MouseState {
     raw_cursor_x: f32,
     raw_cursor_y: f32,
     raw_cursor_window: u64,
+    raw_cursor: Vec<CursorRecord>,
+    aggregate_cursor: Vec<CursorRecord>,
     frame: u32,
     cursor_frame: u32,
     press_frames: Vec<[u32; 2]>,
@@ -180,6 +199,7 @@ fn record_mouse(
         state.raw_cursor_x = event.position.x;
         state.raw_cursor_y = event.position.y;
         state.raw_cursor_window = event.window.to_bits();
+        state.raw_cursor.push(event.into());
         state.cursor_frame = state.frame;
     }
     for event in raw.read() {
@@ -208,6 +228,7 @@ fn record_mouse(
                 state.cursor_moves += 1;
                 state.cursor_x = cursor.position.x;
                 state.cursor_y = cursor.position.y;
+                state.aggregate_cursor.push(cursor.into());
             }
             _ => {}
         }
@@ -742,6 +763,114 @@ fn click_updates_button_input_and_both_message_consumers() {
     assert_eq!(
         primary[Window::type_path()]["internal"]["physical_cursor_position"],
         json!([17.0, 24.5])
+    );
+}
+
+#[test]
+fn click_reports_native_cursor_deltas_in_both_message_channels() {
+    let fixture = Fixture::start(false);
+    let primary = fixture.query(json!({"components":[],"with":["Window","PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    let secondary = fixture
+        .query(json!({"components":[],"with":["Window"],"without":["PrimaryWindow"]}))[0]["entity"]
+        .clone();
+    // The override, not the base scale, must convert prior physical positions.
+    fixture.tool("set_component", json!({"entity":primary,"component":"Window","path":"resolution.scale_factor","value":1.25}));
+    fixture.tool("set_component", json!({"entity":primary,"component":"Window","path":"resolution.scale_factor_override","value":2.0}));
+    let state = || fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
+    let mut expected = Vec::new();
+    for (window, position, delta) in [
+        (primary.clone(), [8.5, 12.25], None),
+        (secondary.clone(), [10.25, 16.5], None),
+        (primary.clone(), [10.0, 8.25], Some([1.5, -4.0])),
+        (secondary.clone(), [8.25, 20.0], Some([-2.0, 3.5])),
+        (primary.clone(), [10.0, 8.25], Some([0.0, 0.0])),
+        (secondary, [8.25, 20.0], Some([0.0, 0.0])),
+    ] {
+        fixture.tool(
+            "click",
+            json!({"window":window,"x":position[0],"y":position[1]}),
+        );
+        expected.push(json!({"window":window,"position":position,"delta":delta}));
+        eventually(|| state()["aggregate_cursor"].as_array().unwrap().len() == expected.len());
+        let observed = state();
+        assert_eq!(observed["raw_cursor"], json!(expected));
+        assert_eq!(observed["aggregate_cursor"], json!(expected));
+    }
+
+    // A changed override must apply to the stored *physical* position, rather
+    // than subtracting previously sent logical coordinates.
+    fixture.tool("set_component", json!({"entity":primary,"component":"Window","path":"resolution.scale_factor_override","value":4.0}));
+    for delta in [[5.0, 4.125], [0.0, 0.0]] {
+        fixture.tool("click", json!({"window":primary,"x":10.0,"y":8.25}));
+        expected.push(json!({"window":primary,"position":[10.0,8.25],"delta":delta}));
+        eventually(|| state()["aggregate_cursor"].as_array().unwrap().len() == expected.len());
+        let observed = state();
+        assert_eq!(observed["raw_cursor"], json!(expected));
+        assert_eq!(observed["aggregate_cursor"], json!(expected));
+    }
+
+    let component = fixture.tool(
+        "get_components",
+        json!({"entity":primary,"components":["Window"],"strict":true}),
+    );
+    let resolution = &component[Window::type_path()]["resolution"];
+    let width = resolution["physical_width"].as_f64().unwrap();
+    let height = resolution["physical_height"].as_f64().unwrap();
+    // Window::physical_cursor_position rejects each edge, even when internal
+    // still holds a position. CursorLeft also clears it to None.
+    for previous in [
+        json!([-0.25, 10.0]),
+        json!([10.0, -0.25]),
+        json!([width, 10.0]),
+        json!([10.0, height]),
+        Value::Null,
+    ] {
+        fixture.tool("set_component", json!({"entity":primary,"component":"Window","path":"internal.physical_cursor_position","value":previous}));
+        fixture.tool("click", json!({"window":primary,"x":10.0,"y":8.25}));
+        expected.push(json!({"window":primary,"position":[10.0,8.25],"delta":null}));
+        eventually(|| state()["aggregate_cursor"].as_array().unwrap().len() == expected.len());
+        let observed = state();
+        assert_eq!(observed["raw_cursor"], json!(expected));
+        assert_eq!(observed["aggregate_cursor"], json!(expected));
+    }
+}
+
+#[test]
+fn click_rejects_unrepresentable_delta_before_mutating_or_sending_input() {
+    let fixture = Fixture::start(false);
+    let window = fixture.query(json!({"components":[],"with":["Window","PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    fixture.tool("set_component", json!({"entity":window,"component":"Window","path":"internal.physical_cursor_position","value":[100.0,100.0]}));
+    fixture.tool("set_component", json!({"entity":window,"component":"Window","path":"resolution.scale_factor_override","value":1e-38}));
+    // Logical and scaled positions fit Vec2, but the delta from the prior
+    // inside position overflows when divided by the tiny effective scale.
+    let error = tools::call(
+        &fixture.client,
+        "click",
+        json!({"window":window,"x":0,"y":0}),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("Cursor delta isn't representable"),
+        "{error}"
+    );
+    let state = fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
+    assert_eq!(state["raw_cursor"], json!([]));
+    assert_eq!(state["aggregate_cursor"], json!([]));
+    assert_eq!(state["raw"], json!([]));
+    assert_eq!(state["aggregate"], json!([]));
+    assert_eq!(state["presses"], 0);
+    assert_eq!(state["releases"], 0);
+    let component = fixture.tool(
+        "get_components",
+        json!({"entity":window,"components":["Window"],"strict":true}),
+    );
+    assert_eq!(
+        component[Window::type_path()]["internal"]["physical_cursor_position"],
+        json!([100.0, 100.0])
     );
 }
 

@@ -717,6 +717,33 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     {
         return Err("Scaled cursor position isn't representable by Bevy's Vec2".to_owned());
     }
+    // Match Window::physical_cursor_position(): an absent or out-of-bounds
+    // previous physical position means the cursor has just entered the window.
+    // Reuse the fetched snapshot so this adds no requests to the frame barrier.
+    let previous: Option<[f64; 2]> =
+        decode(components[WINDOW]["internal"]["physical_cursor_position"].clone())?;
+    let delta = if let Some(previous) = previous {
+        let width = resolution["physical_width"]
+            .as_u64()
+            .ok_or("Window resolution has no physical_width")? as f64;
+        let height = resolution["physical_height"]
+            .as_u64()
+            .ok_or("Window resolution has no physical_height")? as f64;
+        (previous[0] >= 0.0 && previous[1] >= 0.0 && previous[0] < width && previous[1] < height)
+            .then(|| {
+                // Winit converts both physical positions to Vec2 before subtracting
+                // and dividing by the effective scale, all in f32.
+                [
+                    (physical[0] as f32 - previous[0] as f32) / scale as f32,
+                    (physical[1] as f32 - previous[1] as f32) / scale as f32,
+                ]
+            })
+    } else {
+        None
+    };
+    if delta.is_some_and(|delta| delta.iter().any(|n| !n.is_finite())) {
+        return Err("Cursor delta isn't representable by Bevy's Vec2".to_owned());
+    }
     // Like winit, synchronize the target Window before announcing the move.
     // Legacy UI reads this physical position; CursorMoved/picking use logical
     // coordinates. Mutate only the cursor field, never replace a stale Window.
@@ -730,7 +757,7 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
             value: json!(physical),
         },
     )?;
-    let cursor = json!({"window":window,"position":[x,y],"delta":null});
+    let cursor = json!({"window":window,"position":[x,y],"delta":delta});
     let standalone = write_message(client, CURSOR_MOVED, cursor.clone());
     let aggregate = write_message(client, WINDOW_EVENT, json!({"CursorMoved":cursor}));
     standalone?;

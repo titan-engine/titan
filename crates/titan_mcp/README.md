@@ -37,7 +37,9 @@ plugins and registered `CursorMoved`, `MouseButtonInput` and `WindowEvent`
 messages. Clicks first update the target window's physical cursor position,
 using its effective scale factor (including any override), then send standalone
 cursor/button messages for raw readers and `ButtonInput` as well as aggregate
-window messages for picking. A native window backend may also move the OS cursor.
+window messages for picking. Cursor deltas use the previous in-bounds physical
+position and effective scale factor; first entry reports no delta, and stationary
+moves report zero. A native window backend may also move the OS cursor.
 
 For pause, resume, deterministic step, status, and fast file-based screenshots,
 add the optional `TitanRemotePlugin` from `titan_remote` alongside these plugins:
@@ -125,7 +127,10 @@ not an index extracted from a debug string.
 
 Text results are compact JSON. Large results are replaced with valid JSON
 containing truncation metadata, including omitted item counts for arrays and
-advice on narrowing queries. Errors include BRP codes/messages and next steps.
+advice on narrowing queries. Compacted `items` envelopes retain small sibling
+fields (including continuation tokens); omitted/overwritten sibling fields are
+explicitly counted. Carried omission counts saturate with a flag if their sum
+cannot fit in `u64`. Errors include BRP codes/messages and next steps.
 Tool-error text is also capped at 24 KiB: oversized errors preserve a UTF-8-safe
 diagnostic prefix with explicit truncation/omitted-byte metadata and guidance.
 HTTP responses, screenshot sizes, and waits are bounded. A game restart may
