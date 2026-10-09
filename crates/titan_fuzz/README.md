@@ -161,7 +161,12 @@ game components: the simulation also contains internal entities.
 scale fields for non-finite values, including infinity as well as NaN. Its
 built-in name is `no_nan_transforms`. Game-system panics are caught and reported
 under the reserved name `no_panics`, with the panic message. A panic-abort build
-or process abort cannot be recovered by `catch_unwind`.
+or process abort cannot be recovered by `catch_unwind`. Non-string
+`panic_any` payloads have no general-purpose value comparison, so the fuzzer
+reports them without shrinking and says so in the violation message. A payload
+type change on the original replay is `Flaky`; differing values of the same
+opaque type cannot be detected. Prefer descriptive string panics or invariant
+errors when you want a shrunk reproduction.
 
 ## How shrinking works
 

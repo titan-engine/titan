@@ -10,7 +10,11 @@ pub use report::{Failure, FuzzConfig, FuzzReport};
 
 use bevy_ecs::world::World;
 use bevy_transform::components::Transform;
-use std::{any::Any, panic::AssertUnwindSafe, path::PathBuf};
+use std::{
+    any::{Any, TypeId},
+    panic::AssertUnwindSafe,
+    path::PathBuf,
+};
 use titan_test::{InputAction, InputButton, InputScript, Sim};
 
 struct Invariant<'a> {
@@ -197,6 +201,12 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
             if self.execute(&failure.script, failure.ticks).as_ref() != Some(&violation) {
                 return FuzzReport::Flaky(failure);
             }
+            // Arbitrary panic_any payloads cannot be compared by value. Even
+            // equal types might represent unrelated violations, so preserve
+            // the original input rather than minimize to an opaque panic.
+            if violation.opaque_panic.is_some() {
+                return FuzzReport::Failed(failure);
+            }
             let original = failure.clone();
             if shrink::shrink(&mut failure, |script, ticks| self.execute(script, ticks)) {
                 // Do not publish a known-unreliable minimized reproduction.
@@ -240,6 +250,7 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
                             name: invariant.name.clone(),
                             message,
                             tick,
+                            opaque_panic: None,
                         });
                     }
                 }
@@ -252,6 +263,11 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
                 name: "no_panics".to_owned(),
                 message: panic_message(payload.as_ref()),
                 tick: current_tick,
+                opaque_panic: if payload.is::<String>() || payload.is::<&str>() {
+                    None
+                } else {
+                    Some(payload.as_ref().type_id())
+                },
             }),
         }
     }
@@ -262,6 +278,9 @@ pub(crate) struct Violation {
     name: String,
     message: String,
     tick: u64,
+    // Used only in-process to detect differing payload types on the original
+    // replay. Unknown values still cannot safely be compared or shrunk.
+    opaque_panic: Option<TypeId>,
 }
 
 fn panic_message(payload: &(dyn Any + Send)) -> String {
@@ -270,6 +289,6 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
     } else if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_owned()
     } else {
-        "panic with a non-string payload".to_owned()
+        "panic with a non-string payload (shrinking disabled: opaque payload)".to_owned()
     }
 }
