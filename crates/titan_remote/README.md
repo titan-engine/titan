@@ -71,7 +71,11 @@ in one frame. At most 64 jobs are tracked; unfinished jobs time out after 30
 wall-clock seconds, including while paused. Finished tokens are retained for five
 minutes, but may be evicted earlier to make room. Expired/unknown tokens return
 invalid-params errors; capture and disk failures return internal errors. Saved
-files are not deleted when tokens expire; clients own their cleanup.
+files are not deleted when tokens expire; clients own their cleanup. The destination's
+parent directory must be writable for atomic publication. Temporary staging files
+and final screenshots are owner-readable/writable on Unix (mode 0600). An abandoned
+GPU capture can leave an empty staging file until its observer is dropped; a crash
+can leave staging files behind.
 
 The HTTP server is an unauthenticated development tool. Keep its default
 loopback binding and expose it only to trusted clients: BRP can mutate the world,
@@ -111,4 +115,9 @@ curl -s "$URL" -H 'Content-Type: application/json' \
 
 For windowless applications, omit the `render` feature and use `MinimalPlugins`
 with the two BRP plugins and `TitanRemotePlugin`. No renderer or GPU is needed
-for time control.
+for time control. With `render` enabled in a headless app, screenshot methods return
+an error explaining that the renderer or primary window is missing.
+
+BRP needs app frames to process requests. Use a continuously updating runner/window
+mode when controlling an unattended game: reactive Winit modes can sleep until
+window input arrives and are not awakened by HTTP requests.

@@ -147,10 +147,10 @@ fn default_dt() -> f32 {
 }
 
 fn step(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let params: StepParams = serde_json::from_value(
-        params.ok_or_else(|| invalid_params("Expected { frames, dt_secs? }"))?,
-    )
-    .map_err(invalid_params)?;
+    let params = params
+        .filter(Value::is_object)
+        .ok_or_else(|| invalid_params("Expected an object { frames, dt_secs? }"))?;
+    let params: StepParams = serde_json::from_value(params).map_err(invalid_params)?;
     // Bound the amount of fixed-update work one frame can request.
     if !params.dt_secs.is_finite() || params.dt_secs <= 0.0 || params.dt_secs > 1.0 {
         return Err(invalid_params("dt_secs must be finite and in (0, 1]"));

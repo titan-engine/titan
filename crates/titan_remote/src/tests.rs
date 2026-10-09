@@ -106,7 +106,12 @@ fn default_delta_zero_steps_overlap_and_cancellation() {
     call(&mut app, "titan.step", Some(json!({"frames":0}))).unwrap();
     assert!(app.world().resource::<Time<Virtual>>().is_paused());
     call(&mut app, "titan.step", Some(json!({"frames":3}))).unwrap();
-    assert!(call(&mut app, "titan.step", Some(json!({"frames":1}))).is_err());
+    assert_eq!(
+        call(&mut app, "titan.step", Some(json!({"frames":1})))
+            .unwrap_err()
+            .code,
+        STEP_IN_PROGRESS
+    );
     app.update();
     assert_eq!(
         app.world().resource::<Time<Virtual>>().delta(),
@@ -132,6 +137,7 @@ fn invalid_parameters_leave_state_unchanged() {
         Some(json!({})),
         Some(json!({"frames":-1})),
         Some(json!({"frames":1.5})),
+        Some(json!([1, 0.1])),
         Some(json!({"frames":4294967296_u64})),
         Some(json!({"frames":1,"dt_secs":0})),
         Some(json!({"frames":1,"dt_secs":-0.1})),

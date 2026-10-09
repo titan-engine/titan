@@ -56,20 +56,20 @@ use bevy_window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// The method name for queueing a screenshot.
-pub const SCREENSHOT_METHOD: &str = "titan.screenshot";
+/// The method name for queuing a screenshot.
+const SCREENSHOT_METHOD: &str = "titan.screenshot";
 
 /// The method name for polling a screenshot queued with [`SCREENSHOT_METHOD`].
-pub const SCREENSHOT_STATUS_METHOD: &str = "titan.screenshot_status";
+const SCREENSHOT_STATUS_METHOD: &str = "titan.screenshot_status";
 
 /// The most screenshot jobs tracked at once, finished or not.
-pub const MAX_JOBS: usize = 64;
+const MAX_JOBS: usize = 64;
 
 /// How long a job may take, from request to file on disk, before it fails.
-pub const TIMEOUT: Duration = Duration::from_secs(30);
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How long a finished job stays available to `titan.screenshot_status`.
-pub const RETENTION: Duration = Duration::from_secs(300);
+const RETENTION: Duration = Duration::from_secs(300);
 
 /// Registers the screenshot methods and the systems that drive them.
 ///
@@ -454,6 +454,9 @@ fn complete_png(path: &Path) -> io::Result<()> {
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(params: Value) -> Result<T, BrpError> {
+    if !params.is_object() {
+        return Err(invalid_params("Expected an object for params"));
+    }
     serde_json::from_value(params).map_err(|e| invalid_params(e.to_string()))
 }
 
@@ -663,6 +666,8 @@ mod tests {
             json!({ "path": dir.path().join("missing/shot.png") }),
             json!({ "path": 3 }),
             json!({ "unknown": true }),
+            json!([]),
+            json!(["shot.png"]),
         ] {
             let error = call(&mut app, SCREENSHOT_METHOD, Some(params.clone())).unwrap_err();
             assert_eq!(error.code, error_codes::INVALID_PARAMS, "{params}");

@@ -392,7 +392,6 @@ fn polling_status_counts_down_over_http() {
         3,
         "a polling request's own frame is a stepped frame"
     );
-    // The poll in frame `target - 3` ran while paused state was lifted for the step.
     assert_eq!(harness.ok("titan.status", None)["pending_steps"], 2);
     assert_eq!(harness.ok("titan.status", None)["pending_steps"], 1);
     let done = harness.ok("titan.status", None);
@@ -435,6 +434,7 @@ fn invalid_params_return_invalid_params_and_change_nothing() {
         None,
         Some(json!({})),
         Some(json!([1, 2])),
+        Some(json!([1, 0.1])),
         Some(json!({ "frames": -1 })),
         Some(json!({ "frames": 1.5 })),
         Some(json!({ "frames": "3" })),
@@ -571,7 +571,9 @@ mod screenshot {
         for params in [
             json!({ "unexpected": true }),
             json!({ "path": 5 }),
+            json!("shot.png"),
             json!([]),
+            json!(["shot.png"]),
         ] {
             let error = harness.call("titan.screenshot", Some(params)).unwrap_err();
             assert_eq!(error.code, i64::from(error_codes::INVALID_PARAMS));
