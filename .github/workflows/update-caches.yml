@@ -97,7 +97,7 @@ jobs:
             toolchain: stable
             target: aarch64-linux-android
             command: |
-              cargo install cargo-ndk
+              cargo install --force cargo-ndk
               cargo ndk -t arm64-v8a -P 26 -o android_example/app/src/main/jniLibs build --package bevy_mobile_example
           # validation-jobs.yml / build-and-install-on-iOS builds through Xcode, no shared build cache
           - os: macos-14
@@ -112,11 +112,13 @@ jobs:
           echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Checkout main branch
+      # Use the dispatched revision so fixes can be verified before merging.
+      # Push and scheduled runs still build main.
+      - name: Checkout workflow revision
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ github.repository }}
-          ref: "main"
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - uses: ./.github/actions/install-rust
@@ -140,14 +142,15 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
-          lookup-only: true
+          # Manual runs restore caches but still build to validate the selected revision.
+          lookup-only: ${{ github.event_name != 'workflow_dispatch' }}
 
       - name: Fetch Rust dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch'
         run: cargo fetch
 
       - name: Install Linux dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch'
         uses: ./.github/actions/install-linux-deps
         with:
           wayland: true
@@ -157,16 +160,16 @@ jobs:
 
       # Build Bevy for the dev profile, used by check, doc, ...
       - name: Build dev cache
-        if: steps.cache.outputs.cache-hit != 'true' && matrix.target == ''
+        if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile dev --package bevy
 
       # Build Bevy for the test profile, used by test
       - name: Build test cache
-        if: steps.cache.outputs.cache-hit != 'true' && matrix.target == ''
+        if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile test --package bevy
 
       - name: Build cross-target cache
-        if: steps.cache.outputs.cache-hit != 'true' && matrix.command != ''
+        if: matrix.command != '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: ${{ matrix.command }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || env.RUSTFLAGS }}
