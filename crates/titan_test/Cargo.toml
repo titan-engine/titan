@@ -1,0 +1,46 @@
+[package]
+name = "titan_test"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Deterministic, headless gameplay tests for Titan and Bevy"
+repository = "https://github.com/titan-engine/titan"
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "titan", "testing", "gamedev"]
+categories = ["game-development", "development-tools::testing"]
+
+[dependencies]
+bevy_app = { path = "../bevy_app", version = "0.20.0", default-features = false, features = [
+  "std",
+  "error_panic_hook",
+] }
+bevy_diagnostic = { path = "../bevy_diagnostic", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", default-features = false, features = [
+  "std",
+  "backtrace",
+] }
+bevy_input = { path = "../bevy_input", version = "0.20.0", default-features = false, features = [
+  "std",
+  "keyboard",
+  "mouse",
+  "serialize",
+] }
+bevy_state = { path = "../bevy_state", version = "0.20.0", default-features = false, features = [
+  "std",
+  "bevy_app",
+  "bevy_reflect",
+] }
+bevy_time = { path = "../bevy_time", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_transform = { path = "../bevy_transform", version = "0.20.0", default-features = false, features = [
+  "std",
+  "bevy-support",
+] }
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true
