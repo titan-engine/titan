@@ -234,6 +234,13 @@ impl ScreenshotDestination {
         #[cfg(windows)]
         let file = {
             use std::os::windows::fs::OpenOptionsExt;
+            // Validate the pinned parent on its handle, not through a racy
+            // path lookup, before opening the published leaf.
+            let metadata = self.directory.metadata()?;
+            reject_reparse_point(&metadata)?;
+            if !metadata.is_dir() {
+                return Err(io::Error::other("screenshot parent is not a directory"));
+            }
             // FILE_FLAG_OPEN_REPARSE_POINT (0x00200000) opens the link itself,
             // rather than its target, even if swapped in just before this call.
             // Do not share DELETE while the file's metadata/bytes are inspected.
