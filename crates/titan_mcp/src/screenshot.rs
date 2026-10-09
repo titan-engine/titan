@@ -8,8 +8,8 @@
 //!    once it decodes. Any other returned path is rejected. If the method
 //!    returns a `token` instead of a `path`, `titan.screenshot_status` is polled
 //!    with it. The game writes in place (`File::create`), so our handle sees it.
-//! 2. **Fallback:** spawn a BRP `Screenshot` entity and watch for
-//!    `ScreenshotCaptured` with `world.observe+watch`. The whole image arrives as
+//! 2. **Fallback:** spawn an empty BRP entity, register a `ScreenshotCaptured`
+//!    observer, then insert `Screenshot`. The whole image arrives as
 //!    reflected JSON (slow and large), which we decode and encode as PNG here
 //!    without depending on `bevy_render` or `bevy_image`.
 //!
@@ -21,18 +21,20 @@ use std::{
     collections::HashSet,
     fs,
     io::{BufRead, BufReader, Cursor, Read, Seek, SeekFrom},
+    sync::mpsc::{self, Receiver, TryRecvError},
     thread,
     time::Instant,
 };
 
 use base64::Engine as _;
-use bevy_ecs::entity::Entity;
+use bevy_ecs::{entity::Entity, observer::ObservedBy};
 use bevy_platform::collections::HashMap;
 use bevy_remote::{
     builtin_methods::{
-        BrpDespawnEntityParams, BrpObserveParams, BrpSpawnEntityParams, BrpSpawnEntityResponse,
-        BRP_DESPAWN_COMPONENTS_METHOD, BRP_OBSERVE_METHOD, BRP_SPAWN_ENTITY_METHOD,
-        RPC_DISCOVER_METHOD,
+        BrpDespawnEntityParams, BrpInsertComponentsParams, BrpListComponentsParams,
+        BrpListComponentsResponse, BrpObserveParams, BrpSpawnEntityParams, BrpSpawnEntityResponse,
+        BRP_DESPAWN_COMPONENTS_METHOD, BRP_INSERT_COMPONENTS_METHOD, BRP_LIST_COMPONENTS_METHOD,
+        BRP_OBSERVE_METHOD, BRP_SPAWN_ENTITY_METHOD, RPC_DISCOVER_METHOD,
     },
     BrpError, BrpRequest,
 };
@@ -307,11 +309,9 @@ fn one() -> u32 {
 }
 
 fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String> {
+    // No capture may start until the entity-scoped observer is registered.
     let spawn = BrpSpawnEntityParams {
-        components: HashMap::from([(
-            SCREENSHOT_COMPONENT.to_owned(),
-            json!({ "Window": "Primary" }),
-        )]),
+        components: HashMap::default(),
     };
     let spawned = client
         .call_with_deadline(BRP_SPAWN_ENTITY_METHOD, Some(to_params(&spawn)?), deadline)
@@ -325,7 +325,7 @@ fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String
 
     // Bevy despawns the screenshot entity itself once captured. If we bail out
     // before that, despawn it so it doesn't linger.
-    let mut guard = DespawnGuard {
+    let guard = DespawnGuard {
         client,
         entity: Some(entity),
     };
@@ -333,17 +333,114 @@ fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String
         event: SCREENSHOT_CAPTURED_EVENT.to_owned(),
         entity: Some(entity),
     };
-    let image = watch(
-        client,
-        BRP_OBSERVE_METHOD,
-        to_params(&observe)?,
-        deadline,
-        MAX_OBSERVE_LINE_BYTES,
-        |events: Vec<CapturedEvent>| Ok(events.into_iter().next().map(|event| event.image)),
-    )?;
-    guard.entity = None;
+    let response = open_watch(client, BRP_OBSERVE_METHOD, to_params(&observe)?, deadline)?;
+    // Read concurrently so registration errors (including unknown event types)
+    // aren't hidden behind a readiness timeout. Joining the deadline-bounded
+    // worker on every exit prevents repeated failed captures accumulating idle
+    // readers. ureq cannot cancel an in-flight body read, so an early failure
+    // may wait for the remaining budget, but entity cleanup starts immediately.
+    thread::scope(move |scope| {
+        let mut guard = guard;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let reader = thread::Builder::new()
+            .name("titan_mcp screenshot observer".to_owned())
+            .spawn_scoped(scope, move || {
+                let result = read_watch(
+                    response,
+                    BRP_OBSERVE_METHOD,
+                    deadline,
+                    MAX_OBSERVE_LINE_BYTES,
+                    |events: Vec<CapturedEvent>| {
+                        Ok(events.into_iter().next().map(|event| event.image))
+                    },
+                );
+                let _ = sender.send(result);
+            })
+            .map_err(|e| format!("couldn't start the screenshot observer reader: {e}"))?;
+        let result = (|| {
+            wait_for_observer(client, entity, &receiver, deadline)?;
+            client.call_with_deadline(
+                BRP_INSERT_COMPONENTS_METHOD,
+                Some(to_params(&BrpInsertComponentsParams {
+                    entity,
+                    components: HashMap::from([(
+                        SCREENSHOT_COMPONENT.to_owned(),
+                        json!({ "Window": "Primary" }),
+                    )]),
+                })?),
+                deadline,
+            )?;
+            let image = receiver
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .map_err(|_| timeout_error(BRP_OBSERVE_METHOD))??;
+            guard.entity = None;
+            Ok(image)
+        })();
+        drop(receiver);
+        drop(guard);
+        reader
+            .join()
+            .map_err(|_| "screenshot observer reader panicked".to_owned())?;
+        result.and_then(encode_png)
+    })
+}
 
-    encode_png(image)
+/// HTTP headers only prove that the watch was enqueued. `RemoteLast` runs
+/// `process_remote_requests` before `process_ongoing_watching_requests`, which
+/// creates the observer. Its deferred registration hook attaches `ObservedBy`
+/// and installs the event runner in one exclusive World operation. A later
+/// `list_components` request sees the marker only after that operation completes.
+/// This entity is fresh, so no unrelated observer can supply the marker.
+fn wait_for_observer(
+    client: &Client,
+    entity: Entity,
+    receiver: &Receiver<Result<ReflectedImage, String>>,
+    deadline: Instant,
+) -> Result<(), String> {
+    let params = to_params(&BrpListComponentsParams { entity })?;
+    loop {
+        check_registration_stream(receiver)?;
+        let result =
+            client.call_with_deadline(BRP_LIST_COMPONENTS_METHOD, Some(params.clone()), deadline);
+        // Prefer the server's typed registration error to a polling timeout.
+        check_registration_stream(receiver)?;
+        let components: BrpListComponentsResponse = serde_json::from_value(result?)
+            .map_err(|e| format!("unexpected {BRP_LIST_COMPONENTS_METHOD} result: {e}"))?;
+        if components
+            .iter()
+            .any(|name| name == core::any::type_name::<ObservedBy>())
+        {
+            return Ok(());
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(timeout_error("ScreenshotCaptured observer registration"));
+        }
+        // Unlike a fixed registration delay, polling only advances when ECS
+        // confirms readiness. Waiting on the channel also surfaces errors now.
+        match receiver.recv_timeout(POLL_INTERVAL.min(remaining)) {
+            Ok(result) => return registration_result(result),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BRP observer reader disconnected".to_owned());
+            }
+        }
+    }
+}
+
+fn check_registration_stream(
+    receiver: &Receiver<Result<ReflectedImage, String>>,
+) -> Result<(), String> {
+    match receiver.try_recv() {
+        Ok(result) => registration_result(result),
+        Err(TryRecvError::Empty) => Ok(()),
+        Err(TryRecvError::Disconnected) => Err("BRP observer reader disconnected".to_owned()),
+    }
+}
+
+fn registration_result(result: Result<ReflectedImage, String>) -> Result<(), String> {
+    result
+        .and_then(|_| Err("BRP received ScreenshotCaptured before inserting Screenshot".to_owned()))
 }
 
 struct DespawnGuard<'a> {
@@ -459,8 +556,23 @@ fn watch<T: DeserializeOwned, R>(
     params: Value,
     deadline: Instant,
     max_line: u64,
-    mut on_result: impl FnMut(T) -> Result<Option<R>, String>,
+    on_result: impl FnMut(T) -> Result<Option<R>, String>,
 ) -> Result<R, String> {
+    read_watch(
+        open_watch(client, method, params, deadline)?,
+        method,
+        deadline,
+        max_line,
+        on_result,
+    )
+}
+
+fn open_watch(
+    client: &Client,
+    method: &str,
+    params: Value,
+    deadline: Instant,
+) -> Result<ureq::http::Response<ureq::Body>, String> {
     let remaining = deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
         return Err(timeout_error(method));
@@ -489,6 +601,16 @@ fn watch<T: DeserializeOwned, R>(
         return Err(format!("BRP {method} returned HTTP {}", response.status()));
     }
 
+    Ok(response)
+}
+
+fn read_watch<T: DeserializeOwned, R>(
+    response: ureq::http::Response<ureq::Body>,
+    method: &str,
+    deadline: Instant,
+    max_line: u64,
+    mut on_result: impl FnMut(T) -> Result<Option<R>, String>,
+) -> Result<R, String> {
     let mut reader = BufReader::new(
         response
             .into_body()
@@ -571,7 +693,7 @@ mod tests {
         io::Write,
         net::{TcpListener, TcpStream},
         path::PathBuf,
-        sync::Mutex,
+        sync::{Condvar, Mutex},
     };
 
     /// What the stub BRP server sends back for one request.
@@ -579,6 +701,8 @@ mod tests {
         Json(Value),
         /// SSE `data:` frames, then hold the connection open for `hold`.
         Sse(Vec<Value>, Duration),
+        /// Send headers now, but emit success only when insertion fires.
+        SseOnInsert(Vec<Value>, Duration, Arc<(Mutex<bool>, Condvar)>),
         /// Sleep, then reply.
         Slow(Duration, Box<Reply>),
         /// A JSON-RPC error.
@@ -632,6 +756,24 @@ mod tests {
             thread::sleep(delay);
             reply = *next;
         }
+        if let Reply::SseOnInsert(frames, hold, inserted) = reply {
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+            );
+            let _ = stream.flush();
+            let (flag, wake) = &*inserted;
+            let ready = wake
+                .wait_timeout_while(flag.lock().unwrap(), Duration::from_secs(2), |flag| !*flag)
+                .unwrap();
+            assert!(*ready.0, "Screenshot was never inserted");
+            for frame in frames {
+                let _ = write!(stream, "data: {frame}\n\n");
+            }
+            let _ = stream.flush();
+            thread::sleep(hold);
+            return;
+        }
         let envelope = match reply {
             Reply::Json(result) => {
                 json!({ "jsonrpc": "2.0", "id": request["id"], "result": result })
@@ -651,7 +793,7 @@ mod tests {
                 thread::sleep(hold);
                 return;
             }
-            Reply::Slow(..) => unreachable!("unwrapped above"),
+            Reply::Slow(..) | Reply::SseOnInsert(..) => unreachable!("unwrapped above"),
         };
         let body = envelope.to_string();
         let _ = write!(
@@ -659,6 +801,67 @@ mod tests {
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );
+    }
+
+    /// Simulates watch headers preceding observer registration. The first list
+    /// sees no observer, the second sees the marker. Capture completion occurs
+    /// immediately upon insertion (which also despawns the entity), never upon
+    /// spawning or opening the watch.
+    fn fallback_stub(
+        handler: impl Fn(&str, &Value) -> Reply + Send + Sync + 'static,
+    ) -> (Client, Calls) {
+        let inserted = Arc::new((Mutex::new(false), Condvar::new()));
+        let polls = Mutex::new(0);
+        let live_entity = Mutex::new(None);
+        stub(move |method, params| match method {
+            BRP_SPAWN_ENTITY_METHOD => {
+                assert_eq!(params["components"], json!({}));
+                let reply = handler(method, params);
+                if let Reply::Json(result) = &reply {
+                    *live_entity.lock().unwrap() = Some(result["entity"].clone());
+                }
+                reply
+            }
+            BRP_LIST_COMPONENTS_METHOD => {
+                assert_eq!(
+                    live_entity.lock().unwrap().as_ref(),
+                    Some(&params["entity"])
+                );
+                let mut polls = polls.lock().unwrap();
+                *polls += 1;
+                Reply::Json(if *polls == 1 {
+                    json!([])
+                } else {
+                    json!([core::any::type_name::<ObservedBy>()])
+                })
+            }
+            BRP_INSERT_COMPONENTS_METHOD => {
+                assert!(*polls.lock().unwrap() >= 2, "observer not registered yet");
+                assert_eq!(
+                    params["components"][SCREENSHOT_COMPONENT]["Window"],
+                    "Primary"
+                );
+                // A maximally fast game captures and despawns in the INSERT
+                // frame. No later readiness query can rescue a missed event.
+                assert_eq!(
+                    live_entity.lock().unwrap().take(),
+                    Some(params["entity"].clone())
+                );
+                let (flag, wake) = &*inserted;
+                *flag.lock().unwrap() = true;
+                wake.notify_one();
+                Reply::Json(Value::Null)
+            }
+            _ => match handler(method, params) {
+                Reply::Sse(frames, hold)
+                    if method == BRP_OBSERVE_METHOD
+                        && frames.iter().any(|frame| frame.get("result").is_some()) =>
+                {
+                    Reply::SseOnInsert(frames, hold, inserted.clone())
+                }
+                reply => reply,
+            },
+        })
     }
 
     fn discover(methods: &[&str]) -> Reply {
@@ -786,13 +989,10 @@ mod tests {
 
     #[test]
     fn fallback_decodes_reflected_bgra_image() {
-        let (client, calls) = stub(|method, params| match method {
+        let (client, calls) = fallback_stub(|method, params| match method {
             RPC_DISCOVER_METHOD => discover(&[BRP_SPAWN_ENTITY_METHOD, BRP_OBSERVE_METHOD]),
             BRP_SPAWN_ENTITY_METHOD => {
-                assert_eq!(
-                    params["components"][SCREENSHOT_COMPONENT]["Window"],
-                    "Primary"
-                );
+                assert_eq!(params["components"], json!({}));
                 Reply::Json(json!({ "entity": 42 }))
             }
             BRP_OBSERVE_METHOD => {
@@ -835,14 +1035,17 @@ mod tests {
             [
                 RPC_DISCOVER_METHOD,
                 BRP_SPAWN_ENTITY_METHOD,
-                BRP_OBSERVE_METHOD
+                BRP_OBSERVE_METHOD,
+                BRP_LIST_COMPONENTS_METHOD,
+                BRP_LIST_COMPONENTS_METHOD,
+                BRP_INSERT_COMPONENTS_METHOD
             ]
         );
     }
 
     #[test]
     fn fallback_errors_and_timeouts_despawn_the_entity() {
-        let (client, calls) = stub(|method, _| match method {
+        let (client, calls) = fallback_stub(|method, _| match method {
             RPC_DISCOVER_METHOD => discover(&[]),
             BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 5 })),
             BRP_OBSERVE_METHOD => Reply::Sse(
@@ -862,7 +1065,7 @@ mod tests {
         drop(calls);
 
         // A stream that never delivers must time out promptly and clean up.
-        let (client, calls) = stub(|method, _| match method {
+        let (client, calls) = fallback_stub(|method, _| match method {
             RPC_DISCOVER_METHOD => discover(&[]),
             BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 6 })),
             BRP_OBSERVE_METHOD => Reply::Sse(vec![], Duration::from_secs(10)),
@@ -881,7 +1084,7 @@ mod tests {
 
     #[test]
     fn titan_failure_falls_back_and_reports_both() {
-        let (client, _) = stub(|method, _| match method {
+        let (client, _) = fallback_stub(|method, _| match method {
             RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
             TITAN_SCREENSHOT => Reply::Json(json!({ "unexpected": true })),
             BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 1 })),
@@ -899,6 +1102,154 @@ mod tests {
         let err = capture(&client, &json!({})).unwrap_err();
         assert!(err.contains("neither a `path`"), "{err}");
         assert!(err.contains("pixel buffer is 3 bytes"), "{err}");
+    }
+
+    /// Exercise the real reflection observer hook and raw component metadata,
+    /// without a GPU or window. Queuing the watch is not readiness.
+    #[test]
+    fn observed_by_is_a_real_registration_barrier() {
+        use bevy_ecs::{
+            prelude::{EntityEvent, World},
+            reflect::{AppTypeRegistry, ReflectEvent},
+            system::In,
+        };
+        use bevy_reflect::{Reflect, TypePath};
+        use bevy_remote::builtin_methods::{
+            process_remote_list_components_request, process_remote_observe_watching_request,
+        };
+
+        #[derive(EntityEvent, Reflect)]
+        #[reflect(Event)]
+        struct Captured {
+            entity: Entity,
+        }
+
+        let registry = AppTypeRegistry::default();
+        registry.write().register::<Captured>();
+        let mut world = World::new();
+        world.insert_resource(registry);
+        let entity = world.spawn_empty().id();
+        let list = Some(to_params(&BrpListComponentsParams { entity }).unwrap());
+        let observe = Some(
+            to_params(&BrpObserveParams {
+                event: Captured::type_path().to_owned(),
+                entity: Some(entity),
+            })
+            .unwrap(),
+        );
+        assert_eq!(
+            process_remote_list_components_request(In(list.clone()), &world).unwrap(),
+            json!([])
+        );
+        // Model the pending watch before process_ongoing_watching_requests
+        // actually invokes its handler. Run the real handler on application.
+        let queued = observe.clone();
+        world.commands().queue(move |world: &mut World| {
+            assert_eq!(
+                process_remote_observe_watching_request(In(queued), world).unwrap(),
+                None
+            );
+        });
+        assert!(!world.entity(entity).contains::<ObservedBy>());
+        world.flush();
+        let components = process_remote_list_components_request(In(list), &world).unwrap();
+        assert!(components
+            .as_array()
+            .unwrap()
+            .contains(&json!(core::any::type_name::<ObservedBy>())));
+        // ObservedBy needn't be reflected: listing uses ECS component metadata.
+        assert!(world
+            .resource::<AppTypeRegistry>()
+            .read()
+            .get(core::any::TypeId::of::<ObservedBy>())
+            .is_none());
+        // Simulate capture completion and despawn in the insertion frame.
+        world.trigger(Captured { entity });
+        world.despawn(entity);
+        let captured = process_remote_observe_watching_request(In(observe), &mut world)
+            .unwrap()
+            .unwrap();
+        assert_eq!(captured, json!([{ "entity": entity }]));
+    }
+
+    #[test]
+    fn insertion_failure_cleans_up_and_joins_its_deadline_bounded_reader() {
+        let (client, calls) = stub(|method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[]),
+            BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 9 })),
+            BRP_OBSERVE_METHOD => Reply::Sse(vec![], Duration::from_secs(2)),
+            BRP_LIST_COMPONENTS_METHOD => {
+                Reply::Json(json!([core::any::type_name::<ObservedBy>()]))
+            }
+            BRP_INSERT_COMPONENTS_METHOD => Reply::Error("Screenshot type unavailable"),
+            BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
+            _ => panic!("unexpected {method}"),
+        });
+        let start = Instant::now();
+        let err = capture(&client, &json!({ "timeout_secs": 1 })).unwrap_err();
+        assert!(err.contains("-23402: Screenshot type unavailable"), "{err}");
+        // The stream stays open for two seconds, but its reader is joined at
+        // the one-second shared deadline. No reader survives this failed call.
+        assert!(start.elapsed() >= Duration::from_millis(900));
+        assert!(start.elapsed() < Duration::from_secs(3));
+        assert_eq!(
+            methods(&calls).last().unwrap(),
+            BRP_DESPAWN_COMPONENTS_METHOD
+        );
+    }
+
+    #[test]
+    fn registration_timeout_never_inserts_and_cleans_up() {
+        let (client, calls) = stub(|method, params| match method {
+            RPC_DISCOVER_METHOD => discover(&[]),
+            BRP_SPAWN_ENTITY_METHOD => {
+                assert_eq!(params["components"], json!({}));
+                Reply::Json(json!({ "entity": 7 }))
+            }
+            BRP_OBSERVE_METHOD => Reply::Sse(vec![], Duration::from_secs(2)),
+            BRP_LIST_COMPONENTS_METHOD => Reply::Json(json!([])),
+            BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
+            _ => panic!("unexpected {method}"),
+        });
+        let start = Instant::now();
+        let err = capture(&client, &json!({ "timeout_secs": 0.2 })).unwrap_err();
+        assert!(err.contains("timed out"), "{err}");
+        assert!(start.elapsed() < Duration::from_secs(1));
+        let methods = methods(&calls);
+        assert!(!methods
+            .iter()
+            .any(|method| method == BRP_INSERT_COMPONENTS_METHOD));
+        assert_eq!(methods.last().unwrap(), BRP_DESPAWN_COMPONENTS_METHOD);
+    }
+
+    #[test]
+    fn registration_error_is_not_hidden_by_polling() {
+        let (client, calls) = stub(|method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[]),
+            BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 8 })),
+            BRP_OBSERVE_METHOD => Reply::Slow(
+                Duration::from_millis(30),
+                Box::new(Reply::Sse(
+                    vec![json!({ "error": { "code": -23402, "message": "Unknown event type" } })],
+                    Duration::ZERO,
+                )),
+            ),
+            // A polling call is already in flight when registration fails.
+            BRP_LIST_COMPONENTS_METHOD => {
+                Reply::Slow(Duration::from_millis(60), Box::new(Reply::Json(json!([]))))
+            }
+            BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
+            _ => panic!("unexpected {method}"),
+        });
+        let err = capture(&client, &json!({ "timeout_secs": 0.5 })).unwrap_err();
+        assert!(err.contains("-23402: Unknown event type"), "{err}");
+        assert!(!methods(&calls)
+            .iter()
+            .any(|method| method == BRP_INSERT_COMPONENTS_METHOD));
+        assert_eq!(
+            methods(&calls).last().unwrap(),
+            BRP_DESPAWN_COMPONENTS_METHOD
+        );
     }
 
     #[test]

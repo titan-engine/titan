@@ -17,6 +17,7 @@ const WINDOW: &str = "bevy_window::window::Window";
 const PRIMARY_WINDOW: &str = "bevy_window::window::PrimaryWindow";
 const WINDOW_EVENT: &str = "bevy_window::event::WindowEvent";
 const KEYBOARD_INPUT: &str = "bevy_input::keyboard::KeyboardInput";
+const MOUSE_BUTTON_INPUT: &str = "bevy_input::mouse::MouseButtonInput";
 const POLL_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Returns the MCP tools and their input schemas (not a tools/list envelope).
@@ -665,13 +666,19 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     )?;
     separate_frames(client, has_status)?;
     let send = |state: &str| {
-        write_message(
-            client,
-            WINDOW_EVENT,
-            json!({"MouseButtonInput":{"button":button,"state":state,"window":window}}),
-        )
+        let value = json!({"button":button,"state":state,"window":window});
+        // BRP bypasses winit's fan-out. ButtonInput and raw mouse readers need
+        // the standalone message, while picking consumes the WindowEvent.
+        let input = write_message(client, MOUSE_BUTTON_INPUT, value.clone());
+        let aggregate = write_message(client, WINDOW_EVENT, json!({"MouseButtonInput":value}));
+        // Attempt both deliveries, including release if one consumer is unavailable.
+        input?;
+        aggregate
     };
-    send("Pressed")?;
+    if let Err(error) = send("Pressed") {
+        let _ = send("Released");
+        return Err(error);
+    }
     let barrier = separate_frames(client, has_status);
     let release = send("Released");
     barrier?;

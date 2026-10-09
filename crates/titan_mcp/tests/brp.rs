@@ -19,11 +19,12 @@ use bevy_ecs::{
 };
 use bevy_input::{
     keyboard::{KeyCode, KeyboardInput},
+    mouse::{MouseButton, MouseButtonInput},
     ButtonInput, InputPlugin,
 };
 use bevy_reflect::{Reflect, TypePath};
 use bevy_remote::{http::RemoteHttpPlugin, BrpResult, RemotePlugin};
-use bevy_window::{PrimaryWindow, Window};
+use bevy_window::{PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
 use titan_mcp::{client::Client, tools};
 
@@ -58,6 +59,36 @@ struct KeyState {
     releases: u32,
 }
 
+#[derive(Reflect)]
+struct MouseRecord {
+    button: String,
+    state: String,
+    window: u64,
+}
+
+impl From<&MouseButtonInput> for MouseRecord {
+    fn from(input: &MouseButtonInput) -> Self {
+        Self {
+            button: format!("{:?}", input.button),
+            state: format!("{:?}", input.state),
+            window: input.window.to_bits(),
+        }
+    }
+}
+
+#[derive(Resource, Reflect, Default)]
+#[reflect(Resource)]
+struct MouseState {
+    held: bool,
+    presses: u32,
+    releases: u32,
+    raw: Vec<MouseRecord>,
+    aggregate: Vec<MouseRecord>,
+    cursor_moves: u32,
+    cursor_x: f32,
+    cursor_y: f32,
+}
+
 mod first {
     use bevy_ecs::{prelude::*, reflect::ReflectComponent};
     use bevy_reflect::Reflect;
@@ -84,6 +115,31 @@ fn record_keys(input: Res<ButtonInput<KeyCode>>, mut state: ResMut<KeyState>) {
     state.held = input.pressed(KeyCode::KeyW);
     state.presses += u32::from(input.just_pressed(KeyCode::KeyW));
     state.releases += u32::from(input.just_released(KeyCode::KeyW));
+}
+
+fn record_mouse(
+    input: Res<ButtonInput<MouseButton>>,
+    mut raw: MessageReader<MouseButtonInput>,
+    mut aggregate: MessageReader<WindowEvent>,
+    mut state: ResMut<MouseState>,
+) {
+    state.held = input.pressed(MouseButton::Left) || input.pressed(MouseButton::Right);
+    for button in [MouseButton::Left, MouseButton::Right] {
+        state.presses += u32::from(input.just_pressed(button));
+        state.releases += u32::from(input.just_released(button));
+    }
+    state.raw.extend(raw.read().map(MouseRecord::from));
+    for event in aggregate.read() {
+        match event {
+            WindowEvent::MouseButtonInput(input) => state.aggregate.push(input.into()),
+            WindowEvent::CursorMoved(cursor) => {
+                state.cursor_moves += 1;
+                state.cursor_x = cursor.position.x;
+                state.cursor_y = cursor.position.y;
+            }
+            _ => {}
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -152,6 +208,11 @@ fn brp_fixture_process() {
         .register_type::<TestMarker>()
         .register_type::<TestSettings>()
         .register_type::<KeyState>()
+        .register_type::<MouseState>()
+        .register_type::<MouseRecord>()
+        .register_type::<MouseButtonInput>()
+        .register_type::<WindowEvent>()
+        .add_message::<WindowEvent>()
         .register_type::<first::Ambiguous>()
         .register_type::<second::Ambiguous>()
         .register_type::<KeyboardInput>()
@@ -159,7 +220,8 @@ fn brp_fixture_process() {
         .register_type::<PrimaryWindow>()
         .insert_resource(TestSettings { speed: 2.0 })
         .init_resource::<KeyState>()
-        .add_systems(Update, record_keys);
+        .init_resource::<MouseState>()
+        .add_systems(Update, (record_keys, record_mouse));
     app.world_mut().spawn(TestPosition { x: 1.0, y: 2.0 });
     app.world_mut()
         .spawn((TestPosition { x: 3.0, y: 4.0 }, TestMarker { value: 7 }));
@@ -422,6 +484,47 @@ fn send_key_changes_real_button_input() {
         json!({"key": "KeyW", "action": "tap", "window": window}),
     );
     eventually(|| state()["presses"] == 2 && state()["releases"] == 2 && state()["held"] == false);
+}
+
+#[test]
+fn click_updates_button_input_and_both_message_consumers() {
+    let fixture = Fixture::start(false);
+    let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    let state = || fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
+    for (index, button) in ["Left", "Right"].into_iter().enumerate() {
+        let mut args = json!({"x":8.5,"y":12.25});
+        if button == "Right" {
+            args["button"] = json!(button);
+            args["window"] = window.clone();
+        }
+        // First click exercises defaults and primary-window resolution.
+        fixture.tool("click", args);
+        let expected = index + 1;
+        eventually(|| {
+            let actual = state();
+            actual["presses"] == expected
+                && actual["releases"] == expected
+                && actual["raw"].as_array().unwrap().len() == expected * 2
+                && actual["aggregate"].as_array().unwrap().len() == expected * 2
+                && actual["held"] == false
+        });
+        let actual = state();
+        let records = json!([
+            {"button":button,"state":"Pressed","window":window},
+            {"button":button,"state":"Released","window":window}
+        ]);
+        for channel in ["raw", "aggregate"] {
+            assert_eq!(
+                json!(actual[channel].as_array().unwrap()[index * 2..].to_vec()),
+                records
+            );
+        }
+        assert_eq!(actual["cursor_moves"], expected);
+        assert_eq!(actual["cursor_x"], 8.5);
+        assert_eq!(actual["cursor_y"], 12.25);
+    }
 }
 
 #[test]

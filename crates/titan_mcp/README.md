@@ -31,7 +31,9 @@ BRP access. Custom components generally need `#[derive(Component, Reflect)]`,
 `#[reflect(Component)]`, and `app.register_type::<YourComponent>()`.
 Keyboard injection needs the keyboard input plugin and a registered
 `KeyboardInput` message. Mouse injection needs the usual window/input/picking
-plugins and registered `WindowEvent` messages.
+plugins and registered `MouseButtonInput` and `WindowEvent` messages. Clicks
+send standalone mouse-button messages for `ButtonInput`/raw readers as well as
+aggregate window messages for picking.
 
 For pause, resume, deterministic step, status, and fast file-based screenshots,
 also add the optional `TitanRemotePlugin` from `titan_remote` (#17). Without it,
@@ -111,7 +113,11 @@ and covers the BRP capture sequence; best-effort cleanup may take another
 100 ms. The fast path asks the game to write an existing `.png` file in place
 and reads through its retained file handle, never an arbitrary returned path.
 Atomic file replacement is not supported by that path; it may time out and
-fall back to BRP observation. The fallback needs reflected/registered
+fall back to BRP observation. The fallback observes a fresh empty entity,
+waits for ECS observer registration, then inserts `Screenshot`, so capture
+cannot race ahead of the observer. Its deadline-bounded reader is joined on
+all exits; an early capture failure may wait for the remaining budget rather
+than leave a background reader running. The fallback needs reflected/registered
 `Screenshot` and `ScreenshotCaptured` types and a renderer. On platforms that
 stop rendering occluded windows, keep the window visible. The file-based Titan
 path assumes the game and sidecar share the local filesystem.

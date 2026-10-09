@@ -28,6 +28,7 @@ bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
 bevy_input = { path = "../bevy_input", version = "0.20.0", features = [
   "keyboard",
+  "mouse",
   "bevy_reflect",
   "serialize",
 ] }
