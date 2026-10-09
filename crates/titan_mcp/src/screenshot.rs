@@ -1177,29 +1177,37 @@ mod tests {
         );
     }
 
-    /// Reproduce the old-handle bug using the server's `TempPath::persist` flow.
+    /// Exercise the server's `TempPath::persist` publication and cleanup flow.
+    /// Unix additionally proves that a retained handle sees the obsolete inode.
     #[test]
-    fn titan_atomic_publication_reads_the_new_inode_and_cleans_the_directory() {
-        let state = Arc::new(Mutex::new((PathBuf::new(), None, 0)));
+    fn titan_atomic_publication_reopens_the_file_and_cleans_the_directory() {
+        let state = Arc::new(Mutex::new((PathBuf::new(), None::<fs::File>, 0)));
         let seen = state.clone();
         let (client, calls) = stub(move |method, params| match method {
             RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT, TITAN_SCREENSHOT_STATUS]),
             TITAN_SCREENSHOT => {
                 let path = PathBuf::from(params["path"].as_str().unwrap());
                 assert!(!path.exists(), "MCP must not precreate the destination");
-                let old_handle = fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create_new(true)
-                    .open(&path)
-                    .unwrap();
+                #[cfg(unix)]
+                let old_handle = Some(
+                    fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create_new(true)
+                        .open(&path)
+                        .unwrap(),
+                );
+                // Windows MoveFileEx cannot replace an open destination. Do
+                // not manufacture that lock: real MCP leaves the leaf absent.
+                #[cfg(not(unix))]
+                let old_handle = None;
                 // Cleanup should remove server-side staging files too.
                 fs::write(
                     path.parent().unwrap().join("abandoned-staging.png"),
                     b"partial",
                 )
                 .unwrap();
-                *seen.lock().unwrap() = (path, Some(old_handle), 0);
+                *seen.lock().unwrap() = (path, old_handle, 0);
                 Reply::Json(json!({ "token": 123 }))
             }
             TITAN_SCREENSHOT_STATUS => {
@@ -1215,13 +1223,14 @@ mod tests {
                     .unwrap();
                 fs::write(staging.path(), tiny_png()).unwrap();
                 staging.into_temp_path().persist(&state.0).unwrap();
-                let mut old = state.1.take().unwrap();
-                let mut bytes = Vec::new();
-                old.read_to_end(&mut bytes).unwrap();
-                assert!(
-                    bytes.is_empty(),
-                    "the pre-publication handle sees the old inode"
-                );
+                if let Some(mut old) = state.1.take() {
+                    let mut bytes = Vec::new();
+                    old.read_to_end(&mut bytes).unwrap();
+                    assert!(
+                        bytes.is_empty(),
+                        "the pre-publication handle sees the old inode"
+                    );
+                }
                 Reply::Json(json!({ "pending": false, "path": state.0 }))
             }
             _ => panic!("unexpected {method}"),

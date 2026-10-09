@@ -29,8 +29,10 @@ fn main() {
 Components, resources, and input messages must be reflected and registered for
 BRP access. Custom components generally need `#[derive(Component, Reflect)]`,
 `#[reflect(Component)]`, and `app.register_type::<YourComponent>()`.
-Keyboard injection needs the keyboard input plugin and a registered
-`KeyboardInput` message. Mouse injection needs the usual window/input/picking
+Keyboard injection needs the keyboard input plugin and registered
+`KeyboardInput` and `WindowEvent` messages. Each phase is delivered to both
+standalone keyboard readers/`ButtonInput` and ordered window-event readers.
+Mouse injection needs the usual window/input/picking
 plugins and registered `CursorMoved`, `MouseButtonInput` and `WindowEvent`
 messages. Clicks first update the target window's physical cursor position,
 using its effective scale factor (including any override), then send standalone
@@ -128,6 +130,10 @@ HTTP responses, screenshot sizes, and waits are bounded. A game restart may
 invalidate previously obtained entity IDs; query again after reconnecting.
 
 Keyboard taps and clicks use frame barriers when `titan.status` is available.
+Each barrier's baseline and status polls share a three-second deadline; failed
+barriers still attempt releases after a delivered press. Partial press delivery
+also triggers best-effort release in both input channels. Individual release
+requests retain the usual bounded HTTP timeout, outside the barrier budget.
 Vanilla BRP has no frame barrier, so input phases use a best-effort 100 ms delay;
 a game updating slower than 10 Hz may need separately timed press/release calls.
 Titan's frame counter continues while paused and wraps at `u32::MAX`; input
@@ -189,7 +195,9 @@ The integration tests launch a real headless Bevy app in a child process with
 waiting on the fixture process releases the detached HTTP listener. Protocol
 tests pipe JSON through the built binary. Time-control tests use the real
 `TitanRemotePlugin` and verify actual virtual-time deltas, paused input, and
-counter rollover. The `remote-render` test feature enables real screenshot
+counter rollover. Controlled loopback HTTP tests stall baseline/poll responses
+at all three input barriers and verify the shared deadline and cleanup phases.
+The `remote-render` test feature enables real screenshot
 handlers with synthetic GPU readback: the server publishes the PNG atomically,
 and MCP returns its decoded pixels. CI runs these tests on Linux, Windows, and
 macOS. Renderer dependencies are dev-dependencies, not default sidecar runtime

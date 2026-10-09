@@ -54,12 +54,37 @@ struct TestSettings {
     speed: f32,
 }
 
+#[derive(Reflect)]
+struct KeyRecord {
+    key_code: String,
+    logical_key: String,
+    state: String,
+    text: Option<String>,
+    repeat: bool,
+    window: u64,
+}
+
+impl From<&KeyboardInput> for KeyRecord {
+    fn from(input: &KeyboardInput) -> Self {
+        Self {
+            key_code: format!("{:?}", input.key_code),
+            logical_key: format!("{:?}", input.logical_key),
+            state: format!("{:?}", input.state),
+            text: input.text.as_deref().map(str::to_owned),
+            repeat: input.repeat,
+            window: input.window.to_bits(),
+        }
+    }
+}
+
 #[derive(Resource, Reflect, Default)]
 #[reflect(Resource)]
 struct KeyState {
     held: bool,
     presses: u32,
     releases: u32,
+    raw: Vec<KeyRecord>,
+    aggregate: Vec<KeyRecord>,
 }
 
 #[derive(Reflect)]
@@ -122,10 +147,23 @@ mod second {
     }
 }
 
-fn record_keys(input: Res<ButtonInput<KeyCode>>, mut state: ResMut<KeyState>) {
+fn record_keys(
+    input: Res<ButtonInput<KeyCode>>,
+    mut raw: MessageReader<KeyboardInput>,
+    mut aggregate: MessageReader<WindowEvent>,
+    mut state: ResMut<KeyState>,
+) {
     state.held = input.pressed(KeyCode::KeyW);
     state.presses += u32::from(input.just_pressed(KeyCode::KeyW));
     state.releases += u32::from(input.just_released(KeyCode::KeyW));
+    state.raw.extend(raw.read().map(KeyRecord::from));
+    state.aggregate.extend(aggregate.read().filter_map(|event| {
+        if let WindowEvent::KeyboardInput(input) = event {
+            Some(input.into())
+        } else {
+            None
+        }
+    }));
 }
 
 fn record_mouse(
@@ -581,10 +619,13 @@ fn resource_crud_and_raw_brp_escape_hatch() {
 }
 
 #[test]
-fn send_key_changes_real_button_input() {
+fn send_key_updates_real_button_input_and_both_message_consumers() {
     let fixture = Fixture::start(false);
     let state = || fixture.tool("get_resource", json!({"resource": "KeyState"}))["value"].clone();
-    assert_eq!(state(), json!({"held": false, "presses": 0, "releases": 0}));
+    assert_eq!(
+        state(),
+        json!({"held": false, "presses": 0, "releases": 0, "raw": [], "aggregate": []})
+    );
     // Omitting the window exercises resolution of the reflected PrimaryWindow.
     fixture.tool("send_key", json!({"key": "KeyW", "action": "press"}));
     eventually(|| state()["held"] == true);
@@ -602,6 +643,29 @@ fn send_key_changes_real_button_input() {
         json!({"key": "KeyW", "action": "tap", "window": window}),
     );
     eventually(|| state()["presses"] == 2 && state()["releases"] == 2 && state()["held"] == false);
+    let observed = state();
+    let pressed = json!({"key_code":"KeyW","logical_key":"Character(\"w\")","state":"Pressed","text":"w","repeat":false,"window":window});
+    let mut released = pressed.clone();
+    released["state"] = json!("Released");
+    released["text"] = Value::Null;
+    assert_eq!(
+        observed["raw"],
+        json!([pressed, released, pressed, released])
+    );
+    assert_eq!(observed["aggregate"], observed["raw"]);
+
+    // Preserve explicit logical/text overrides identically in both channels.
+    fixture.tool(
+        "send_key",
+        json!({"key":"KeyW","window":window,"logical_key":{"Character":"λ"},"text":"typed λ"}),
+    );
+    eventually(|| state()["aggregate"].as_array().unwrap().len() == 6);
+    let observed = state();
+    assert_eq!(observed["aggregate"], observed["raw"]);
+    assert_eq!(observed["raw"][4]["logical_key"], "Character(\"λ\")");
+    assert_eq!(observed["raw"][4]["text"], "typed λ");
+    assert_eq!(observed["raw"][5]["state"], "Released");
+    assert_eq!(observed["raw"][5]["text"], Value::Null);
 }
 
 #[test]
@@ -982,7 +1046,11 @@ fn titan_input_barriers_work_while_real_virtual_time_is_paused() {
     let key = fixture.tool("get_resource", json!({"resource": "KeyState"}))["value"].clone();
     // No eventual fallback: real titan.status frame barriers must separate
     // press/release. This resource query observes the release's next PreUpdate.
-    assert_eq!(key, json!({"held": false, "presses": 1, "releases": 1}));
+    assert_eq!(key["held"], false);
+    assert_eq!(key["presses"], 1);
+    assert_eq!(key["releases"], 1);
+    assert_eq!(key["raw"].as_array().unwrap().len(), 2);
+    assert_eq!(key["aggregate"], key["raw"]);
 
     fixture.tool("click", json!({"x": 8.5, "y": 12.25}));
     let mouse = fixture.tool("get_resource", json!({"resource": "MouseState"}))["value"].clone();
@@ -1014,23 +1082,27 @@ fn titan_send_key_frame_barrier_crosses_u32_wrap_while_paused() {
         ["entity"]
         .clone();
     let frozen = fixture.time_trace();
-    // Explicit window avoids resolution requests. Discovery, press, then the
-    // barrier's first status each run one real update: the first status is MAX.
+    // Explicit window avoids resolution requests. Discovery, both press
+    // messages, then the first status each run one update: baseline is MAX.
     fixture
         .client
-        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 3})))
+        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 4})))
         .unwrap();
     fixture.tool(
         "send_key",
         json!({"key": "KeyW", "action": "tap", "window": window}),
     );
     let key = fixture.tool("get_resource", json!({"resource": "KeyState"}))["value"].clone();
-    assert_eq!(key, json!({"held": false, "presses": 1, "releases": 1}));
+    assert_eq!(key["held"], false);
+    assert_eq!(key["presses"], 1);
+    assert_eq!(key["releases"], 1);
+    assert_eq!(key["raw"].as_array().unwrap().len(), 2);
+    assert_eq!(key["aggregate"], key["raw"]);
     // Polls at zero and one satisfy wrapping_sub(MAX) >= 2. Ordinary or
     // saturating subtraction instead times out, even though input is updating.
     assert_eq!(
         paused_frame(&fixture.client.call("titan.status", None).unwrap()),
-        5
+        6
     );
     let after = fixture.time_trace();
     assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);

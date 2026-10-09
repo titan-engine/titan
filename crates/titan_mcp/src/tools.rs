@@ -565,12 +565,12 @@ fn separate_frames(client: &Client, has_status: bool) -> Result<(), String> {
         thread::sleep(Duration::from_millis(100));
         return Ok(());
     }
-    let status = client.call("titan.status", None)?;
-    let frame = parse_titan_status(&status)?.frame;
     let deadline = Instant::now() + Duration::from_secs(3);
+    let status = client.call_with_deadline("titan.status", None, deadline)?;
+    let frame = parse_titan_status(&status)?.frame;
     loop {
         thread::sleep(Duration::from_millis(10));
-        let status = client.call("titan.status", None)?;
+        let status = client.call_with_deadline("titan.status", None, deadline)?;
         let now = parse_titan_status(&status)?.frame;
         if two_frames_elapsed(frame, now) {
             return Ok(());
@@ -606,18 +606,27 @@ fn send_key(client: &Client, args: &Value) -> Result<Value, String> {
     }
     let has_status = action == "tap" && supports(&discover(client)?, "titan.status");
     let send = |state: &str| {
-        write_message(
-            client,
-            KEYBOARD_INPUT,
-            json!({
-                "key_code":key,"logical_key":logical,"state":state,"text":if state == "Pressed" { text.clone() } else { Value::Null },"repeat":false,"window":window
-            }),
-        )
+        let value = json!({
+            "key_code":key,"logical_key":logical,"state":state,"text":if state == "Pressed" { text.clone() } else { Value::Null },"repeat":false,"window":window
+        });
+        // Match winit's fan-out: ButtonInput/raw readers and ordered window
+        // readers must both receive each keyboard phase. Attempt both even if
+        // one delivery fails, especially when releasing a partially sent press.
+        let input = write_message(client, KEYBOARD_INPUT, value.clone());
+        let aggregate = write_message(client, WINDOW_EVENT, json!({"KeyboardInput":value}));
+        input?;
+        aggregate
     };
     if action == "release" {
         return send("Released");
     }
-    let result = send("Pressed")?;
+    let result = match send("Pressed") {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = send("Released");
+            return Err(error);
+        }
+    };
     if action == "tap" {
         let barrier = separate_frames(client, has_status);
         // Even if the barrier fails, release the key to avoid leaving it held.
