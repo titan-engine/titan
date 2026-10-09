@@ -635,7 +635,9 @@ fn track_location_hint_points_to_the_last_component_mutation() {
             hint.component == Position::type_path() && hint.entity.as_deref() == Some(&entity)
         })
         .expect("the differing reflected component should carry changed_by information");
-    assert!(hint.location.contains("tests/check.rs:"), "{hint:?}");
+    // rustc records platform-native separators in the source location.
+    let normalized_location = hint.location.replace('\\', "/");
+    assert!(normalized_location.contains("tests/check.rs:"), "{hint:?}");
     // Distinguish the game's mutation from the component's spawn location.
     let mutation_line = include_str!("check.rs")
         .lines()
