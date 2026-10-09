@@ -1,6 +1,11 @@
 //! Windowed presentation for the demo; all gameplay lives in the library.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::{
+    env,
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use bevy::{
     app::AppExit,
@@ -23,7 +28,7 @@ struct Capture {
     frames: u32,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<AppExit, Box<dyn Error>> {
     let mut level = Level::demo();
     let mut capture = Capture::default();
     let mut args = env::args().skip(1);
@@ -45,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    App::new()
+    Ok(App::new()
         .insert_resource(level)
         .insert_resource(capture)
         .insert_resource(Time::<Fixed>::from_hz(FIXED_HZ))
@@ -65,8 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             human_actions.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
         )
         .add_systems(Update, (present_player, capture_frame))
-        .run();
-    Ok(())
+        .run())
 }
 
 // Input is just an adapter. Pending look survives frames with no fixed tick and
@@ -80,6 +84,7 @@ fn human_actions(
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut actions: ResMut<GameplayActions>,
 ) {
+    let was_locked = cursor.grab_mode == CursorGrabMode::Locked;
     if keys.just_pressed(KeyCode::Escape) || !window.focused {
         cursor.visible = true;
         cursor.grab_mode = CursorGrabMode::None;
@@ -101,7 +106,9 @@ fn human_actions(
         axis(KeyCode::ArrowLeft, KeyCode::ArrowRight),
         axis(KeyCode::ArrowUp, KeyCode::ArrowDown),
     ) * (1.8 * time.delta_secs());
-    if cursor.grab_mode == CursorGrabMode::Locked {
+    // The activation frame may include motion from before the click or from
+    // the OS warping the pointer into the grab. Start consuming next frame.
+    if was_locked && cursor.grab_mode == CursorGrabMode::Locked {
         actions.look_delta -= motion.delta * 0.0025;
     }
 }
@@ -240,6 +247,24 @@ fn present_player(player: Res<PlayerState>, mut camera: Single<&mut Transform, W
     camera.rotation = Quat::from_euler(EulerRot::YXZ, player.yaw, player.pitch, 0.0);
 }
 
+/// Save a captured image, preserving failures in the process exit status.
+fn capture_exit(image: &Image, path: &Path) -> AppExit {
+    let save = || -> Result<(), Box<dyn Error>> {
+        image.clone().try_into_dynamic()?.to_rgb8().save(path)?;
+        Ok(())
+    };
+    match save() {
+        Ok(()) => {
+            info!("Screenshot saved to {}", path.display());
+            AppExit::Success
+        }
+        Err(error) => {
+            error!("Cannot save screenshot to {}: {error}", path.display());
+            AppExit::error()
+        }
+    }
+}
+
 fn capture_frame(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
@@ -249,18 +274,94 @@ fn capture_frame(
     if capture.frames == 120
         && let Some(path) = capture.path.take()
     {
-        commands
-            .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(path))
-            .observe(
-                |_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
-                    exit.write(AppExit::Success);
-                },
-            );
+        commands.spawn(Screenshot::primary_window()).observe(
+            move |captured: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
+                exit.write(capture_exit(&captured.image, &path));
+            },
+        );
     }
     if keys.just_pressed(KeyCode::F12) {
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk("titan-doom.png"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mouse_grab_discards_free_cursor_motion_on_activation() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<ButtonInput<MouseButton>>()
+            .init_resource::<AccumulatedMouseMotion>()
+            .init_resource::<Time>()
+            .init_resource::<GameplayActions>()
+            .add_systems(Update, human_actions);
+        let window = app
+            .world_mut()
+            .spawn((
+                Window {
+                    focused: true,
+                    ..default()
+                },
+                CursorOptions::default(),
+                PrimaryWindow,
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.world_mut()
+            .resource_mut::<AccumulatedMouseMotion>()
+            .delta = Vec2::new(100.0, 50.0);
+        app.update();
+        assert_eq!(
+            app.world().resource::<GameplayActions>().look_delta,
+            Vec2::ZERO
+        );
+        assert_eq!(
+            app.world().get::<CursorOptions>(window).unwrap().grab_mode,
+            CursorGrabMode::Locked
+        );
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<AccumulatedMouseMotion>()
+            .delta = Vec2::new(2.0, 3.0);
+        app.update();
+        let look = app.world().resource::<GameplayActions>().look_delta;
+        assert!(look.distance(Vec2::new(-0.005, -0.0075)) < 0.000001);
+
+        app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
+        app.update();
+        assert_eq!(
+            app.world().resource::<GameplayActions>().look_delta,
+            Vec2::ZERO
+        );
+        assert_eq!(
+            app.world().get::<CursorOptions>(window).unwrap().grab_mode,
+            CursorGrabMode::None
+        );
+    }
+
+    #[test]
+    fn automatic_capture_reports_write_and_conversion_failures() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("capture.png");
+        let image = placeholder_texture(false);
+        assert_eq!(capture_exit(&image, &path), AppExit::Success);
+        assert!(fs::read(&path).unwrap().starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(capture_exit(&image, &directory.path().join("missing/capture.png")).is_error());
+        assert!(capture_exit(&image, &directory.path().join("capture.unsupported")).is_error());
+        let uninitialized = Image {
+            data: None,
+            ..default()
+        };
+        assert!(capture_exit(&uninitialized, &path).is_error());
     }
 }

@@ -43,6 +43,7 @@ ron = "0.12"
 
 [dev-dependencies]
 titan_test = { path = "../../crates/titan_test" }
+tempfile = "3"
 
 [[bin]]
 name = "titan_doom"

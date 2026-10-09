@@ -35,8 +35,10 @@ cargo run -p titan_doom -- --level demos/doom/levels/industrial.ron
 cargo run -p titan_doom -- --capture /tmp/titan-doom.png
 ```
 
-`--capture` requests a screenshot after 120 presentation frames and exits once
-captured. Allow the window to render; this is not a headless screenshot command.
+`--capture` requests a screenshot after 120 presentation frames and exits only
+with success after the image is saved. Conversion errors, unsupported file
+extensions, or write failures produce a nonzero exit status and a diagnostic.
+Allow the window to render; this is not a headless screenshot command.
 The committed image below was captured from the running macOS/Metal build and
 visually checked for floor/wall textures, perspective, and controls. There is
 no before image because this is a new demo. The textures are original procedural
@@ -163,6 +165,10 @@ large-displacement wall tunneling, diagonal/analog speed, aiming and look
 consumption, non-finite actions, malformed levels, and stable identity despite
 unrelated ECS entity allocation. CI tests the no-default-feature combination
 explicitly; workspace CI covers the rendered build.
+
+`cargo test -p titan_doom --bin titan_doom` additionally checks mouse-grab
+activation/focus loss and automatic screenshot success/failure handling without
+opening a window or creating a GPU device (rendering dependencies are compiled).
 
 For presentation changes, also run the windowed demo and inspect a fresh capture.
 The compiler and headless tests cannot establish that a rendered view is correct.
