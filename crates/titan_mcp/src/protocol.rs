@@ -127,7 +127,9 @@ fn handle(client: &Client, request: Value, initialized: &mut bool) -> Option<Val
                 Ok(result) => {
                     json!({"content":[{"type":"text","text":compact(result)}],"isError":false})
                 }
-                Err(message) => json!({"content":[{"type":"text","text":message}],"isError":true}),
+                Err(message) => {
+                    json!({"content":[{"type":"text","text":compact_error(message)}],"isError":true})
+                }
             }
         }
         _ => {
@@ -143,6 +145,30 @@ fn handle(client: &Client, request: Value, initialized: &mut bool) -> Option<Val
 
 fn error(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
+}
+
+// Keep small errors readable, and retain diagnostic prefixes for large errors.
+// Measure the encoded metadata too: control characters can expand when escaped.
+fn compact_error(message: String) -> String {
+    if message.len() <= MAX_TEXT_BYTES {
+        return message;
+    }
+    let mut end = MAX_TEXT_BYTES / 2;
+    loop {
+        while !message.is_char_boundary(end) {
+            end -= 1;
+        }
+        let bounded = json!({
+            "error_prefix": &message[..end],
+            "truncated": true,
+            "omitted_bytes": message.len() - end,
+            "note": "Error exceeds the text limit; prefix retained. Use exact type paths or more specific parameters, or inspect the game logs for the full diagnostic."
+        }).to_string();
+        if bounded.len() <= MAX_TEXT_BYTES {
+            return bounded;
+        }
+        end /= 2;
+    }
 }
 
 // Keep structured JSON valid rather than slicing a string in the middle of a value.
@@ -203,6 +229,27 @@ mod tests {
         assert_eq!(responses[1]["error"]["code"], -32700);
         assert_eq!(responses[2]["id"], 7);
         assert_eq!(responses[2]["result"], json!({}));
+    }
+
+    #[test]
+    fn large_errors_preserve_bounded_diagnostics_and_utf8() {
+        let small = "BRP custom.method error -23402: actionable diagnostic";
+        assert_eq!(compact_error(small.to_owned()), small);
+        for tail in ["🦀", "\0\n\"\\🦀"] {
+            let full = format!("{small}: {}", tail.repeat(MAX_TEXT_BYTES));
+            let bounded = compact_error(full.clone());
+            assert!(bounded.len() <= MAX_TEXT_BYTES);
+            let metadata: Value = serde_json::from_str(&bounded).unwrap();
+            let prefix = metadata["error_prefix"].as_str().unwrap();
+            assert!(prefix.starts_with(small));
+            assert!(full.starts_with(prefix));
+            assert_eq!(metadata["truncated"], true);
+            assert_eq!(metadata["omitted_bytes"], full.len() - prefix.len());
+            assert!(metadata["note"]
+                .as_str()
+                .unwrap()
+                .contains("exact type paths"));
+        }
     }
 
     #[test]

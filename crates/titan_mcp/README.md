@@ -126,6 +126,8 @@ not an index extracted from a debug string.
 Text results are compact JSON. Large results are replaced with valid JSON
 containing truncation metadata, including omitted item counts for arrays and
 advice on narrowing queries. Errors include BRP codes/messages and next steps.
+Tool-error text is also capped at 24 KiB: oversized errors preserve a UTF-8-safe
+diagnostic prefix with explicit truncation/omitted-byte metadata and guidance.
 HTTP responses, screenshot sizes, and waits are bounded. A game restart may
 invalidate previously obtained entity IDs; query again after reconnecting.
 
