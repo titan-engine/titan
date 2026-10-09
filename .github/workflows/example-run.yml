@@ -20,6 +20,10 @@ env:
   # Keep in sync between all workflows
   RUSTFLAGS: "-C debuginfo=0 -D warnings"
 
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+
 jobs:
   run-examples-macos-metal:
     runs-on: macos-14
