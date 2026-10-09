@@ -1,9 +1,8 @@
 name: "Security Static Analysis"
 
 on:
+  merge_group:
   push:
-    branches: ["main"]
-  pull_request:
     branches: ["main"]
 
 concurrency:

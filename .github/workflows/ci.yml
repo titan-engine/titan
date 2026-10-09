@@ -24,13 +24,13 @@ concurrency:
   cancel-in-progress: ${{github.event_name == 'pull_request'}}
 
 jobs:
+  # Separate jobs preserve required check names even when skipped on PRs.
+  # Share steps with YAML aliases to keep the upstream build recipe in one place.
   build:
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: build (ubuntu-latest)
+    runs-on: ubuntu-latest
     timeout-minutes: 40
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -54,6 +54,20 @@ jobs:
       - name: Build & run tests
         # See tools/ci/src/main.rs for the commands this runs
         run: cargo run -p ci -- test
+
+  build-windows:
+    name: build (windows-latest)
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps: *build-steps
+
+  build-macos:
+    name: build (macos-latest)
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps: *build-steps
 
   ci:
     runs-on: ubuntu-latest
@@ -91,6 +105,7 @@ jobs:
         run: cargo run -p ci -- lints
 
   miri:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -126,10 +141,11 @@ jobs:
           # -Zmiri-disable-isolation is needed because our executor uses `fastrand` which accesses system time.
           MIRIFLAGS: -Zmiri-disable-isolation
 
+  # Run expensive checks independently to leave room in the 60-minute queue timeout.
   check-compiles:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -156,9 +172,9 @@ jobs:
         run: cargo run -p ci -- compile
 
   check-compiles-no-std:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -191,9 +207,9 @@ jobs:
         run: cargo check -p bevy --no-default-features --features default_no_std,web --target x86_64-unknown-none
 
   check-compiles-no-std-portable-atomic:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -221,9 +237,9 @@ jobs:
         run: cargo check -p bevy --no-default-features --features default_no_std --target thumbv6m-none-eabi
 
   check-compiles-no-std-examples:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -251,9 +267,9 @@ jobs:
         run: cd examples/no_std/library && cargo check --no-default-features --features libm,critical-section --target x86_64-unknown-none
 
   build-wasm:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: build
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -281,9 +297,9 @@ jobs:
         run: cargo check --target wasm32-unknown-unknown
 
   build-wasm-atomics:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: build
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -485,9 +501,9 @@ jobs:
           path: missing-features/
 
   msrv:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: build
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
