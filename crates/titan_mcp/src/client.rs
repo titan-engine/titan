@@ -1,11 +1,11 @@
 //! Bounded, loopback-only HTTP transport for the Bevy Remote Protocol.
 
-use std::{
-    io::Read,
+use core::{
     net::IpAddr,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
+use std::{io::Read, time::Instant};
 
 use bevy_remote::{BrpPayload, BrpRequest, BrpResponse};
 use serde_json::Value;
@@ -48,6 +48,20 @@ impl Client {
     /// Calls an instant BRP method and returns its JSON result.
     /// Streaming/watch methods require a separate streaming transport.
     pub fn call(&self, method: &str, params: Option<Value>) -> Result<Value, String> {
+        self.call_with_deadline(method, params, Instant::now() + Duration::from_secs(10))
+    }
+
+    /// Calls an instant BRP method within a shared operation deadline.
+    ///
+    /// Both connection and response-body reads use the remaining budget. No request
+    /// is started when the deadline has expired; a caller can share one deadline
+    /// across discovery, capture, and completion polling.
+    pub fn call_with_deadline(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        deadline: Instant,
+    ) -> Result<Value, String> {
         if method.ends_with("+watch") {
             return Err(format!(
                 "BRP {method} is a streaming method; brp_call supports instant methods only"
@@ -66,7 +80,17 @@ impl Client {
                 "BRP request for {method} exceeds the 1 MiB limit; send less data"
             ));
         }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(format!(
+                "BRP {method} timed out before request; operation deadline expired"
+            ));
+        }
         let mut response = self.agent.post(&self.url)
+            .config()
+            .timeout_global(Some(remaining))
+            .timeout_connect(Some(Duration::from_secs(2).min(remaining)))
+            .build()
             .header("Content-Type", "application/json")
             .send(body.as_slice())
             .map_err(|e| format!("BRP {method} at {} failed: {e}. Is the game running with RemotePlugin and RemoteHttpPlugin?", self.url))?;

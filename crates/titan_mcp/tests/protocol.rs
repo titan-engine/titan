@@ -77,6 +77,11 @@ fn initialize_list_call_and_notifications() {
     // A dead game must not kill the MCP connection or produce a protocol error.
     assert!(responses[2].get("result").is_some());
     assert!(responses[2]["result"]["content"].as_array().is_some());
+    assert_eq!(responses[2]["result"]["isError"], true);
+    assert!(responses[2]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("RemoteHttpPlugin"));
 }
 
 #[test]
@@ -87,11 +92,15 @@ fn malformed_params_unknown_tools_and_preinitialization() {
         json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing"}}),
         json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"query_entities","arguments":[]}}),
         json!({"jsonrpc":"2.0","id":4,"method":"unknown"}),
+        json!({"jsonrpc":"2.0","id":null,"method":"ping"}),
+        json!({"jsonrpc":"2.0","id":0.5,"method":"ping"}),
     ]);
     assert_eq!(responses[0]["error"]["code"], -32000);
     assert_eq!(responses[2]["error"]["code"], -32602);
     assert_eq!(responses[3]["error"]["code"], -32602);
     assert_eq!(responses[4]["error"]["code"], -32601);
+    assert_eq!(responses[5]["error"]["code"], -32600);
+    assert_eq!(responses[6]["error"]["code"], -32600);
 }
 
 #[test]

@@ -4,6 +4,8 @@
 //! methods enable time control and file-based screenshots. See the crate README for
 //! configuration, tools, and the localhost-only security model.
 
+extern crate alloc;
+
 pub mod client;
 pub mod protocol;
 pub mod screenshot;

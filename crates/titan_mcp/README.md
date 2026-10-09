@@ -102,7 +102,16 @@ advice on narrowing queries. Errors include BRP codes/messages and next steps.
 HTTP responses, screenshot sizes, and waits are bounded. A game restart may
 invalidate previously obtained entity IDs; query again after reconnecting.
 
-Screenshots use the primary window. The fallback needs reflected/registered
+Keyboard taps and clicks use frame barriers when `titan.status` is available.
+Vanilla BRP has no frame barrier, so input phases use a best-effort 100 ms delay;
+a game updating slower than 10 Hz may need separately timed press/release calls.
+
+Screenshots use the primary window. `timeout_secs` defaults to 10 (maximum 60)
+and covers the BRP capture sequence; best-effort cleanup may take another
+100 ms. The fast path asks the game to write an existing `.png` file in place
+and reads through its retained file handle, never an arbitrary returned path.
+Atomic file replacement is not supported by that path; it may time out and
+fall back to BRP observation. The fallback needs reflected/registered
 `Screenshot` and `ScreenshotCaptured` types and a renderer. On platforms that
 stop rendering occluded windows, keep the window visible. The file-based Titan
 path assumes the game and sidecar share the local filesystem.

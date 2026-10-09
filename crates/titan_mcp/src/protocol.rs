@@ -64,14 +64,14 @@ fn handle(client: &Client, request: Value, initialized: &mut bool) -> Option<Val
     if !request.is_object()
         || request["jsonrpc"] != "2.0"
         || !request["method"].is_string()
-        || !(id.is_null() || id.is_string() || id.is_number())
+        || request
+            .get("id")
+            .is_some_and(|id| !(id.is_string() || id.is_i64() || id.is_u64()))
     {
         return Some(error(Value::Null, -32600, "Invalid JSON-RPC request"));
     }
     // Notifications, including notifications/initialized, never receive a response.
-    if request.get("id").is_none() {
-        return None;
-    }
+    request.get("id")?;
     if request.get("params").is_some_and(|p| !p.is_object()) {
         return Some(error(id, -32602, "params must be an object"));
     }
@@ -184,6 +184,26 @@ fn compact(value: Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_and_malformed_requests_do_not_break_stdio() {
+        let client = Client::new("http://127.0.0.1:1").unwrap();
+        let mut input = vec![b'x'; MAX_REQUEST_BYTES + 1];
+        input
+            .extend_from_slice(b"\nnot json\n{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\"}\n");
+        let mut output = Vec::new();
+        serve(&client, input.as_slice(), &mut output).unwrap();
+        let responses: Vec<Value> = output
+            .split(|b| *b == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice(line).unwrap())
+            .collect();
+        assert_eq!(responses.len(), 3);
+        assert_eq!(responses[0]["error"]["code"], -32600);
+        assert_eq!(responses[1]["error"]["code"], -32700);
+        assert_eq!(responses[2]["id"], 7);
+        assert_eq!(responses[2]["result"], json!({}));
+    }
 
     #[test]
     fn truncation_keeps_json_valid_and_counts_omitted_items() {

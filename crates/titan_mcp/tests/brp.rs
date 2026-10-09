@@ -5,6 +5,7 @@
 //! including when an assertion panics. Titan methods are contract stubs until #17 lands.
 
 use std::{
+    io::Write,
     net::{Ipv4Addr, TcpListener},
     process::{Child, Command, Stdio},
     thread,
@@ -495,6 +496,82 @@ fn missing_titan_methods_have_actionable_errors() {
             "{name}: {error}"
         );
     }
+}
+
+#[test]
+fn binary_stdio_tools_call_queries_the_live_headless_app() {
+    let fixture = Fixture::start(false);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_titan_mcp"))
+        .args(["--url", fixture.client.url()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    for request in [
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-11-25", "capabilities": {},
+            "clientInfo": {"name": "brp-integration-test", "version": "1"}
+        }}),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "query_entities", "arguments": {"components": ["TestPosition"]}
+        }}),
+    ] {
+        writeln!(input, "{request}").unwrap();
+    }
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let responses: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(responses.len(), 3);
+    for (index, response) in responses.iter().enumerate() {
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], index + 1);
+        assert!(response.get("error").is_none(), "{response}");
+    }
+    assert_eq!(responses[0]["result"]["serverInfo"]["name"], "titan_mcp");
+    assert_eq!(responses[0]["result"]["protocolVersion"], "2025-11-25");
+    assert!(responses[1]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool["name"] == "query_entities"));
+    let result = &responses[2]["result"];
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(result["content"].as_array().unwrap().len(), 1);
+    assert_eq!(result["content"][0]["type"], "text");
+    let rows: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    let mut positions: Vec<Value> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            assert!(row["entity"].is_number(), "{row}");
+            row["components"][TestPosition::type_path()].clone()
+        })
+        .collect();
+    positions.sort_by(|a, b| {
+        a["x"]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&b["x"].as_f64().unwrap())
+    });
+    assert_eq!(
+        positions,
+        [json!({"x": 1.0, "y": 2.0}), json!({"x": 3.0, "y": 4.0})]
+    );
 }
 
 #[test]

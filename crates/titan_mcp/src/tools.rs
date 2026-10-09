@@ -56,9 +56,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 
 /// Dispatches a tool, returning raw JSON (screenshot returns MCP image content).
 pub fn call(client: &Client, name: &str, args: Value) -> Result<Value, String> {
-    if !args.is_object() {
-        return Err(format!("Arguments to {name} must be a JSON object"));
-    }
+    validate_args(name, &args)?;
     let mut registry = Registry {
         client,
         schemas: None,
@@ -163,9 +161,15 @@ pub fn call(client: &Client, name: &str, args: Value) -> Result<Value, String> {
                 .schemas()?
                 .as_object()
                 .ok_or("registry.schema did not return a type map")?
-                .keys()
-                .filter(|path| path.to_lowercase().contains(&query))
-                .cloned()
+                .iter()
+                .filter(|(path, schema)| {
+                    path.to_lowercase().contains(&query)
+                        || schema
+                            .get("shortPath")
+                            .and_then(Value::as_str)
+                            .is_some_and(|short| short.to_lowercase().contains(&query))
+                })
+                .map(|(path, _)| path.clone())
                 .collect();
             matches.sort();
             let total = matches.len();
@@ -188,6 +192,91 @@ pub fn call(client: &Client, name: &str, args: Value) -> Result<Value, String> {
             "Unknown tool `{name}`; use tools/list to see available tools"
         )),
     }
+}
+
+// Validate the schema vocabulary used by list(), keeping schemas and dispatch
+// in sync without introducing a general-purpose schema dependency.
+fn validate_args(name: &str, args: &Value) -> Result<(), String> {
+    let tools = list();
+    let tool = tools
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["name"] == name))
+        .ok_or_else(|| format!("Unknown tool `{name}`; use tools/list to see available tools"))?;
+    validate_schema(args, &tool["inputSchema"], name)
+}
+
+fn validate_schema(value: &Value, schema: &Value, path: &str) -> Result<(), String> {
+    if let Some(kind) = schema.get("type").and_then(Value::as_str) {
+        let valid = match kind {
+            "object" => value.is_object(),
+            "array" => value.is_array(),
+            "string" => value.is_string(),
+            "integer" => value.as_u64().is_some() || value.as_i64().is_some(),
+            "number" => value.is_number(),
+            "boolean" => value.is_boolean(),
+            _ => false,
+        };
+        if !valid {
+            return Err(format!("`{path}` must be {kind}"));
+        }
+    }
+    if let Some(variants) = schema.get("enum").and_then(Value::as_array)
+        && !variants.contains(value)
+    {
+        return Err(format!(
+            "`{path}` must be one of {}",
+            Value::Array(variants.clone())
+        ));
+    }
+    if let Some(fields) = value.as_object() {
+        if let Some(required) = schema.get("required").and_then(Value::as_array) {
+            for field in required.iter().filter_map(Value::as_str) {
+                if !fields.contains_key(field) {
+                    return Err(format!("Missing required argument `{path}.{field}`"));
+                }
+            }
+        }
+        let properties = schema.get("properties").and_then(Value::as_object);
+        for (field, value) in fields {
+            if let Some(child) = properties.and_then(|props| props.get(field)) {
+                validate_schema(value, child, &format!("{path}.{field}"))?;
+            } else if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+                return Err(format!(
+                    "Unknown argument `{path}.{field}`; check tools/list for valid fields"
+                ));
+            }
+        }
+    }
+    if let Some(items) = value.as_array()
+        && let Some(child) = schema.get("items")
+    {
+        for (index, item) in items.iter().enumerate() {
+            validate_schema(item, child, &format!("{path}[{index}]"))?;
+        }
+    }
+    if let Some(text) = value.as_str()
+        && let Some(minimum) = schema.get("minLength").and_then(Value::as_u64)
+        && (text.chars().count() as u64) < minimum
+    {
+        return Err(format!(
+            "`{path}` must contain at least {minimum} characters"
+        ));
+    }
+    if let Some(number) = value.as_f64() {
+        for key in ["minimum", "maximum", "exclusiveMinimum"] {
+            if let Some(bound) = schema.get(key).and_then(Value::as_f64) {
+                let invalid = match key {
+                    "minimum" => number < bound,
+                    "maximum" => number > bound,
+                    _ => number <= bound,
+                };
+                if invalid {
+                    return Err(format!("`{path}` violates {key} {bound}"));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn decode<T: DeserializeOwned>(value: Value) -> Result<T, String> {
@@ -262,7 +351,7 @@ impl Registry<'_> {
             return Err("Type name must not be empty".to_owned());
         }
         // Full paths already satisfy BRP's contract; only short names require discovery.
-        if name.contains("::") {
+        if name.contains("::") && !name.contains('<') {
             return Ok(name.to_owned());
         }
         resolve_short(self.schemas()?, name)
@@ -613,6 +702,60 @@ mod tests {
         assert!(resolve_short(&schemas, "Missing")
             .unwrap_err()
             .contains("register_type"));
+    }
+
+    #[test]
+    fn arguments_are_validated_before_destructive_dispatch() {
+        let client = Client::new("http://127.0.0.1:1").unwrap();
+        for (tool, args, expected) in [
+            (
+                "despawn_entity",
+                json!({"entity":1,"extra":2}),
+                "Unknown argument",
+            ),
+            ("remove_components", json!({"entity":1}), "Missing required"),
+            ("despawn_entity", json!({"entity":"1"}), "integer"),
+            (
+                "remove_components",
+                json!({"entity":1,"components":[false]}),
+                "string",
+            ),
+            ("send_key", json!({"key":"KeyA","action":"typo"}), "one of"),
+            ("step", json!({"frames":0}), "minimum"),
+        ] {
+            assert!(call(&client, tool, args).unwrap_err().contains(expected));
+        }
+        assert!(validate_args(
+            "set_component",
+            &json!({"entity":1,"component":"Foo","path":"field","value":{"arbitrary":true}})
+        )
+        .is_ok());
+        assert!(validate_args(
+            "brp_call",
+            &json!({"method":"world.query","params":{"anything":[1,2]}})
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn generic_short_paths_use_the_actual_schema_wire_field() {
+        use bevy_remote::schemas::json_schema::JsonSchemaBevyType;
+        let schema = JsonSchemaBevyType {
+            short_path: "Wrapper<Foo>".to_owned(),
+            type_path: "game::Wrapper<other::Foo>".to_owned(),
+            ..Default::default()
+        };
+        let schema = serde_json::to_value(schema).unwrap();
+        assert_eq!(schema["shortPath"], "Wrapper<Foo>");
+        let registry = json!({"game::Wrapper<other::Foo>":schema});
+        assert_eq!(
+            resolve_short(&registry, "Wrapper<Foo>").unwrap(),
+            "game::Wrapper<other::Foo>"
+        );
+        assert_eq!(
+            resolve_short(&registry, "game::Wrapper<other::Foo>").unwrap(),
+            "game::Wrapper<other::Foo>"
+        );
     }
 
     #[test]

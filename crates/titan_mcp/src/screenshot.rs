@@ -3,29 +3,26 @@
 //! Two paths, chosen by what `rpc.discover` advertises:
 //!
 //! 1. **Fast path:** `titan.screenshot` (or `titan.screenshot+watch`) from
-//!    `TitanRemotePlugin`. We ask the game to write a PNG to a temp file we own,
-//!    wait until a complete PNG exists at the returned path, read it (bounded),
-//!    and delete our temp file. If the method returns a `token` instead of a
-//!    `path`, `titan.screenshot_status` is polled with it.
+//!    `TitanRemotePlugin`. We create a temp file, ask the game to write the PNG
+//!    to exactly that path, and read it back (bounded, through our own handle)
+//!    once it decodes. Any other returned path is rejected. If the method
+//!    returns a `token` instead of a `path`, `titan.screenshot_status` is polled
+//!    with it. The game writes in place (`File::create`), so our handle sees it.
 //! 2. **Fallback:** spawn a BRP `Screenshot` entity and watch for
 //!    `ScreenshotCaptured` with `world.observe+watch`. The whole image arrives as
 //!    reflected JSON (slow and large), which we decode and encode as PNG here
 //!    without depending on `bevy_render` or `bevy_image`.
 //!
-//! Everything is bounded by a deadline (`timeout_secs`, default 10, max 60) and
-//! by size limits. Nothing is written to stdout.
+//! Every BRP call shares one deadline (`timeout_secs`, default 10, max 60), and
+//! all reads are size-limited. Nothing is written to stdout.
 
-use core::{
-    sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
-};
+use core::time::Duration;
 use std::{
     collections::HashSet,
     fs,
-    io::{BufRead, BufReader, Read},
-    path::{Path, PathBuf},
+    io::{BufRead, BufReader, Cursor, Read, Seek, SeekFrom},
     thread,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::Instant,
 };
 
 use base64::Engine as _;
@@ -55,6 +52,9 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_TIMEOUT_SECS: f64 = 60.0;
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// Extra time best-effort cleanup (despawning a fallback `Screenshot` entity)
+/// may take, even when the user's deadline has already passed.
+const CLEANUP_BUDGET: Duration = Duration::from_millis(100);
 
 /// Largest PNG we read from disk or return to the agent.
 const MAX_PNG_BYTES: u64 = 32 * 1024 * 1024;
@@ -72,14 +72,17 @@ const PNG_IEND: [u8; 12] = [0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xAE, 0x42, 0x60
 /// Captures the primary window and returns a complete MCP `tools/call` result
 /// with a single PNG image content block.
 ///
-/// `args` may contain `timeout_secs` (number, `0 < t <= 60`, default 10).
+/// `args` may contain `timeout_secs` (number, `0 < t <= 60`, default 10). The
+/// timeout covers every BRP call made here; only best-effort cleanup of a
+/// fallback `Screenshot` entity may run up to 100 ms past it.
 pub fn capture(client: &Client, args: &Value) -> Result<Value, String> {
     let deadline = Instant::now() + timeout_from_args(args)?;
-    let methods = discover_methods(client)?;
+    let methods = discover_methods(client, deadline)?;
 
     let png = if methods.contains(TITAN_SCREENSHOT_WATCH) || methods.contains(TITAN_SCREENSHOT) {
         match capture_titan(client, &methods, deadline) {
             Ok(png) => png,
+            Err(titan_err) if Instant::now() >= deadline => return Err(titan_err),
             Err(titan_err) => capture_observe(client, deadline).map_err(|fallback_err| {
                 format!(
                     "{TITAN_SCREENSHOT} failed: {titan_err}. The world.observe fallback also failed: {fallback_err}"
@@ -114,8 +117,8 @@ fn timeout_from_args(args: &Value) -> Result<Duration, String> {
     }
 }
 
-fn discover_methods(client: &Client) -> Result<HashSet<String>, String> {
-    let doc = client.call(RPC_DISCOVER_METHOD, None)?;
+fn discover_methods(client: &Client, deadline: Instant) -> Result<HashSet<String>, String> {
+    let doc = client.call_with_deadline(RPC_DISCOVER_METHOD, None, deadline)?;
     Ok(doc
         .get("methods")
         .and_then(Value::as_array)
@@ -140,8 +143,22 @@ fn capture_titan(
     methods: &HashSet<String>,
     deadline: Instant,
 ) -> Result<Vec<u8>, String> {
-    let temp = TempFile::new();
-    let params = json!({ "path": temp.path });
+    // Create (O_EXCL) and keep a handle to a regular file before the game
+    // writes. We only ever read through this handle, never by reopening a path
+    // the game hands back, so a swapped-in FIFO, device, or symlink can't block
+    // or redirect the read. The `.png` suffix is how `save_to_disk` picks the
+    // format. The file is removed when `temp` drops.
+    let temp = tempfile::Builder::new()
+        .prefix("titan_mcp-screenshot-")
+        .suffix(".png")
+        .tempfile()
+        .map_err(|e| format!("couldn't create a temp file for the screenshot: {e}"))?;
+    let requested = temp
+        .path()
+        .to_str()
+        .ok_or("the temp directory path isn't valid UTF-8")?
+        .to_owned();
+    let params = json!({ "path": requested });
 
     let path = if methods.contains(TITAN_SCREENSHOT_WATCH) {
         watch(
@@ -153,7 +170,7 @@ fn capture_titan(
             |result: Value| Ok(result_path(&result)),
         )?
     } else {
-        let result = client.call(TITAN_SCREENSHOT, Some(params))?;
+        let result = client.call_with_deadline(TITAN_SCREENSHOT, Some(params), deadline)?;
         match (result_path(&result), result.get("token")) {
             (Some(path), _) => path,
             (None, Some(token)) if methods.contains(TITAN_SCREENSHOT_STATUS) => {
@@ -167,109 +184,92 @@ fn capture_titan(
             }
         }
     };
+    if path != requested {
+        return Err(format!(
+            "{TITAN_SCREENSHOT} wrote to `{}` instead of the requested `{requested}`; refusing to read a path titan_mcp didn't create",
+            truncate(&path, 200)
+        ));
+    }
 
-    wait_for_png(&path, deadline)
+    wait_for_png(temp.as_file(), &requested, deadline)
 }
 
 /// Extracts `path` from a `titan.screenshot*` result (`{ "path": ... }`).
-fn result_path(result: &Value) -> Option<PathBuf> {
+fn result_path(result: &Value) -> Option<String> {
     result
         .get("path")
         .and_then(Value::as_str)
         .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
+        .map(str::to_owned)
 }
 
-fn poll_status(client: &Client, token: &Value, deadline: Instant) -> Result<PathBuf, String> {
+fn poll_status(client: &Client, token: &Value, deadline: Instant) -> Result<String, String> {
     loop {
-        let status = client.call(TITAN_SCREENSHOT_STATUS, Some(json!({ "token": token })))?;
+        let status = client.call_with_deadline(
+            TITAN_SCREENSHOT_STATUS,
+            Some(json!({ "token": token })),
+            deadline,
+        )?;
         if let Some(path) = result_path(&status) {
             return Ok(path);
         }
-        if Instant::now() >= deadline {
+        if Instant::now() + POLL_INTERVAL >= deadline {
             return Err(timeout_error(TITAN_SCREENSHOT_STATUS));
         }
         thread::sleep(POLL_INTERVAL);
     }
 }
 
-/// Waits until `path` holds a complete PNG (the game writes it asynchronously),
-/// then returns its bytes.
-fn wait_for_png(path: &Path, deadline: Instant) -> Result<Vec<u8>, String> {
-    if !path.is_absolute() {
-        return Err(format!(
-            "the game returned a relative screenshot path `{}`, which can't be resolved here",
-            path.display()
-        ));
-    }
+/// Waits until `file` holds a complete, decodable PNG (the game writes it
+/// asynchronously), then returns its bytes.
+fn wait_for_png(mut file: &fs::File, path: &str, deadline: Instant) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
     loop {
-        if let Ok(meta) = fs::metadata(path) {
-            if meta.len() > MAX_PNG_BYTES {
-                return Err(format!(
-                    "screenshot `{}` is {} bytes, over the {MAX_PNG_BYTES} byte limit",
-                    path.display(),
-                    meta.len()
-                ));
-            }
-            if let Some(png) = read_bounded(path)?.filter(|bytes| is_complete_png(bytes)) {
-                return Ok(png);
-            }
+        bytes.clear();
+        file.seek(SeekFrom::Start(0))
+            .and_then(|_| file.take(MAX_PNG_BYTES + 1).read_to_end(&mut bytes))
+            .map_err(|e| format!("reading screenshot `{path}` failed: {e}"))?;
+        if bytes.len() as u64 > MAX_PNG_BYTES {
+            return Err(format!(
+                "screenshot `{path}` is over the {MAX_PNG_BYTES} byte limit"
+            ));
         }
-        if Instant::now() >= deadline {
-            return Err(timeout_error(&format!(
-                "a complete PNG at `{}`",
-                path.display()
-            )));
+        // Cheap check first so a half-written file isn't decoded every poll.
+        if looks_complete(&bytes) {
+            validate_png(&bytes)
+                .map_err(|e| format!("screenshot `{path}` isn't a valid PNG: {e}"))?;
+            return Ok(bytes);
+        }
+        if Instant::now() + POLL_INTERVAL >= deadline {
+            return Err(timeout_error(&format!("a complete PNG at `{path}`")));
         }
         thread::sleep(POLL_INTERVAL);
     }
 }
 
-/// Reads at most `MAX_PNG_BYTES`. `Ok(None)` if the file vanished or is too big.
-fn read_bounded(path: &Path) -> Result<Option<Vec<u8>>, String> {
-    let Ok(file) = fs::File::open(path) else {
-        return Ok(None);
-    };
-    let mut bytes = Vec::new();
-    file.take(MAX_PNG_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("reading screenshot `{}` failed: {e}", path.display()))?;
-    Ok((bytes.len() as u64 <= MAX_PNG_BYTES).then_some(bytes))
-}
-
-/// Cheap completeness check: PNG signature at the start and an `IEND` chunk at the end.
-fn is_complete_png(bytes: &[u8]) -> bool {
+/// PNG signature at the start and an `IEND` chunk at the end.
+fn looks_complete(bytes: &[u8]) -> bool {
     bytes.len() >= PNG_SIGNATURE.len() + PNG_IEND.len()
         && bytes.starts_with(&PNG_SIGNATURE)
         && bytes.ends_with(&PNG_IEND)
 }
 
-/// A temp file path we own; removed on drop, whether capture succeeded or not.
-struct TempFile {
-    path: PathBuf,
-}
-
-impl TempFile {
-    fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        let name = format!(
-            "titan_mcp-screenshot-{}-{nanos}-{}.png",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        );
-        Self {
-            path: std::env::temp_dir().join(name),
-        }
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
+/// Fully decodes an in-memory PNG (checksums included) within the pixel limit,
+/// so a spoofed signature + `IEND` isn't handed to the agent as an image.
+fn validate_png(bytes: &[u8]) -> Result<(), String> {
+    let limits = png::Limits {
+        bytes: MAX_PIXEL_BYTES as usize,
+    };
+    let mut reader = png::Decoder::new_with_limits(Cursor::new(bytes), limits)
+        .read_info()
+        .map_err(|e| e.to_string())?;
+    let size = reader
+        .output_buffer_size()
+        .filter(|&size| size as u64 <= MAX_PIXEL_BYTES)
+        .ok_or_else(|| format!("decoded image is over the {MAX_PIXEL_BYTES} byte limit"))?;
+    let mut pixels = vec![0; size];
+    reader.next_frame(&mut pixels).map_err(|e| e.to_string())?;
+    reader.finish().map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String
         )]),
     };
     let spawned = client
-        .call(BRP_SPAWN_ENTITY_METHOD, Some(to_params(&spawn)?))
+        .call_with_deadline(BRP_SPAWN_ENTITY_METHOD, Some(to_params(&spawn)?), deadline)
         .map_err(|e| {
             format!(
                 "couldn't spawn a `Screenshot` entity ({e}). Screenshots need a game with a window and bevy_render; add TitanRemotePlugin for faster screenshots"
@@ -356,9 +356,11 @@ impl Drop for DespawnGuard<'_> {
         if let Some(entity) = self.entity.take()
             && let Ok(params) = to_params(&BrpDespawnEntityParams { entity })
         {
-            let _ = self
-                .client
-                .call(BRP_DESPAWN_COMPONENTS_METHOD, Some(params));
+            let _ = self.client.call_with_deadline(
+                BRP_DESPAWN_COMPONENTS_METHOD,
+                Some(params),
+                Instant::now() + CLEANUP_BUDGET,
+            );
         }
     }
 }
@@ -384,12 +386,16 @@ fn encode_png(image: ReflectedImage) -> Result<Vec<u8>, String> {
             ))
         }
     };
-    let expected = u64::from(width) * u64::from(height) * 4;
-    if width == 0 || height == 0 || depth_or_array_layers != 1 || expected > MAX_PIXEL_BYTES {
-        return Err(format!(
-            "screenshot size {width}x{height}x{depth_or_array_layers} is empty or over the {MAX_PIXEL_BYTES} byte limit"
-        ));
-    }
+    // Dimensions come from the game; checked math so hostile values can't overflow.
+    let expected = u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|pixels| pixels.checked_mul(4))
+        .filter(|&bytes| bytes > 0 && bytes <= MAX_PIXEL_BYTES && depth_or_array_layers == 1)
+        .ok_or_else(|| {
+            format!(
+                "screenshot size {width}x{height}x{depth_or_array_layers} is empty or over the {MAX_PIXEL_BYTES} byte limit"
+            )
+        })?;
     let data = image.data.unwrap_or_default();
     if data.len() as u64 != expected {
         return Err(format!(
@@ -564,6 +570,7 @@ mod tests {
     use std::{
         io::Write,
         net::{TcpListener, TcpStream},
+        path::PathBuf,
         sync::Mutex,
     };
 
@@ -572,6 +579,10 @@ mod tests {
         Json(Value),
         /// SSE `data:` frames, then hold the connection open for `hold`.
         Sse(Vec<Value>, Duration),
+        /// Sleep, then reply.
+        Slow(Duration, Box<Reply>),
+        /// A JSON-RPC error.
+        Error(&'static str),
     }
 
     type Calls = Arc<Mutex<Vec<(String, Value)>>>;
@@ -616,15 +627,17 @@ mod tests {
         let method = request["method"].as_str().unwrap().to_owned();
         let params = request.get("params").cloned().unwrap_or(Value::Null);
         calls.lock().unwrap().push((method.clone(), params.clone()));
-        match handler(&method, &params) {
+        let mut reply = handler(&method, &params);
+        while let Reply::Slow(delay, next) = reply {
+            thread::sleep(delay);
+            reply = *next;
+        }
+        let envelope = match reply {
             Reply::Json(result) => {
-                let body =
-                    json!({ "jsonrpc": "2.0", "id": request["id"], "result": result }).to_string();
-                let _ = write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                );
+                json!({ "jsonrpc": "2.0", "id": request["id"], "result": result })
+            }
+            Reply::Error(message) => {
+                json!({ "jsonrpc": "2.0", "id": request["id"], "error": { "code": -23402, "message": message } })
             }
             Reply::Sse(frames, hold) => {
                 let _ = write!(
@@ -636,8 +649,16 @@ mod tests {
                 }
                 let _ = stream.flush();
                 thread::sleep(hold);
+                return;
             }
-        }
+            Reply::Slow(..) => unreachable!("unwrapped above"),
+        };
+        let body = envelope.to_string();
+        let _ = write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
     }
 
     fn discover(methods: &[&str]) -> Reply {
@@ -668,9 +689,7 @@ mod tests {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(block["data"].as_str().unwrap())
             .unwrap();
-        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
-            .read_info()
-            .unwrap();
+        let mut reader = png::Decoder::new(Cursor::new(bytes)).read_info().unwrap();
         let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
         let info = reader.next_frame(&mut pixels).unwrap();
         pixels.truncate(info.buffer_size());
@@ -890,9 +909,12 @@ mod tests {
         assert_eq!(timeout_from_args(&json!({})).unwrap(), DEFAULT_TIMEOUT);
 
         let png = tiny_png();
-        assert!(is_complete_png(&png));
-        assert!(!is_complete_png(&png[..png.len() - 1]));
-        assert!(!is_complete_png(b"not a png"));
+        assert!(looks_complete(&png) && validate_png(&png).is_ok());
+        assert!(!looks_complete(&png[..png.len() - 1]));
+        assert!(!looks_complete(b"not a png"));
+        // Signature + IEND around garbage passes the cheap check but not decoding.
+        let spoof = [&PNG_SIGNATURE[..], b"garbage", &PNG_IEND[..]].concat();
+        assert!(looks_complete(&spoof) && validate_png(&spoof).is_err());
 
         let mut buf = Vec::new();
         let mut long = BufReader::new(&b"0123456789\nok\n"[..]);
@@ -903,23 +925,121 @@ mod tests {
         assert!(read_line_bounded(&mut short, &mut buf, 5).unwrap());
         assert!(!read_line_bounded(&mut short, &mut buf, 5).unwrap());
 
-        let format = |format: &str, data: Vec<u8>, width: u32| {
+        let format = |format: &str, data: Vec<u8>, width: u32, height: u32, layers: u32| {
             encode_png(ReflectedImage {
                 data: Some(data),
                 texture_descriptor: ReflectedTextureDescriptor {
                     size: ReflectedExtent {
                         width,
-                        height: 1,
-                        depth_or_array_layers: 1,
+                        height,
+                        depth_or_array_layers: layers,
                     },
                     format: format.into(),
                 },
             })
         };
-        assert!(format("rgba16float", vec![0; 8], 1).is_err());
-        assert!(format("rgba8unorm", vec![0; 4], 0).is_err());
-        assert!(format("rgba8unorm", vec![0; 4], u32::MAX).is_err());
+        assert!(format("rgba16float", vec![0; 8], 1, 1, 1).is_err());
+        assert!(format("rgba8unorm", vec![0; 4], 0, 1, 1).is_err());
+        assert!(format("rgba8unorm", vec![0; 4], 1, 1, 2).is_err());
+        assert!(format("rgba8unorm", vec![0; 4], 1, 1, 1).is_ok());
+        // Hostile dimensions: u32::MAX² * 4 overflows u64 and must be rejected, not panic.
+        for (width, height) in [(u32::MAX, 1), (u32::MAX, u32::MAX), (1 << 16, 1 << 16)] {
+            let err = format("rgba8unorm", vec![0; 4], width, height, 1).unwrap_err();
+            assert!(err.contains("byte limit"), "{err}");
+        }
+    }
 
-        assert!(wait_for_png(Path::new("relative.png"), Instant::now()).is_err());
+    /// Every BRP call shares the user's deadline: a slow discovery or a slow
+    /// instant `titan.screenshot` fails at `timeout_secs`, with no fallback
+    /// started after the budget is spent.
+    #[test]
+    fn slow_calls_respect_timeout_secs() {
+        let (client, _) = stub(|method, _| match method {
+            RPC_DISCOVER_METHOD => Reply::Slow(Duration::from_secs(5), Box::new(discover(&[]))),
+            _ => panic!("unexpected {method}"),
+        });
+        let start = Instant::now();
+        assert!(capture(&client, &json!({ "timeout_secs": 0.3 })).is_err());
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+
+        let (client, calls) = stub(|method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
+            TITAN_SCREENSHOT => Reply::Slow(
+                Duration::from_secs(5),
+                Box::new(Reply::Json(json!({ "path": "/nope" }))),
+            ),
+            _ => Reply::Error("unexpected"),
+        });
+        let start = Instant::now();
+        assert!(capture(&client, &json!({ "timeout_secs": 0.3 })).is_err());
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(methods(&calls), [RPC_DISCOVER_METHOD, TITAN_SCREENSHOT]);
+    }
+
+    /// A returned path other than the one requested is never opened, even if
+    /// it holds a valid PNG.
+    #[test]
+    fn rejects_a_different_returned_path() {
+        let other = tempfile::Builder::new().suffix(".png").tempfile().unwrap();
+        fs::write(other.path(), tiny_png()).unwrap();
+        let other_path = other.path().to_str().unwrap().to_owned();
+        let (client, _) = stub(move |method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
+            TITAN_SCREENSHOT => Reply::Json(json!({ "path": other_path })),
+            _ => Reply::Error("no fallback here"),
+        });
+        let err = capture(&client, &json!({})).unwrap_err();
+        assert!(err.contains("instead of the requested"), "{err}");
+    }
+
+    /// Paths the game controls can be FIFOs. Neither returning one nor
+    /// swapping one in at the requested path may block the read.
+    #[cfg(unix)]
+    #[test]
+    fn fifo_paths_do_not_block() {
+        let mkfifo = |path: &str| {
+            let status = std::process::Command::new("mkfifo")
+                .arg(path)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("evil.png").to_str().unwrap().to_owned();
+        mkfifo(&fifo);
+        let (client, _) = stub(move |method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
+            TITAN_SCREENSHOT => Reply::Json(json!({ "path": fifo })),
+            _ => Reply::Error("no fallback here"),
+        });
+        let err = capture(&client, &json!({ "timeout_secs": 2 })).unwrap_err();
+        assert!(err.contains("instead of the requested"), "{err}");
+
+        let (client, _) = stub(move |method, params| match method {
+            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
+            TITAN_SCREENSHOT => {
+                let path = params["path"].as_str().unwrap();
+                fs::remove_file(path).unwrap();
+                mkfifo(path);
+                Reply::Json(json!({ "path": path }))
+            }
+            _ => Reply::Error("no fallback here"),
+        });
+        let start = Instant::now();
+        let err = capture(&client, &json!({ "timeout_secs": 0.5 })).unwrap_err();
+        assert!(err.contains("timed out"), "{err}");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
     }
 }
