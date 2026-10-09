@@ -1499,7 +1499,12 @@ mod tests {
         });
         let start = Instant::now();
         let err = capture(&client, &json!({ "timeout_secs": 0.2 })).unwrap_err();
-        assert!(err.contains("timed out"), "{err}");
+        // The shared deadline may expire between polls or in an in-flight
+        // HTTP request; both are valid timeout diagnostics, not insert success.
+        assert!(
+            err.contains("timed out") || err.contains("timeout: global"),
+            "{err}"
+        );
         assert!(start.elapsed() < Duration::from_secs(1));
         let methods = methods(&calls);
         assert!(!methods
