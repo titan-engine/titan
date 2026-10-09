@@ -63,7 +63,10 @@ the wire. Poll `titan.screenshot_status` for completion; **the path is returned
 only after the PNG has been written**, never just because an older file exists.
 The optional path is a server-local PNG path; omitted paths use a per-process
 temporary directory. Relative paths resolve against the game's working directory;
-parent directories must exist. Results contain absolute paths. Rendering must be
+parent directories must exist. Results contain absolute paths. Resolved paths must
+be valid UTF-8 for JSON responses; a non-UTF-8 working or temporary directory causes
+the request to fail with invalid params before a token is allocated. An explicit
+UTF-8 absolute destination can be used instead. Rendering must be
 initialized and a primary window must exist. Keep that window visible while
 capturing: on macOS/Metal, a fully occluded or minimized window can produce a
 black image even though capture and file writing succeed.

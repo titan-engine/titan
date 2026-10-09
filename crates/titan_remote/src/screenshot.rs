@@ -12,8 +12,9 @@
 //! # Paths
 //!
 //! `path` must end in `.png` (any case). Relative paths are resolved against the game's current
-//! working directory, and the parent directory must already exist. The result always holds the
-//! absolute path. Without `path`, the file goes to a per-process temporary directory as
+//! working directory, and the parent directory must already exist. The resolved absolute path
+//! must be valid UTF-8 so it can be returned over JSON; otherwise the request is rejected before
+//! a token is allocated. Without `path`, the file goes to a per-process temporary directory as
 //! `titan-screenshot-<token>.png`.
 //!
 //! # Guarantees
@@ -243,6 +244,15 @@ fn process_screenshot_request(
             .map_err(|e| internal_error(format!("cannot create temporary directory: {e}")))?
             .join(format!("titan-screenshot-{token}.png")),
     };
+
+    // Relative and default paths can inherit non-UTF-8 bytes from the working
+    // or temporary directory, even though JSON input paths are always UTF-8.
+    // Reject these before allocating a token whose result could never serialize.
+    if destination.to_str().is_none() {
+        return Err(invalid_params(
+            "screenshot destination must be valid UTF-8 to return its path over JSON",
+        ));
+    }
 
     if !jobs.make_room() {
         return Err(internal_error(format!(
@@ -570,6 +580,81 @@ mod tests {
         assert_eq!(path.extension().unwrap(), "png");
         assert!(path.is_file());
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_non_utf8_default_destination_before_queuing() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+        let dir = tempfile::tempdir().unwrap();
+        let non_utf8_dir = dir
+            .path()
+            .join(OsString::from_vec(b"screenshots-\xff".to_vec()));
+        // APFS rejects non-UTF-8 directory names, but a cached PathBuf can still
+        // exercise validation there. Linux permits the real directory as well.
+        #[cfg(target_os = "linux")]
+        fs::create_dir(&non_utf8_dir).unwrap();
+        let mut app = app();
+        app.world_mut().resource_mut::<ScreenshotJobs>().default_dir = Some(non_utf8_dir.clone());
+
+        let error = call(&mut app, SCREENSHOT_METHOD, None).unwrap_err();
+        assert_eq!(error.code, error_codes::INVALID_PARAMS);
+        assert!(error.message.contains("UTF-8"));
+        let jobs = app.world().resource::<ScreenshotJobs>();
+        assert!(jobs.jobs.is_empty());
+        assert_eq!(jobs.next_token, 1);
+        assert!(!non_utf8_dir.join("titan-screenshot-1.png").exists());
+
+        // A valid absolute path still works, including non-ASCII Unicode.
+        let path = dir.path().join("capture-é.png");
+        assert_eq!(request(&mut app, &path), 1);
+        app.update();
+        capture(&mut app, Image::default());
+        assert_eq!(
+            status(&mut app, 1).unwrap(),
+            json!({ "pending": false, "path": path })
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rejects_non_utf8_relative_destination_before_queuing() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt, process::Command};
+
+        const CHILD_ENV: &str = "TITAN_REMOTE_TEST_NON_UTF8_CWD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let mut app = app();
+            let error = call(
+                &mut app,
+                SCREENSHOT_METHOD,
+                Some(json!({ "path": "shot.png" })),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, error_codes::INVALID_PARAMS);
+            assert!(error.message.contains("UTF-8"));
+            let jobs = app.world().resource::<ScreenshotJobs>();
+            assert!(jobs.jobs.is_empty());
+            assert_eq!(jobs.next_token, 1);
+            assert!(!Path::new("shot.png").exists());
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let non_utf8_dir = dir
+            .path()
+            .join(OsString::from_vec(b"working-dir-\xff".to_vec()));
+        fs::create_dir(&non_utf8_dir).unwrap();
+        // Isolate the non-UTF-8 cwd in a subprocess: changing the parent process's
+        // working directory would race with tests running on other threads.
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("screenshot::tests::rejects_non_utf8_relative_destination_before_queuing")
+            .env(CHILD_ENV, "1")
+            .current_dir(&non_utf8_dir)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "child test failed: {output:?}");
     }
 
     #[test]
