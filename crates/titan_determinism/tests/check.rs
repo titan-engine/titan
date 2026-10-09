@@ -1,12 +1,15 @@
 //! Integration coverage for bounded replay, actionable reports, and diagnostics.
 
+extern crate alloc;
+
+use alloc::sync::Arc;
 use std::{
     collections::HashMap,
     hash::{BuildHasher, Hasher},
     panic::{catch_unwind, AssertUnwindSafe},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Mutex,
     },
 };
 

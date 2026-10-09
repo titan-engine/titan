@@ -1,9 +1,9 @@
-//! A controlled demonstration of a HashMap-order gameplay bug, without a window.
+//! A controlled demonstration of a `HashMap`-order gameplay bug, without a window.
 //!
 //! A fixed collision hasher and opposite insertion orders expose the bug without
 //! depending on random hash seeds. This intentionally changes hidden setup
 //! between factories; normal Repeat checks should use identical configuration.
-//! HashMap does not promise any iteration order, even with a custom hasher.
+//! `HashMap` does not promise any iteration order, even with a custom hasher.
 
 use core::hash::{BuildHasherDefault, Hasher};
 use std::collections::HashMap;
