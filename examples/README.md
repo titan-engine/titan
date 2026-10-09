@@ -35,6 +35,7 @@ git checkout v0.4.0
 
 - [Examples](#examples)
   - [Table of Contents](#table-of-contents)
+- [Titan Headless Tools](#titan-headless-tools)
 - [The Bare Minimum](#the-bare-minimum)
   - [Hello, World!](#hello-world)
 - [Cross-Platform Examples](#cross-platform-examples)
@@ -88,6 +89,14 @@ git checkout v0.4.0
     - [Audio in the browsers](#audio-in-the-browsers)
     - [Optimizing](#optimizing)
     - [Loading Assets](#loading-assets)
+
+## Titan Headless Tools
+
+Titan's crate-local examples run with their own package dependencies, without a window or GPU.
+
+Example | Command | Description
+--- | --- | ---
+[Headless nondeterminism report](../crates/titan_determinism/examples/hashmap_order.rs) | `cargo run -p titan_determinism --example hashmap_order` | Locate an order-dependent `HashMap` bug and print the first differing entity, component, and field
 
 ## The Bare Minimum
 

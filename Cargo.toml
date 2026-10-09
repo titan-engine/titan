@@ -809,6 +809,13 @@ name = "context_menu"
 path = "examples/usage/context_menu.rs"
 doc-scrape-examples = true
 
+# Crate-local Titan examples use their package's dependencies, not the root Bevy app.
+[package.metadata.titan-example.hashmap_order]
+name = "Headless nondeterminism report"
+path = "crates/titan_determinism/examples/hashmap_order.rs"
+description = "Locate an order-dependent HashMap bug in repeated headless simulations"
+command = "cargo run -p titan_determinism --example hashmap_order"
+
 [package.metadata.example.context_menu]
 name = "Context Menu"
 description = "Example of a context menu"
