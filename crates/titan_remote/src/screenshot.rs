@@ -29,7 +29,9 @@
 //! - **Storage is bounded.** At most [`MAX_JOBS`] jobs are tracked. Finished jobs are kept for
 //!   [`RETENTION`] so clients can poll them, and are evicted early (oldest first) when space is
 //!   needed. A job that hasn't finished [`TIMEOUT`] after it was requested fails. Timeouts use
-//!   wall-clock time, so they still work while `Time<Virtual>` is paused.
+//!   wall-clock time, so they still work while `Time<Virtual>` is paused. A timed-out readback
+//!   already owned by the renderer continues reserving its job slot until upstream removes
+//!   its entity/observer, bounding abandoned staging files even if readbacks never return.
 //!
 //! Tokens are only meaningful within one run of the game. Expired or unknown tokens return an
 //! `INVALID_PARAMS` error.
@@ -124,6 +126,9 @@ enum JobState {
     Queued,
     /// A [`Screenshot`] entity has been spawned for this job.
     Capturing(Entity),
+    /// A timed-out readback still owns an entity/observer. Keep its slot reserved
+    /// until upstream cleanup removes the entity, rather than evicting its job.
+    Abandoned { entity: Entity, reason: String },
     /// The PNG is at the job's destination.
     Done,
     /// The capture or write failed.
@@ -207,10 +212,13 @@ impl ScreenshotJobs {
         }
         let dir = tempfile::Builder::new()
             .prefix("titan-screenshots-")
-            .tempdir()?
-            .keep();
-        self.default_dir = Some(dir.clone());
-        Ok(dir)
+            .tempdir()?;
+        // Preserve the API's absolute-path guarantee even if the configured
+        // temporary-directory base is relative. Keep the guard until this succeeds.
+        let path = std::path::absolute(dir.path())?;
+        let _ = dir.keep();
+        self.default_dir = Some(path.clone());
+        Ok(path)
     }
 }
 
@@ -256,7 +264,7 @@ fn process_screenshot_request(
 
     if !jobs.make_room() {
         return Err(internal_error(format!(
-            "too many screenshots in flight (limit {MAX_JOBS}); poll existing tokens first"
+            "too many screenshots in flight or awaiting renderer cleanup (limit {MAX_JOBS})"
         )));
     }
 
@@ -296,7 +304,7 @@ fn process_screenshot_status_request(
             pending: false,
             path: Some(job.destination.clone()),
         },
-        JobState::Failed(reason) => {
+        JobState::Failed(reason) | JobState::Abandoned { reason, .. } => {
             return Err(internal_error(format!(
                 "screenshot {token} failed: {reason}"
             )));
@@ -317,6 +325,13 @@ fn drive_screenshot_jobs(
     let timeout = jobs.timeout;
     let mut in_flight = false;
     for job in jobs.jobs.iter_mut() {
+        if let JobState::Abandoned { entity, reason } = &job.state {
+            if capturing.get(*entity).is_err() {
+                let reason = reason.clone();
+                job.finish(JobState::Failed(reason));
+            }
+            continue;
+        }
         let JobState::Capturing(entity) = job.state else {
             continue;
         };
@@ -327,12 +342,16 @@ fn drive_screenshot_jobs(
                     .into(),
             )),
             Ok(started) if job.requested.elapsed() >= timeout => {
-                // Once the renderer has picked the screenshot up, despawning it could race with
-                // upstream's own cleanup. The observer ignores late captures instead.
-                if !started {
+                let reason = format!("timed out after {timeout:?}");
+                // Once the renderer owns the readback, despawning its entity would
+                // break upstream's late delivery. Ignore late captures, but keep
+                // the slot reserved until its observer and staging file are gone.
+                if started {
+                    job.state = JobState::Abandoned { entity, reason };
+                } else {
                     commands.entity(entity).despawn();
+                    job.finish(JobState::Failed(reason));
                 }
-                job.finish(JobState::Failed(format!("timed out after {timeout:?}")));
             }
             Ok(_) => in_flight = true,
         }
@@ -657,6 +676,50 @@ mod tests {
         assert!(output.status.success(), "child test failed: {output:?}");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn default_destination_is_absolute_with_relative_tmpdir() {
+        use std::process::Command;
+
+        const CHILD_ENV: &str = "TITAN_REMOTE_TEST_RELATIVE_TMPDIR";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            assert_eq!(std::env::temp_dir(), Path::new("relative-tmp"));
+            let mut app = app();
+            let token = call(&mut app, SCREENSHOT_METHOD, None).unwrap()["token"]
+                .as_u64()
+                .unwrap();
+            let destination = app.world().resource::<ScreenshotJobs>().jobs[0]
+                .destination
+                .clone();
+            assert!(destination.is_absolute());
+            let expected_base = std::env::current_dir().unwrap().join("relative-tmp");
+            assert!(destination.starts_with(&expected_base));
+            // Once queued, changing cwd must not change where capture is written.
+            // This is an isolated child process, not the parallel parent test runner.
+            std::env::set_current_dir(destination.parent().unwrap()).unwrap();
+            app.update();
+            capture(&mut app, Image::default());
+            assert_eq!(
+                status(&mut app, token).unwrap(),
+                json!({ "pending": false, "path": destination })
+            );
+            assert!(destination.exists());
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("relative-tmp")).unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("screenshot::tests::default_destination_is_absolute_with_relative_tmpdir")
+            .env(CHILD_ENV, "1")
+            .env("TMPDIR", "relative-tmp")
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "child test failed: {output:?}");
+    }
+
     #[test]
     fn failed_write_does_not_complete_or_touch_an_existing_file() {
         let dir = tempfile::tempdir().unwrap();
@@ -727,6 +790,66 @@ mod tests {
         capture(&mut app, Image::default());
         assert!(status(&mut app, token).is_err());
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn timed_out_readbacks_remain_bounded_until_renderer_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shot.png");
+        let mut app = app();
+        let mut entities = Vec::new();
+
+        for _ in 0..MAX_JOBS {
+            app.world_mut().resource_mut::<ScreenshotJobs>().timeout = TIMEOUT;
+            let token = request(&mut app, &path);
+            app.update();
+            let mut fresh = app
+                .world_mut()
+                .query_filtered::<Entity, (With<Screenshot>, Without<Capturing>)>();
+            let entity = fresh.single(app.world()).unwrap();
+            entities.push(entity);
+            // Simulate a renderer that picks each request up but never returns its readback.
+            app.world_mut().entity_mut(entity).insert(Capturing);
+            app.world_mut().resource_mut::<ScreenshotJobs>().timeout = Duration::ZERO;
+            app.update();
+            assert!(status(&mut app, token).is_err());
+        }
+
+        // Neither capacity eviction nor retention expiry can forget live captures.
+        assert!(call(&mut app, SCREENSHOT_METHOD, Some(json!({ "path": path }))).is_err());
+        app.world_mut().resource_mut::<ScreenshotJobs>().retention = Duration::ZERO;
+        app.update();
+        assert!(call(&mut app, SCREENSHOT_METHOD, Some(json!({ "path": path }))).is_err());
+        assert_eq!(
+            app.world().resource::<ScreenshotJobs>().jobs.len(),
+            MAX_JOBS
+        );
+        let mut screenshots = app.world_mut().query_filtered::<Entity, With<Screenshot>>();
+        assert_eq!(screenshots.iter(app.world()).count(), MAX_JOBS);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), MAX_JOBS);
+
+        // A late capture must not publish a file. Upstream then despawns the entity,
+        // which releases its observer/staging path and lets us recycle its slot.
+        app.world_mut().trigger(ScreenshotCaptured {
+            entity: entities[0],
+            image: Image::default(),
+        });
+        assert!(!path.exists());
+        app.world_mut().despawn(entities[0]);
+        app.update();
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), MAX_JOBS - 1);
+        app.world_mut().resource_mut::<ScreenshotJobs>().timeout = TIMEOUT;
+        let token = request(&mut app, &path);
+        app.update();
+        let mut fresh = app
+            .world_mut()
+            .query_filtered::<Entity, (With<Screenshot>, Without<Capturing>)>();
+        let entity = fresh.single(app.world()).unwrap();
+        app.world_mut().trigger(ScreenshotCaptured {
+            entity,
+            image: Image::default(),
+        });
+        assert_eq!(status(&mut app, token).unwrap()["pending"], false);
     }
 
     #[test]

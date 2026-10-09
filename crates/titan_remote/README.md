@@ -73,7 +73,11 @@ black image even though capture and file writing succeed.
 
 Captures are serialized to avoid Bevy dropping duplicate primary-window captures
 in one frame. At most 64 jobs are tracked; unfinished jobs time out after 30
-wall-clock seconds, including while paused. Finished tokens are retained for five
+wall-clock seconds, including while paused. A timed-out readback already owned by
+the renderer still counts toward the job limit until upstream cleans up its
+entity and observer; late captures are ignored. This prevents retries from
+accumulating unbounded entities and staging files if readbacks never return.
+Finished tokens are retained for five
 minutes, but may be evicted earlier to make room. Expired/unknown tokens return
 invalid-params errors; capture and disk failures return internal errors. Saved
 files are not deleted when tokens expire; clients own their cleanup. The destination's
