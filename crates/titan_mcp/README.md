@@ -203,8 +203,10 @@ counter rollover. Controlled loopback HTTP tests stall baseline/poll responses
 at all three input barriers and verify the shared deadline and cleanup phases.
 The `remote-render` test feature enables real screenshot
 handlers with synthetic GPU readback: the server publishes the PNG atomically,
-and MCP returns its decoded pixels. CI runs these tests on Linux, Windows, and
-macOS. Renderer dependencies are dev-dependencies, not default sidecar runtime
+and MCP returns its decoded pixels. The shared Titan workflow discovers
+`titan_*` workspace crates and runs all-feature tests on Linux, including MCP's
+`bevy_remote/bevy_render` feature combination. No per-crate workflow is needed.
+Renderer dependencies are dev-dependencies, not default sidecar runtime
 dependencies.
 
 To reproduce the visual agent workflow:
