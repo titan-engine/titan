@@ -177,8 +177,8 @@ fn tick_task_pools() {
     bevy::tasks::tick_global_task_pools_on_main_thread();
 }
 
-/// An unused loopback port. The OS does not hand the same ephemeral port out twice in a row, so
-/// tests running in parallel do not collide in practice.
+/// A loopback port selected by the OS. The transport accepts a port rather than a
+/// bound listener, so there is a short reservation gap before the server binds.
 fn free_port() -> u16 {
     TcpListener::bind(("127.0.0.1", 0))
         .unwrap()

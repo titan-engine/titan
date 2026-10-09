@@ -81,7 +81,9 @@ can leave staging files behind.
 
 The HTTP server is an unauthenticated development tool. Keep its default
 loopback binding and expose it only to trusted clients: BRP can mutate the world,
-and this extension can write files with the game's permissions. Returned paths
+and this extension can write files with the game's permissions. Use destination
+directories that other users cannot modify: the upstream encoder reopens the
+reserved staging path by name. Returned paths
 are on the game's machine, not necessarily the client's machine. Disk encoding
 uses Bevy's `save_to_disk` observer when the asynchronous capture arrives.
 

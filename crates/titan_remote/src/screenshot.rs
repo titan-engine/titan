@@ -347,8 +347,9 @@ fn drive_screenshot_jobs(
 
     let token = job.token;
     let destination = job.destination.clone();
-    // Reserve an unpredictable, private staging file. Never reuse a pathname from
-    // a previous run, or follow a pre-existing symlink when the encoder opens it.
+    // Reserve an unpredictable, private staging file instead of reusing a
+    // pathname from a previous run. The destination directory must be trusted:
+    // save_to_disk reopens the reserved path by name to encode the image.
     let partial = match tempfile::Builder::new()
         .prefix(".titan-screenshot-")
         .suffix(".png")
