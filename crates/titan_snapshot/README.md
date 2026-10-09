@@ -33,10 +33,10 @@ resources:
 
 ```text
 ~ 12v0 "Player"
-    + world_diff::Grounded
-      <absent> -> null
     ~ bevy_transform::components::transform::Transform
         translation[1]: 0.0 -> 2.309999942779541
+    + world_diff::Grounded
+      <absent> -> {}
 ~ resource world_diff::Score
     value: 0 -> 3
 ```

@@ -1,10 +1,15 @@
+//! Acceptance coverage for world capture, filters, serialization, and diffing.
+
+extern crate alloc;
+
+use alloc::collections::BTreeSet;
 use bevy_camera::visibility::{InheritedVisibility, ViewVisibility, Visibility};
 use bevy_ecs::{prelude::*, reflect::AppTypeRegistry};
 use bevy_reflect::{Reflect, TypePath};
 use bevy_time::{Fixed, Real, Time, Virtual};
 use bevy_transform::components::{GlobalTransform, Transform, TransformTreeChanged};
 use serde_json::{json, Value};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use titan_snapshot::{
     ChangeKind, DiffConfig, SnapshotConfig, SnapshotValue, TypeFilter, WorldSnapshot,
 };

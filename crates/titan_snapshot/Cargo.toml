@@ -10,7 +10,10 @@ keywords = ["bevy", "ecs", "snapshot", "diff"]
 categories = ["game-development", "development-tools::testing"]
 
 [dependencies]
-bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", features = ["debug", "serialize"] }
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", features = [
+  "debug",
+  "serialize",
+] }
 bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["float_roundtrip"] }
@@ -19,7 +22,9 @@ serde_json = { version = "1.0.140", features = ["float_roundtrip"] }
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_camera = { path = "../bevy_camera", version = "0.20.0" }
 bevy_time = { path = "../bevy_time", version = "0.20.0" }
-bevy_transform = { path = "../bevy_transform", version = "0.20.0", features = ["serialize"] }
+bevy_transform = { path = "../bevy_transform", version = "0.20.0", features = [
+  "serialize",
+] }
 # Exercise canonicalization even when JSON objects preserve insertion order.
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
 
