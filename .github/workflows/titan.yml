@@ -1,0 +1,74 @@
+name: Titan
+
+permissions:
+  contents: read
+
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches: [main]
+
+# Keep in sync with the repository's other Rust workflows.
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  RUSTFLAGS: "-C debuginfo=0 -D warnings"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  titan-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # key won't match, will rely on restore-keys
+          key: ${{ runner.os }}-stable--${{ hashFiles('**/Cargo.toml') }}-
+          # See .github/workflows/update-caches.yml for how keys are generated
+          restore-keys: |
+            ${{ runner.os }}-stable--${{ hashFiles('**/Cargo.toml') }}-
+            ${{ runner.os }}-stable--
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+      - uses: ./.github/actions/install-rust
+      - uses: ./.github/actions/install-linux-deps
+      - name: Test all Titan crates with extra features
+        shell: bash
+        run: |
+          set -euo pipefail
+          crates=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' \
+            | sort)
+          if [[ -z "$crates" ]]; then
+            echo "::error::No titan_* workspace crates found"
+            exit 1
+          fi
+
+          # Default-feature coverage is provided by ci.yml's workspace tests.
+          # New titan_* workspace crates are automatically tested with all features.
+          while IFS= read -r crate; do
+            test_args=(test -p "$crate" --all-features)
+            case "$crate" in
+              titan_remote|titan_mcp)
+                # The upstream http-only combination emits a dead-code warning;
+                # match workspace CI's render feature while keeping tests GPU-free.
+                test_args+=(--features bevy_remote/bevy_render)
+                ;;
+            esac
+            echo "::group::Test $crate (all features)"
+            cargo "${test_args[@]}"
+            echo "::endgroup::"
+          done <<< "$crates"
