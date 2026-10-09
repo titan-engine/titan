@@ -91,9 +91,12 @@ rate with `with_fixed_dt` and, if needed, set `Time<Fixed>` independently afterw
 ## Time, input, and inspection
 
 - `with_fixed_dt(seconds)` sets **both** frame duration and `Time<Fixed>`'s
-  timestep. The first tick advances the full duration: the real clock is primed
-  without secretly running an extra app update. Large requested durations are
-  not lost to virtual time's default maximum-delta clamp.
+  timestep in the main app and every sub-app with `TimePlugin`; clockless
+  sub-apps are left unchanged. Each real clock is primed without secretly
+  running an extra app update, so even a sub-app's first tick advances the full
+  duration. Virtual time speed and pause settings are preserved independently
+  for each world. The virtual delta cap is raised to accommodate the configured
+  duration **after time scaling**, including when a paused clock resumes.
 - The default frame and fixed timestep are both `1.0 / 60.0` seconds.
 - `current_tick()` counts **completed** updates, starting at zero. `tick()`
   advances once; `run_ticks(n)` advances exactly `n` times.

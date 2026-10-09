@@ -107,6 +107,8 @@ impl Sim {
     /// executor policy, but preserves virtual time speed and pause settings.
     /// An already-updated app keeps its existing time and fixed-loop overstep,
     /// but its frame duration and fixed timestep are replaced with 60 Hz.
+    /// The same timing policy applies to each sub-app with `TimePlugin`,
+    /// including priming its real clock without executing any systems.
     ///
     /// # Panics
     /// Panics if plugins are not ready or the time resources are missing.
@@ -126,12 +128,6 @@ impl Sim {
                 && app.world().contains_resource::<Time<Fixed>>(),
             "Sim::from_app requires TimePlugin at tick 0"
         );
-        // Bevy's first real-time update normally only initializes its clock and
-        // has zero delta. Prime just the clock, without executing game systems.
-        let mut real = app.world_mut().resource_mut::<Time<Real>>();
-        if real.last_update().is_none() {
-            real.update_with_duration(Duration::ZERO);
-        }
         // A real, empty entity identifies synthetic input without requiring
         // bevy_window or creating an OS window. It is NOT a Window component.
         let input_window = app.world_mut().spawn_empty().id();
@@ -148,16 +144,19 @@ impl Sim {
         sim
     }
 
-    /// Set both the tick duration and fixed timestep, in seconds.
+    /// Set the tick duration and fixed timestep in the main app and each
+    /// time-enabled sub-app, in seconds.
     ///
     /// Raises virtual time's maximum delta if necessary to avoid clamping large
-    /// ticks. Virtual time speed/pause and existing fixed overstep are preserved.
+    /// ticks, accounting for each clock's configured relative speed. Virtual
+    /// time speed/pause and existing fixed overstep are preserved.
     /// Games may independently change `Time<Fixed>` to run multiple (or fewer)
     /// fixed updates per tick.
     ///
     /// # Panics
     /// Panics if `seconds` is nonfinite, nonpositive, unrepresentable as a
-    /// duration, or rounds to zero nanoseconds.
+    /// duration, rounds to zero nanoseconds, or produces an unrepresentable
+    /// scaled duration at a clock's configured relative speed.
     pub fn with_fixed_dt(mut self, seconds: f64) -> Self {
         assert!(
             seconds.is_finite() && seconds > 0.0,
@@ -180,12 +179,31 @@ impl Sim {
     }
 
     fn set_dt(&mut self, dt: Duration) {
-        let world = self.app.world_mut();
-        world.insert_resource(TimeUpdateStrategy::ManualDuration(dt));
-        world.resource_mut::<Time<Fixed>>().set_timestep(dt);
-        let mut virtual_time = world.resource_mut::<Time<Virtual>>();
-        if virtual_time.max_delta() < dt {
-            virtual_time.set_max_delta(dt);
+        for app in self.app.sub_apps_mut().iter_mut() {
+            let world = app.world_mut();
+            if !(world.contains_resource::<Time<Real>>()
+                && world.contains_resource::<Time<Virtual>>()
+                && world.contains_resource::<Time<Fixed>>())
+            {
+                continue;
+            }
+            // Bevy's first real-time update only initializes the clock. Prime
+            // each clock without executing systems so its first tick has dt.
+            let mut real = world.resource_mut::<Time<Real>>();
+            if real.last_update().is_none() {
+                real.update_with_duration(Duration::ZERO);
+            }
+            world.insert_resource(TimeUpdateStrategy::ManualDuration(dt));
+            world.resource_mut::<Time<Fixed>>().set_timestep(dt);
+            let mut virtual_time = world.resource_mut::<Time<Virtual>>();
+            // Bevy applies scaling before clamping. Use the configured speed
+            // even while paused so resuming doesn't silently discard time.
+            let speed = virtual_time.relative_speed_f64();
+            let scaled_dt = if speed == 1.0 { dt } else { dt.mul_f64(speed) };
+            let max_delta = dt.max(scaled_dt);
+            if virtual_time.max_delta() < max_delta {
+                virtual_time.set_max_delta(max_delta);
+            }
         }
     }
 
