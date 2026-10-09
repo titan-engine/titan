@@ -68,6 +68,45 @@ fn opaque_input_panic_preserves_original_script_without_shrinking() {
 }
 
 #[test]
+fn string_panic_cannot_shrink_to_an_opaque_payload_with_the_same_diagnostic() {
+    const SENTINEL: &str = "panic with a non-string payload (shrinking disabled: opaque payload)";
+    let factory = || {
+        Sim::new(|app| {
+            app.add_systems(Update, |keys: Res<ButtonInput<KeyCode>>| {
+                if keys.pressed(KeyCode::Space) {
+                    panic!("{SENTINEL}");
+                }
+                panic_any(OtherPanic);
+            });
+        })
+    };
+    let report = Fuzz::new(factory)
+        .buttons([KeyCode::Space])
+        .generator(DENSE)
+        .cases(1)
+        .ticks(12)
+        .max_shrink_runs(100)
+        .run();
+    let FuzzReport::Failed(failure) = report else {
+        panic!("expected string panic failure, got {report:?}");
+    };
+    assert_eq!(failure.message, SENTINEL);
+    assert_eq!(failure.ticks, 1);
+    assert_eq!(failure.script.events.len(), 1);
+    assert_eq!(failure.shrink_runs, 3);
+    let mut sim = factory();
+    let payload = catch_unwind(AssertUnwindSafe(|| {
+        sim.run_script(&failure.script, failure.ticks);
+    }))
+    .expect_err("retained script must still produce a string panic");
+    let message = payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied());
+    assert_eq!(message, Some(SENTINEL));
+}
+
+#[test]
 fn opaque_panic_type_changing_on_original_replay_is_flaky() {
     let calls = AtomicU64::new(0);
     let report = Fuzz::new(|| {

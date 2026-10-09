@@ -134,7 +134,9 @@ impl<E: FnMut(&InputScript, u64) -> Option<Violation>> Shrinker<'_, E> {
         let Some(violation) = (self.execute)(&candidate, ticks) else {
             return false;
         };
-        if violation.name != self.failure.invariant {
+        // An opaque payload cannot prove identity with a string panic, even
+        // when that string happens to equal our opaque diagnostic text.
+        if violation.name != self.failure.invariant || violation.opaque_panic.is_some() {
             return false;
         }
         // Do not trade one game panic for a different panic merely because both
