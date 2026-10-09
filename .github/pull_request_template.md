@@ -14,6 +14,15 @@
 - How can other people (reviewers) test your changes? Is there anything specific they need to know?
 - If relevant, what platforms did you test these changes on, and are there any important ones you can't test?
 
+## AI usage
+
+- How was AI used? (e.g. "none", "autocomplete", "agent wrote the implementation, I reviewed and tested it")
+- Which tools or models?
+
+## Upstream
+
+- Does this change make sense for Bevy too? (yes / no / maybe)
+
 ---
 
 ## Showcase

@@ -112,10 +112,10 @@ jobs:
           echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Checkout Bevy main branch
+      - name: Checkout main branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          repository: "bevyengine/bevy"
+          repository: ${{ github.repository }}
           ref: "main"
           persist-credentials: false
 
