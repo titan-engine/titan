@@ -58,6 +58,18 @@ Pin a commit with `rev = "..."` if you need reproducible builds.
 cargo run --example breakout
 ```
 
+## Titan demos
+
+The [Doom-style demo](demos/doom) is a small, walkable room-and-corridor level
+with shared human and headless gameplay controls:
+
+```sh
+cargo run -p titan_doom
+cargo test -p titan_doom --no-default-features
+```
+
+See its README for controls, the level format, and simulation tests.
+
 ## Contributing
 
 AI-assisted contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
