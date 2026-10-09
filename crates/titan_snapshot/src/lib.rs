@@ -109,6 +109,7 @@ pub struct EntitySnapshot {
     /// The entity's `Name`, if present, even when filtered from components.
     pub name: Option<String>,
     /// Components keyed and sorted by full reflected type path (or ECS type name).
+    /// Ambiguous paths gain a `[component_id:N]` suffix instead of losing values.
     pub components: BTreeMap<String, SnapshotValue>,
 }
 
@@ -122,7 +123,8 @@ pub struct WorldSnapshot {
     /// Entities sorted numerically by index and generation. Resource entities are
     /// represented only in `resources`, not duplicated here.
     pub entities: BTreeMap<EntityId, EntitySnapshot>,
-    /// Send + Sync resources sorted by full type path (or ECS type name).
+    /// Send + Sync resources sorted by full type path (or ECS type name), with
+    /// `[component_id:N]` suffixes for ambiguous paths.
     /// Non-send resources are outside the ECS resource iterator and not captured.
     pub resources: BTreeMap<String, SnapshotValue>,
 }

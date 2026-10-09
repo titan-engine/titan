@@ -56,7 +56,13 @@ lock. Capture works without a registry, too: values are then opaque.
 
 Each component/resource is keyed by its full reflected type path, falling back to
 its ECS type name. This crate enables ECS `debug` names so non-reflectable types
-remain identifiable in release builds. Values have explicit markers:
+remain identifiable in release builds. If multiple registered ECS descriptors
+share a type path, their document keys gain a `[component_id:N]` suffix so no
+value is overwritten. Suffixes are world-local; filters still match the original
+path. They remain stable when one of the colliding values is removed (registered
+descriptors persist). Registering a new colliding type between captures can change
+a previously plain key into a suffixed key; register such types before the first
+capture. Values have explicit markers:
 
 ```json
 {"kind": "reflected", "value": {"value": 11}}

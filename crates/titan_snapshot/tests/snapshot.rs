@@ -50,6 +50,30 @@ struct Collections {
     list: Vec<u32>,
 }
 
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+#[type_path = "snapshot_test"]
+#[type_name = "Duplicate"]
+struct DuplicateA(u32);
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+#[type_path = "snapshot_test"]
+#[type_name = "Duplicate"]
+struct DuplicateB(u32);
+
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+#[type_path = "snapshot_test"]
+#[type_name = "DuplicateResource"]
+struct DuplicateResourceA(u32);
+
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+#[type_path = "snapshot_test"]
+#[type_name = "DuplicateResource"]
+struct DuplicateResourceB(u32);
+
 fn world() -> World {
     let mut world = World::new();
     world.init_resource::<AppTypeRegistry>();
@@ -401,6 +425,78 @@ fn filters_default_noise_and_name_metadata() {
     let empty = WorldSnapshot::capture(&world, &config);
     assert!(empty.resources.is_empty());
     assert!(empty.entities[&entity.into()].components.is_empty());
+}
+
+#[test]
+fn colliding_type_paths_do_not_drop_values_or_rename_survivors() {
+    let mut world = world();
+    {
+        let mut registry = world.resource::<AppTypeRegistry>().write();
+        registry.register::<DuplicateA>();
+        registry.register::<DuplicateB>();
+        registry.register::<DuplicateResourceA>();
+        registry.register::<DuplicateResourceB>();
+    }
+    let entity = world.spawn((DuplicateA(1), DuplicateB(2))).id();
+    world.insert_resource(DuplicateResourceA(3));
+    world.insert_resource(DuplicateResourceB(4));
+    let before = capture(&world);
+    let components = &before.entities[&entity.into()].components;
+    assert_eq!(components.len(), 2);
+    assert!(components
+        .keys()
+        .all(|key| key.starts_with("snapshot_test::Duplicate [component_id:")));
+    assert_eq!(
+        components
+            .values()
+            .map(reflected)
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![json!(1), json!(2)]
+    );
+    assert_eq!(before.resources.len(), 2);
+    assert_eq!(
+        serde_json::to_string(&before).unwrap(),
+        serde_json::to_string(&capture(&world)).unwrap()
+    );
+    world.entity_mut(entity).remove::<DuplicateA>();
+    world.remove_resource::<DuplicateResourceA>();
+    let diff = before.diff(&capture(&world), &DiffConfig::default());
+    assert_eq!(diff.entities[0].components.len(), 1);
+    assert_eq!(diff.entities[0].components[0].kind, ChangeKind::Removed);
+    assert_eq!(diff.resources.len(), 1);
+    assert_eq!(diff.resources[0].kind, ChangeKind::Removed);
+}
+
+#[test]
+fn scalar_floats_roundtrip_exactly_and_capture_does_not_mark_changes() {
+    let mut world = world();
+    let entity = world
+        .spawn(Position {
+            translation: Coordinates { x: 0.0, y: 0.0 },
+        })
+        .id();
+    for value in [
+        0.1,
+        -0.0,
+        1.234_567_890_123_456_7,
+        f64::MIN_POSITIVE,
+        f64::MAX,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ] {
+        world.get_mut::<Position>(entity).unwrap().translation.y = value;
+        let ticks = world.entity(entity).get_change_ticks::<Position>().unwrap();
+        let snapshot = capture(&world);
+        let json = serde_json::to_string_pretty(&snapshot).unwrap();
+        let loaded: WorldSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(snapshot, loaded, "float {value}");
+        assert!(snapshot.diff(&loaded, &DiffConfig::default()).is_empty());
+        let after_ticks = world.entity(entity).get_change_ticks::<Position>().unwrap();
+        assert_eq!(ticks.added, after_ticks.added);
+        assert_eq!(ticks.changed, after_ticks.changed);
+    }
 }
 
 #[test]

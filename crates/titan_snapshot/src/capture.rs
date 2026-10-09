@@ -1,7 +1,13 @@
 use crate::{EntityId, EntitySnapshot, SnapshotValue, WorldSnapshot};
-use alloc::{collections::BTreeSet, format, string::String, string::ToString, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    format,
+    string::String,
+    string::ToString,
+    vec::Vec,
+};
 use bevy_ecs::{
-    component::ComponentInfo,
+    component::{ComponentId, ComponentInfo},
     name::Name,
     reflect::{AppTypeRegistry, ReflectComponent},
     resource::IS_RESOURCE,
@@ -98,6 +104,7 @@ impl WorldSnapshot {
     pub fn capture(world: &World, config: &SnapshotConfig) -> Self {
         let registry = world.get_resource::<AppTypeRegistry>().map(|r| r.read());
         let registry = registry.as_deref();
+        let keys = unique_type_keys(world, registry);
         let mut snapshot = Self::default();
         for entity in world.iter_entities() {
             if entity.contains_id(IS_RESOURCE) {
@@ -115,7 +122,7 @@ impl WorldSnapshot {
                 if config.components.includes(&path) {
                     captured
                         .components
-                        .insert(path, capture_value(entity, info, registry));
+                        .insert(keys[id].clone(), capture_value(entity, info, registry));
                 }
             }
             snapshot
@@ -136,7 +143,7 @@ impl WorldSnapshot {
             {
                 snapshot
                     .resources
-                    .insert(path, capture_value(entity, info, registry));
+                    .insert(keys[&id].clone(), capture_value(entity, info, registry));
             }
         }
         snapshot
@@ -148,6 +155,40 @@ fn type_path(info: &ComponentInfo, registry: Option<&TypeRegistry>) -> String {
         || info.name().to_string(),
         |r| r.type_info().type_path().to_string(),
     )
+}
+
+// Type paths normally identify a type, but custom reflection paths and dynamic
+// ECS descriptors may collide. Disambiguate against all registered descriptors,
+// not just present values, so removing one instance does not rename the others.
+fn unique_type_keys(
+    world: &World,
+    registry: Option<&TypeRegistry>,
+) -> BTreeMap<ComponentId, String> {
+    let mut groups: BTreeMap<String, Vec<ComponentId>> = BTreeMap::new();
+    for (id, info) in world.components().iter_registered() {
+        groups
+            .entry(type_path(info, registry))
+            .or_default()
+            .push(id);
+    }
+    let mut reserved: BTreeSet<String> = groups.keys().cloned().collect();
+    let mut keys = BTreeMap::new();
+    for (path, mut ids) in groups {
+        ids.sort();
+        if ids.len() == 1 {
+            keys.insert(ids[0], path);
+        } else {
+            for id in ids {
+                let mut key = format!("{path} [component_id:{}]", id.index());
+                // A dynamic descriptor could itself use our suffix syntax.
+                while !reserved.insert(key.clone()) {
+                    key.push('#');
+                }
+                keys.insert(id, key);
+            }
+        }
+    }
+    keys
 }
 
 fn opaque(reason: &str) -> SnapshotValue {
