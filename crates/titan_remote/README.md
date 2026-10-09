@@ -64,7 +64,9 @@ only after the PNG has been written**, never just because an older file exists.
 The optional path is a server-local PNG path; omitted paths use a per-process
 temporary directory. Relative paths resolve against the game's working directory;
 parent directories must exist. Results contain absolute paths. Rendering must be
-initialized and a primary window must exist.
+initialized and a primary window must exist. Keep that window visible while
+capturing: on macOS/Metal, a fully occluded or minimized window can produce a
+black image even though capture and file writing succeed.
 
 Captures are serialized to avoid Bevy dropping duplicate primary-window captures
 in one frame. At most 64 jobs are tracked; unfinished jobs time out after 30
