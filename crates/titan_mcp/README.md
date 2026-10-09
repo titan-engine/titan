@@ -150,9 +150,11 @@ and covers the BRP capture sequence; best-effort cleanup may take another
 100 ms. The fast path requests a `.png` inside a private temporary directory,
 polls Titan's screenshot token until publication, and securely opens the exact
 requested destination. Both atomic replacement and legacy in-place writes are
-supported. Unix reads are anchored to the held directory handle and never follow
-symlinks or block on FIFOs; Windows pins the directory and rejects reparse points
-on the opened handle. Byte, decoded-image, checksum and deadline checks apply,
+supported. Both platforms open relative to the held directory handle: Unix uses
+`openat` without following symlinks or blocking on FIFOs; Windows uses a safe
+`cap-primitives` wrapper around handle-relative `NtCreateFile` and rejects
+reparse points on the opened handle. Windows shares parent write access for
+atomic publication while denying parent deletion/replacement. Byte, decoded-image, checksum and deadline checks apply,
 and the temporary directory is removed on ordinary success/error paths. The
 local temp-directory ancestors are trusted. Animated PNGs are rejected. OS I/O
 and individual decoder operations cannot be forcibly interrupted; deadlines are

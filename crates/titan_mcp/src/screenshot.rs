@@ -188,10 +188,10 @@ const SCREENSHOT_FILE: &str = "capture.png";
 ///
 /// The temporary directory's ancestors are the local, trusted temp-directory
 /// hierarchy. The game controls the leaf and can rename our immediate parent:
-/// Unix reads are relative to a directory handle, not a racy full-path lookup;
-/// Windows denies write/delete sharing of the parent (including conversion to
-/// a reparse point). Leaf metadata
-/// is checked on the opened handle, never as a check-then-open security barrier.
+/// Both platforms read relative to a directory handle, not a racy full-path
+/// lookup. Windows denies parent deletion but shares write access so the game
+/// can atomically rename its staging PNG. Leaf metadata is checked on the opened
+/// handle, never as a check-then-open security barrier.
 struct ScreenshotDestination {
     // Field order matters on Windows: close the directory before removing it.
     directory: fs::File,
@@ -233,9 +233,9 @@ impl ScreenshotDestination {
         };
         #[cfg(windows)]
         let file = {
-            use std::os::windows::fs::OpenOptionsExt;
-            // Validate the pinned parent on its handle, not through a racy
-            // path lookup, before opening the published leaf.
+            use cap_primitives::fs::{open, OpenOptions, OpenOptionsExt};
+            // Reject an already-converted parent; the handle-relative open
+            // below also prevents redirection if conversion races this check.
             let metadata = self.directory.metadata()?;
             reject_reparse_point(&metadata)?;
             if !metadata.is_dir() {
@@ -244,11 +244,18 @@ impl ScreenshotDestination {
             // FILE_FLAG_OPEN_REPARSE_POINT (0x00200000) opens the link itself,
             // rather than its target, even if swapped in just before this call.
             // Do not share DELETE while the file's metadata/bytes are inspected.
-            fs::OpenOptions::new()
+            let mut options = OpenOptions::new();
+            options
                 .read(true)
                 .share_mode(0x00000001 | 0x00000002) // FILE_SHARE_READ | FILE_SHARE_WRITE
-                .custom_flags(0x00200000)
-                .open(&self.path)?
+                .custom_flags(0x00200000);
+            // cap-primitives uses NtCreateFile's RootDirectory for this fixed
+            // single-component name; it never re-resolves the full parent path.
+            open(
+                &self.directory,
+                std::path::Path::new(SCREENSHOT_FILE),
+                &options,
+            )?
         };
         #[cfg(not(any(unix, windows)))]
         return Err(io::Error::new(
@@ -283,12 +290,10 @@ fn open_directory(path: &std::path::Path) -> io::Result<fs::File> {
         use std::os::windows::fs::OpenOptionsExt;
         let directory = fs::OpenOptions::new()
             .read(true)
-            // FILE_SHARE_READ only: omitting DELETE prevents replacement;
-            // omitting WRITE prevents opening it with GENERIC_WRITE to convert
-            // the held directory to a reparse point (FSCTL_SET_REPARSE_POINT).
-            // Creating/renaming children does not require a writable handle to
-            // this parent, so the server can still atomically publish the PNG.
-            .share_mode(0x00000001)
+            // Deny DELETE to prevent parent replacement. MoveFileEx opens its
+            // target directory for FILE_WRITE_DATA, so WRITE sharing is required
+            // for atomic publication. Reads remain directory-handle-relative.
+            .share_mode(0x00000001 | 0x00000002)
             // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT.
             .custom_flags(0x02000000 | 0x00200000)
             .open(path)?;
@@ -1745,13 +1750,15 @@ mod tests {
             .to_owned();
         assert!(fs::rename(&parent, parent.with_extension("moved")).is_err());
         assert!(fs::remove_dir(&parent).is_err());
-        // A writable directory handle is needed to set a junction/reparse point.
-        assert!(fs::OpenOptions::new()
+        // Publication needs writable parent access. The pinned parent still
+        // cannot be replaced, and leaf reads use its handle rather than its path.
+        let writer = fs::OpenOptions::new()
             .write(true)
             .share_mode(0x00000001 | 0x00000002 | 0x00000004)
             .custom_flags(0x02000000) // FILE_FLAG_BACKUP_SEMANTICS
             .open(&parent)
-            .is_err());
+            .unwrap();
+        drop(writer);
     }
 
     #[cfg(windows)]
@@ -1770,6 +1777,29 @@ mod tests {
         let error =
             wait_for_png(&destination, Instant::now() + Duration::from_secs(1)).unwrap_err();
         assert!(error.contains("reparse point"), "{error}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_junction_leaf_is_rejected_without_touching_its_target() {
+        let destination = ScreenshotDestination::new().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let external_png = external.path().join(SCREENSHOT_FILE);
+        fs::write(&external_png, tiny_png()).unwrap();
+        // Junction creation does not require Developer Mode/symlink privileges.
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&destination.path)
+            .arg(external.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let start = Instant::now();
+        let error = wait_for_png(&destination, start + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("securely opening"), "{error}");
+        assert!(start.elapsed() < Duration::from_secs(1));
+        drop(destination);
+        assert_eq!(fs::read(external_png).unwrap(), tiny_png());
     }
 
     /// Paths the game controls can be FIFOs. Neither returning one nor

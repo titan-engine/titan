@@ -30,6 +30,9 @@ ureq = { version = "3.0.8", default-features = false, features = ["json"] }
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["fs"] }
 
+[target.'cfg(windows)'.dependencies]
+cap-primitives = "4.0.3"
+
 [dev-dependencies]
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_asset = { path = "../bevy_asset", version = "0.20.0" }
