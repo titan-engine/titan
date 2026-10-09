@@ -6,11 +6,12 @@ extern crate alloc;
 use alloc::string::ToString;
 use core::{mem, time::Duration};
 
-use bevy_app::{App, First, Last, Plugin};
+use bevy_app::{App, First, Plugin};
 use bevy_diagnostic::{FrameCount, FrameCountPlugin};
 use bevy_ecs::prelude::*;
 use bevy_remote::{
-    error_codes, BrpError, BrpResult, RemoteMethodSystemId, RemoteMethods, RemotePlugin,
+    error_codes, BrpError, BrpResult, RemoteLast, RemoteMethodSystemId, RemoteMethods,
+    RemotePlugin, RemoteSystems,
 };
 use bevy_time::{Time, TimePlugin, TimeSystems, TimeUpdateStrategy, Virtual};
 use serde::Deserialize;
@@ -34,7 +35,10 @@ impl Plugin for TitanRemotePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<StepState>()
             .add_systems(First, begin_step_frame.before(TimeSystems))
-            .add_systems(Last, finish_step_frame);
+            .add_systems(
+                RemoteLast,
+                finish_step_frame.before(RemoteSystems::ProcessRequests),
+            );
     }
 
     fn finish(&self, app: &mut App) {

@@ -30,8 +30,10 @@ Results below are the JSON-RPC `result` payload, not the entire envelope.
 `pause` and `resume` pause/unpause `Time<Virtual>`. Either cancels an outstanding
 step and restores its saved clock configuration. `step` advances the **next** N
 app frames with `TimeUpdateStrategy::ManualDuration`, then pauses again. Poll
-`status` until `pending_steps` is zero. BRP handles requests after `Last`, so the
-frame in which the request arrives is not counted as a stepped frame.
+`status` until `pending_steps` is zero. Completion runs in `RemoteLast` after all
+`Last` systems and before BRP processes requests, so every system in the final
+stepped frame observes an unpaused clock. The frame in which the step request
+arrives is not counted as a stepped frame.
 
 Stepping temporarily uses virtual speed 1 and a maximum delta equal to the step
 delta, then restores the previous speed, maximum delta, and time-update strategy.

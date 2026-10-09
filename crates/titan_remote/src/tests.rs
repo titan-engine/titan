@@ -1,5 +1,5 @@
 use super::*;
-use bevy_app::{FixedUpdate, Update};
+use bevy_app::{FixedUpdate, Last, Update};
 use bevy_time::Fixed;
 
 fn app() -> App {
@@ -97,6 +97,36 @@ fn ten_frames_advance_exactly_and_restore_configuration() {
     assert_eq!(
         app.world().resource::<Time<Virtual>>().elapsed() - elapsed,
         duration * 10
+    );
+}
+
+#[derive(Resource, Default)]
+struct LastStepFrames(u32);
+
+#[test]
+fn last_systems_observe_every_stepped_frame_as_unpaused() {
+    let mut app = app();
+    app.init_resource::<LastStepFrames>().add_systems(
+        Last,
+        (|time: Res<Time<Virtual>>, mut frames: ResMut<LastStepFrames>| {
+            if !time.is_paused() {
+                frames.0 += 1;
+            }
+        })
+        // Force the ordering that exposed the old Last-schedule completion bug.
+        // Completion now lives in RemoteLast, after every Last system has run.
+        .after(finish_step_frame),
+    );
+    call(&mut app, "titan.pause", None).unwrap();
+    call(&mut app, "titan.step", Some(json!({ "frames": 3 }))).unwrap();
+    for expected in 1..=3 {
+        app.update();
+        assert_eq!(app.world().resource::<LastStepFrames>().0, expected);
+    }
+    assert!(app.world().resource::<Time<Virtual>>().is_paused());
+    assert_eq!(
+        call(&mut app, "titan.status", None).unwrap()["pending_steps"],
+        0
     );
 }
 
@@ -251,5 +281,14 @@ fn registration_preserves_builtin_methods_in_either_plugin_order() {
         let methods = app.world().resource::<RemoteMethods>();
         assert!(methods.get("world.query").is_some());
         assert!(methods.get("titan.status").is_some());
+        app.cleanup();
+        app.update();
+        call(&mut app, "titan.step", Some(json!({ "frames": 1 }))).unwrap();
+        app.update();
+        assert_eq!(app.world().resource::<FrameCount>().0, 2);
+        assert_eq!(
+            call(&mut app, "titan.status", None).unwrap(),
+            json!({ "paused": true, "frame": 2, "pending_steps": 0 })
+        );
     }
 }
