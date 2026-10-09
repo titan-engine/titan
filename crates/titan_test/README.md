@@ -107,7 +107,8 @@ rate with `with_fixed_dt` and, if needed, set `Time<Fixed>` independently afterw
   and `InputPlugin`, so game systems see real `ButtonInput` pressed,
   just-pressed, and just-released transitions, not manually patched resources.
   Their `window` is a spawned empty entity, not a `Window` component or an invalid
-  placeholder; no window crate is required. Systems that query window components
+  placeholder; no window crate is required. This entity is visible to whole-world
+  queries, counts, and cleanup systems. Systems that query window components
   need custom input messages. Keyboard messages have an unidentified logical key,
   no text, and `repeat = false`: use `ButtonInput<KeyCode>`, not `ButtonInput<Key>`.
 - `world()` / `world_mut()` expose the world; `resource::<R>()` reads a resource.
@@ -187,6 +188,7 @@ For repeatable runs, control all relevant inputs:
   `with_executor_kind(ExecutorKind::MultiThreaded)`. Actual concurrency depends on
   Bevy/task-pool feature flags. Still explicitly order systems whose behavior
   depends on ordering; sequential execution is not a substitute for dependencies.
+  Parallel iteration or task-pool work inside a system is not serialized.
   The harness replaces custom executors and their local settings. It configures
   existing schedules and new ones discovered before each tick; schedules created
   and immediately run, or replaced under an existing label, by a system must

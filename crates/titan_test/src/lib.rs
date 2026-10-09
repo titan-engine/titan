@@ -44,6 +44,7 @@ pub struct SimSeed(pub u64);
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ExecutorKind {
     /// Run systems sequentially, including when Bevy's multithreading is enabled.
+    /// Parallel iteration or task-pool work *inside* a system is not serialized.
     #[default]
     SingleThreaded,
     /// Opt out of sequential execution using Bevy's multithreaded executor.
