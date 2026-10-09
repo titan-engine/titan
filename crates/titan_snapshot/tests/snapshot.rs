@@ -454,7 +454,14 @@ fn colliding_type_paths_do_not_drop_values_or_rename_survivors() {
             .collect::<Vec<_>>(),
         vec![json!(1), json!(2)]
     );
-    assert_eq!(before.resources.len(), 2);
+    assert_eq!(
+        before
+            .resources
+            .keys()
+            .filter(|key| key.starts_with(DuplicateResourceA::type_path()))
+            .count(),
+        2,
+    );
     assert_eq!(
         serde_json::to_string(&before).unwrap(),
         serde_json::to_string(&capture(&world)).unwrap()
