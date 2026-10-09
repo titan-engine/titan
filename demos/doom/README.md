@@ -167,8 +167,10 @@ corner for 1200 ticks. Timing tests cover frames with zero or multiple fixed
 steps, retaining pending aim and consuming it exactly once. Unit tests also cover sliding, circular corner clearance,
 large-displacement wall tunneling, diagonal/analog speed, aiming and look
 consumption, non-finite actions, malformed levels, and stable identity despite
-unrelated ECS entity allocation. CI tests the no-default-feature combination
-explicitly; workspace CI covers the rendered build.
+unrelated ECS entity allocation. The shared Linux-only
+[Titan workflow](../../.github/workflows/titan.yml) tests and lints the
+no-default-feature combination explicitly, as well as testing all features.
+Workspace CI covers the rendered build on all three operating systems.
 
 `cargo test -p titan_doom --bin titan_doom` additionally checks the BSN scene
 hierarchy, mouse-grab activation/focus loss, and screenshot success/failure
