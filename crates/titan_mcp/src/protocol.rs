@@ -178,17 +178,20 @@ fn compact(value: Value) -> String {
         return full;
     }
     let guidance = "Narrow the query with with/without filters or fetch fewer components; brp_call can request a smaller result.";
-    let (items, already_omitted) = match value {
-        Value::Array(items) => (Some(items), 0),
+    let (items, already_omitted, siblings) = match value {
+        Value::Array(items) => (Some(items), 0, serde_json::Map::new()),
         Value::Object(mut object) if object.get("items").is_some_and(Value::is_array) => {
             let omitted = object.get("omitted").and_then(Value::as_u64).unwrap_or(0);
-            let items = object.remove("items").and_then(|v| v.as_array().cloned());
-            (items, omitted)
+            let items = match object.remove("items") {
+                Some(Value::Array(items)) => Some(items),
+                _ => None,
+            };
+            (items, omitted, object)
         }
         Value::Object(object) => {
             return json!({"truncated":true,"omitted_items":object.len(),"omitted_bytes":full.len(),"note":format!("Result exceeds the text limit; object entries were omitted. {guidance}")}).to_string();
         }
-        _ => (None, 0),
+        _ => (None, 0, serde_json::Map::new()),
     };
     if let Some(items) = items {
         let total = items.len();
@@ -202,7 +205,38 @@ fn compact(value: Value) -> String {
             bytes += size;
             kept.push(item);
         }
-        return json!({"omitted_items":already_omitted + (total-kept.len()) as u64,"items":kept,"truncated":true,"note":guidance}).to_string();
+        let locally_omitted = (total - kept.len()) as u64;
+        let mut result = json!({
+            "omitted_items": already_omitted.saturating_add(locally_omitted),
+            "omitted_items_saturated": already_omitted.checked_add(locally_omitted).is_none(),
+            "items": kept,
+            "truncated": true,
+            "omitted_fields": 0,
+            "omitted_field_bytes": 0,
+            "note": guidance
+        });
+        let object = result.as_object_mut().unwrap();
+        let mut sibling_bytes: usize = 0;
+        let mut omitted_fields: usize = 0;
+        let mut omitted_field_bytes: usize = 0;
+        for (key, value) in siblings {
+            // Budget encoded keys/values, including escape expansion. Continue
+            // past an oversized field so small continuation tokens can survive.
+            let size = json!(key).to_string().len() + value.to_string().len() + 2;
+            if object.contains_key(&key) || sibling_bytes.saturating_add(size) > MAX_TEXT_BYTES / 4
+            {
+                // Reserved truncation fields must not silently overwrite the
+                // original envelope's metadata: count those omissions too.
+                omitted_fields += 1;
+                omitted_field_bytes = omitted_field_bytes.saturating_add(size);
+            } else {
+                sibling_bytes += size;
+                object.insert(key, value);
+            }
+        }
+        object.insert("omitted_fields".to_owned(), json!(omitted_fields));
+        object.insert("omitted_field_bytes".to_owned(), json!(omitted_field_bytes));
+        return result.to_string();
     }
     json!({"truncated":true,"omitted_bytes":full.len(),"note":format!("Result exceeds the text limit and was omitted. {guidance}")}).to_string()
 }
@@ -250,6 +284,66 @@ mod tests {
                 .unwrap()
                 .contains("exact type paths"));
         }
+    }
+
+    #[test]
+    fn carried_omission_counts_saturate_instead_of_panicking_or_wrapping() {
+        for carried in [u64::MAX, u64::MAX - 1, u64::MAX - 3] {
+            let text = compact(json!({
+                "items": ["x".repeat(MAX_TEXT_BYTES), "second", "third"],
+                "omitted": carried
+            }));
+            assert!(text.len() <= MAX_TEXT_BYTES);
+            let result: Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(result["items"], json!([]));
+            assert_eq!(result["omitted_items"], u64::MAX);
+            assert_eq!(result["omitted_items_saturated"], carried > u64::MAX - 3);
+        }
+    }
+
+    #[test]
+    fn compacted_items_preserve_small_siblings_and_report_dropped_fields() {
+        let text = compact(json!({
+            "items": vec!["x".repeat(256); 150],
+            "blob": "y".repeat(MAX_TEXT_BYTES),
+            "continuation": "next-page-token",
+            "total": 500,
+            "omitted": 20,
+            "note": "original pagination guidance",
+            "truncated": false
+        }));
+        assert!(text.len() <= MAX_TEXT_BYTES);
+        let result: Value = serde_json::from_str(&text).unwrap();
+        let kept = result["items"].as_array().unwrap().len();
+        assert!(kept > 0 && kept <= MAX_ITEMS);
+        assert_eq!(result["omitted_items"], 20 + (150 - kept));
+        assert_eq!(result["continuation"], "next-page-token");
+        assert_eq!(result["total"], 500);
+        assert_eq!(result["omitted"], 20);
+        assert!(result.get("blob").is_none());
+        assert_eq!(result["omitted_fields"], 3); // blob and two reserved fields
+        assert!(result["omitted_field_bytes"].as_u64().unwrap() > MAX_TEXT_BYTES as u64);
+        assert_eq!(result["truncated"], true);
+        assert!(result["note"].as_str().unwrap().contains("Narrow"));
+    }
+
+    #[test]
+    fn escaped_sibling_keys_and_values_stay_within_the_text_budget() {
+        let mut original = serde_json::Map::new();
+        original.insert("items".to_owned(), json!(["x".repeat(MAX_TEXT_BYTES)]));
+        for index in 0..300 {
+            original.insert(
+                format!("{index}:{}", "\n\"\\🦀".repeat(20)),
+                json!("\n\"\\🦀".repeat(20)),
+            );
+        }
+        let text = compact(Value::Object(original));
+        assert!(text.len() <= MAX_TEXT_BYTES);
+        let result: Value = serde_json::from_str(&text).unwrap();
+        let retained = result.as_object().unwrap().len() - 7;
+        let omitted = result["omitted_fields"].as_u64().unwrap() as usize;
+        assert_eq!(retained + omitted, 300);
+        assert!(omitted > 0 && retained > 0);
     }
 
     #[test]
