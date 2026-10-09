@@ -3,11 +3,11 @@
 //! Two paths, chosen by what `rpc.discover` advertises:
 //!
 //! 1. **Fast path:** `titan.screenshot` (or `titan.screenshot+watch`) from
-//!    `TitanRemotePlugin`. We create a temp file, ask the game to write the PNG
-//!    to exactly that path, and read it back (bounded, through our own handle)
-//!    once it decodes. Any other returned path is rejected. If the method
-//!    returns a `token` instead of a `path`, `titan.screenshot_status` is polled
-//!    with it. The game writes in place (`File::create`), so our handle sees it.
+//!    `TitanRemotePlugin`. We ask the game to publish the PNG to an exact path
+//!    inside a private temp directory, then securely open the published regular
+//!    file (not a pre-publication handle). Any other returned path is rejected.
+//!    If the method returns a `token`, `titan.screenshot_status` is polled with
+//!    it. Atomic publication and legacy in-place writes are both supported.
 //! 2. **Fallback:** spawn an empty BRP entity, register a `ScreenshotCaptured`
 //!    observer, then insert `Screenshot`. The whole image arrives as
 //!    reflected JSON (slow and large), which we decode and encode as PNG here
@@ -20,7 +20,7 @@ use core::time::Duration;
 use std::{
     collections::HashSet,
     fs,
-    io::{BufRead, BufReader, Cursor, Read, Seek, SeekFrom},
+    io::{self, BufRead, BufReader, Cursor, Read},
     sync::mpsc::{self, Receiver, TryRecvError},
     thread,
     time::Instant,
@@ -82,15 +82,10 @@ pub fn capture(client: &Client, args: &Value) -> Result<Value, String> {
     let methods = discover_methods(client, deadline)?;
 
     let png = if methods.contains(TITAN_SCREENSHOT_WATCH) || methods.contains(TITAN_SCREENSHOT) {
-        match capture_titan(client, &methods, deadline) {
-            Ok(png) => png,
-            Err(titan_err) if Instant::now() >= deadline => return Err(titan_err),
-            Err(titan_err) => capture_observe(client, deadline).map_err(|fallback_err| {
-                format!(
-                    "{TITAN_SCREENSHOT} failed: {titan_err}. The world.observe fallback also failed: {fallback_err}"
-                )
-            })?,
-        }
+        // Respect the advertised backend's operational errors, including its
+        // limit on stuck renderer readbacks. Raw BRP fallback would bypass that
+        // accounting by spawning additional Screenshot entities directly.
+        capture_titan(client, &methods, deadline)?
     } else {
         capture_observe(client, deadline)?
     };
@@ -145,21 +140,12 @@ fn capture_titan(
     methods: &HashSet<String>,
     deadline: Instant,
 ) -> Result<Vec<u8>, String> {
-    // Create (O_EXCL) and keep a handle to a regular file before the game
-    // writes. We only ever read through this handle, never by reopening a path
-    // the game hands back, so a swapped-in FIFO, device, or symlink can't block
-    // or redirect the read. The `.png` suffix is how `save_to_disk` picks the
-    // format. The file is removed when `temp` drops.
-    let temp = tempfile::Builder::new()
-        .prefix("titan_mcp-screenshot-")
-        .suffix(".png")
-        .tempfile()
-        .map_err(|e| format!("couldn't create a temp file for the screenshot: {e}"))?;
-    let requested = temp
-        .path()
-        .to_str()
-        .ok_or("the temp directory path isn't valid UTF-8")?
-        .to_owned();
+    // TitanRemotePlugin publishes by rename. A precreated NamedTempFile handle
+    // would still refer to the old inode after publication and read zero bytes.
+    // Reserve the directory instead, and open the destination only after the
+    // RPC completes. The directory guard also removes staging files on failure.
+    let destination = ScreenshotDestination::new()?;
+    let requested = &destination.path;
     let params = json!({ "path": requested });
 
     let path = if methods.contains(TITAN_SCREENSHOT_WATCH) {
@@ -186,14 +172,145 @@ fn capture_titan(
             }
         }
     };
-    if path != requested {
+    if path != *requested {
         return Err(format!(
-            "{TITAN_SCREENSHOT} wrote to `{}` instead of the requested `{requested}`; refusing to read a path titan_mcp didn't create",
+            "{TITAN_SCREENSHOT} wrote to `{}` instead of the requested `{requested}`; refusing to read any other destination",
             truncate(&path, 200)
         ));
     }
 
-    wait_for_png(temp.as_file(), &requested, deadline)
+    wait_for_png(&destination, deadline)
+}
+
+const SCREENSHOT_FILE: &str = "capture.png";
+
+/// Pins the private parent directory while the game publishes the file.
+///
+/// The temporary directory's ancestors are the local, trusted temp-directory
+/// hierarchy. The game controls the leaf and can rename our immediate parent:
+/// Unix reads are relative to a directory handle, not a racy full-path lookup;
+/// Windows denies write/delete sharing of the parent (including conversion to
+/// a reparse point). Leaf metadata
+/// is checked on the opened handle, never as a check-then-open security barrier.
+struct ScreenshotDestination {
+    // Field order matters on Windows: close the directory before removing it.
+    directory: fs::File,
+    _temp: tempfile::TempDir,
+    path: String,
+}
+
+impl ScreenshotDestination {
+    fn new() -> Result<Self, String> {
+        let temp = tempfile::Builder::new()
+            .prefix("titan_mcp-screenshot-")
+            .tempdir()
+            .map_err(|e| format!("couldn't create a private screenshot directory: {e}"))?;
+        let parent = std::path::absolute(temp.path()).map_err(|e| e.to_string())?;
+        let path = parent
+            .join(SCREENSHOT_FILE)
+            .to_str()
+            .ok_or("the temp directory path isn't valid UTF-8")?
+            .to_owned();
+        let directory = open_directory(&parent)
+            .map_err(|e| format!("couldn't secure the screenshot directory: {e}"))?;
+        Ok(Self {
+            directory,
+            _temp: temp,
+            path,
+        })
+    }
+
+    fn open(&self) -> io::Result<fs::File> {
+        #[cfg(unix)]
+        let file = {
+            use rustix::fs::{openat, Mode, OFlags};
+            fs::File::from(openat(
+                &self.directory,
+                SCREENSHOT_FILE,
+                OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+                Mode::empty(),
+            )?)
+        };
+        #[cfg(windows)]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            // FILE_FLAG_OPEN_REPARSE_POINT (0x00200000) opens the link itself,
+            // rather than its target, even if swapped in just before this call.
+            // Do not share DELETE while the file's metadata/bytes are inspected.
+            fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0x00000001 | 0x00000002) // FILE_SHARE_READ | FILE_SHARE_WRITE
+                .custom_flags(0x00200000)
+                .open(&self.path)?
+        };
+        #[cfg(not(any(unix, windows)))]
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "secure screenshot file opening is unsupported on this platform",
+        ));
+
+        #[cfg(any(unix, windows))]
+        {
+            let metadata = file.metadata()?;
+            reject_reparse_point(&metadata)?;
+            if !metadata.is_file() {
+                return Err(io::Error::other("screenshot is not a regular file"));
+            }
+            Ok(file)
+        }
+    }
+}
+
+fn open_directory(path: &std::path::Path) -> io::Result<fs::File> {
+    #[cfg(unix)]
+    {
+        use rustix::fs::{open, Mode, OFlags};
+        Ok(fs::File::from(open(
+            path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )?))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let directory = fs::OpenOptions::new()
+            .read(true)
+            // FILE_SHARE_READ only: omitting DELETE prevents replacement;
+            // omitting WRITE prevents opening it with GENERIC_WRITE to convert
+            // the held directory to a reparse point (FSCTL_SET_REPARSE_POINT).
+            // Creating/renaming children does not require a writable handle to
+            // this parent, so the server can still atomically publish the PNG.
+            .share_mode(0x00000001)
+            // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT.
+            .custom_flags(0x02000000 | 0x00200000)
+            .open(path)?;
+        let metadata = directory.metadata()?;
+        reject_reparse_point(&metadata)?;
+        if !metadata.is_dir() {
+            return Err(io::Error::other("screenshot parent is not a directory"));
+        }
+        Ok(directory)
+    }
+    #[cfg(not(any(unix, windows)))]
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "secure screenshot file opening is unsupported on this platform",
+    ))
+}
+
+fn reject_reparse_point(metadata: &fs::Metadata) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x00000400 != 0 {
+            // FILE_ATTRIBUTE_REPARSE_POINT: includes symlinks and junctions.
+            return Err(io::Error::other("screenshot path is a reparse point"));
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = metadata;
+    Ok(())
 }
 
 /// Extracts `path` from a `titan.screenshot*` result (`{ "path": ... }`).
@@ -212,8 +329,15 @@ fn poll_status(client: &Client, token: &Value, deadline: Instant) -> Result<Stri
             Some(json!({ "token": token })),
             deadline,
         )?;
-        if let Some(path) = result_path(&status) {
-            return Ok(path);
+        if status.get("pending") != Some(&Value::Bool(true)) {
+            if let Some(path) = result_path(&status) {
+                return Ok(path);
+            }
+            if status.get("pending") == Some(&Value::Bool(false)) {
+                return Err(format!(
+                    "{TITAN_SCREENSHOT_STATUS} completed without a `path`"
+                ));
+            }
         }
         if Instant::now() + POLL_INTERVAL >= deadline {
             return Err(timeout_error(TITAN_SCREENSHOT_STATUS));
@@ -222,30 +346,62 @@ fn poll_status(client: &Client, token: &Value, deadline: Instant) -> Result<Stri
     }
 }
 
-/// Waits until `file` holds a complete, decodable PNG (the game writes it
-/// asynchronously), then returns its bytes.
-fn wait_for_png(mut file: &fs::File, path: &str, deadline: Instant) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
+/// Reopens on each poll: atomic publication may replace a partial legacy file.
+/// Only an opened, verified regular file is read, with byte and deadline limits.
+fn wait_for_png(destination: &ScreenshotDestination, deadline: Instant) -> Result<Vec<u8>, String> {
+    let path = &destination.path;
     loop {
-        bytes.clear();
-        file.seek(SeekFrom::Start(0))
-            .and_then(|_| file.take(MAX_PNG_BYTES + 1).read_to_end(&mut bytes))
-            .map_err(|e| format!("reading screenshot `{path}` failed: {e}"))?;
-        if bytes.len() as u64 > MAX_PNG_BYTES {
-            return Err(format!(
-                "screenshot `{path}` is over the {MAX_PNG_BYTES} byte limit"
-            ));
+        if Instant::now() >= deadline {
+            return Err(timeout_error("a complete screenshot PNG"));
         }
+        let bytes = match destination.open() {
+            Ok(file) => read_png(file, path, deadline)?,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(format!("securely opening screenshot `{path}` failed: {e}")),
+        };
         // Cheap check first so a half-written file isn't decoded every poll.
         if looks_complete(&bytes) {
-            validate_png(&bytes)
+            validate_png(&bytes, deadline)
                 .map_err(|e| format!("screenshot `{path}` isn't a valid PNG: {e}"))?;
+            if Instant::now() >= deadline {
+                return Err(timeout_error("decoding the screenshot PNG"));
+            }
             return Ok(bytes);
         }
         if Instant::now() + POLL_INTERVAL >= deadline {
             return Err(timeout_error(&format!("a complete PNG at `{path}`")));
         }
         thread::sleep(POLL_INTERVAL);
+    }
+}
+
+fn read_png(mut file: fs::File, path: &str, deadline: Instant) -> Result<Vec<u8>, String> {
+    if file.metadata().map_err(|e| e.to_string())?.len() > MAX_PNG_BYTES {
+        return Err(format!(
+            "screenshot `{path}` is over the {MAX_PNG_BYTES} byte limit"
+        ));
+    }
+    let mut bytes = Vec::new();
+    let mut chunk = [0; 16 * 1024];
+    loop {
+        if Instant::now() >= deadline {
+            return Err(timeout_error("reading the screenshot PNG"));
+        }
+        // Read one extra byte to detect a file growing past the limit.
+        let remaining = (MAX_PNG_BYTES + 1 - bytes.len() as u64) as usize;
+        let capacity = chunk.len().min(remaining);
+        let count = file
+            .read(&mut chunk[..capacity])
+            .map_err(|e| format!("reading screenshot `{path}` failed: {e}"))?;
+        if bytes.len() as u64 + count as u64 > MAX_PNG_BYTES {
+            return Err(format!(
+                "screenshot `{path}` is over the {MAX_PNG_BYTES} byte limit"
+            ));
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+        if count == 0 {
+            return Ok(bytes);
+        }
     }
 }
 
@@ -258,20 +414,47 @@ fn looks_complete(bytes: &[u8]) -> bool {
 
 /// Fully decodes an in-memory PNG (checksums included) within the pixel limit,
 /// so a spoofed signature + `IEND` isn't handed to the agent as an image.
-fn validate_png(bytes: &[u8]) -> Result<(), String> {
+fn validate_png(bytes: &[u8], deadline: Instant) -> Result<(), String> {
+    if Instant::now() >= deadline {
+        return Err(timeout_error("decoding the screenshot PNG"));
+    }
     let limits = png::Limits {
         bytes: MAX_PIXEL_BYTES as usize,
     };
     let mut reader = png::Decoder::new_with_limits(Cursor::new(bytes), limits)
         .read_info()
         .map_err(|e| e.to_string())?;
-    let size = reader
+    let info = reader.info();
+    if info.animation_control.is_some() {
+        return Err("animated PNG screenshots aren't supported".to_owned());
+    }
+    // Bound dimensions independently of the encoded color depth: a grayscale
+    // or indexed PNG must not bypass the RGBA-sized pixel budget.
+    u64::from(info.width)
+        .checked_mul(u64::from(info.height))
+        .and_then(|pixels| pixels.checked_mul(4))
+        .filter(|&bytes| bytes > 0 && bytes <= MAX_PIXEL_BYTES)
+        .ok_or_else(|| format!("image dimensions exceed the {MAX_PIXEL_BYTES} byte limit"))?;
+    reader
         .output_buffer_size()
         .filter(|&size| size as u64 <= MAX_PIXEL_BYTES)
         .ok_or_else(|| format!("decoded image is over the {MAX_PIXEL_BYTES} byte limit"))?;
-    let mut pixels = vec![0; size];
-    reader.next_frame(&mut pixels).map_err(|e| e.to_string())?;
-    reader.finish().map_err(|e| e.to_string())
+    // Decode every row (including interlaced passes) without allocating another
+    // whole-frame buffer. Check the shared deadline between bounded rows. PNG
+    // decoding and OS file I/O are synchronous, not forcibly preemptible.
+    loop {
+        if Instant::now() >= deadline {
+            return Err(timeout_error("decoding the screenshot PNG"));
+        }
+        if reader.next_row().map_err(|e| e.to_string())?.is_none() {
+            break;
+        }
+    }
+    reader.finish().map_err(|e| e.to_string())?;
+    if Instant::now() >= deadline {
+        return Err(timeout_error("decoding the screenshot PNG"));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -987,6 +1170,70 @@ mod tests {
         );
     }
 
+    /// Reproduce the old-handle bug using the server's `TempPath::persist` flow.
+    #[test]
+    fn titan_atomic_publication_reads_the_new_inode_and_cleans_the_directory() {
+        let state = Arc::new(Mutex::new((PathBuf::new(), None, 0)));
+        let seen = state.clone();
+        let (client, calls) = stub(move |method, params| match method {
+            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT, TITAN_SCREENSHOT_STATUS]),
+            TITAN_SCREENSHOT => {
+                let path = PathBuf::from(params["path"].as_str().unwrap());
+                assert!(!path.exists(), "MCP must not precreate the destination");
+                let old_handle = fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                    .unwrap();
+                // Cleanup should remove server-side staging files too.
+                fs::write(
+                    path.parent().unwrap().join("abandoned-staging.png"),
+                    b"partial",
+                )
+                .unwrap();
+                *seen.lock().unwrap() = (path, Some(old_handle), 0);
+                Reply::Json(json!({ "token": 123 }))
+            }
+            TITAN_SCREENSHOT_STATUS => {
+                assert_eq!(params["token"], 123);
+                let mut state = seen.lock().unwrap();
+                state.2 += 1;
+                if state.2 == 1 {
+                    return Reply::Json(json!({ "pending": true }));
+                }
+                let staging = tempfile::Builder::new()
+                    .suffix(".png")
+                    .tempfile_in(state.0.parent().unwrap())
+                    .unwrap();
+                fs::write(staging.path(), tiny_png()).unwrap();
+                staging.into_temp_path().persist(&state.0).unwrap();
+                let mut old = state.1.take().unwrap();
+                let mut bytes = Vec::new();
+                old.read_to_end(&mut bytes).unwrap();
+                assert!(
+                    bytes.is_empty(),
+                    "the pre-publication handle sees the old inode"
+                );
+                Reply::Json(json!({ "pending": false, "path": state.0 }))
+            }
+            _ => panic!("unexpected {method}"),
+        });
+        let (info, pixels) = decode(&capture(&client, &json!({})).unwrap());
+        assert_eq!((info.width, info.height), (1, 1));
+        assert_eq!(pixels, [10, 20, 30]);
+        assert_eq!(
+            methods(&calls),
+            [
+                RPC_DISCOVER_METHOD,
+                TITAN_SCREENSHOT,
+                TITAN_SCREENSHOT_STATUS,
+                TITAN_SCREENSHOT_STATUS
+            ]
+        );
+        assert!(!state.lock().unwrap().0.parent().unwrap().exists());
+    }
+
     #[test]
     fn fallback_decodes_reflected_bgra_image() {
         let (client, calls) = fallback_stub(|method, params| match method {
@@ -1083,25 +1330,43 @@ mod tests {
     }
 
     #[test]
-    fn titan_failure_falls_back_and_reports_both() {
-        let (client, _) = fallback_stub(|method, _| match method {
-            RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
-            TITAN_SCREENSHOT => Reply::Json(json!({ "unexpected": true })),
-            BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 1 })),
-            BRP_OBSERVE_METHOD => Reply::Sse(
-                vec![
-                    json!({ "jsonrpc": "2.0", "id": 1, "result": [{ "entity": 1, "image": {
-                    "data": [0, 0, 0],
-                    "texture_descriptor": { "size": { "width": 1, "height": 1 }, "format": "rgba8unorm" }
-                } }] }),
-                ],
-                Duration::ZERO,
-            ),
-            _ => panic!("unexpected {method}"),
-        });
-        let err = capture(&client, &json!({})).unwrap_err();
-        assert!(err.contains("neither a `path`"), "{err}");
-        assert!(err.contains("pixel buffer is 3 bytes"), "{err}");
+    fn advertised_titan_failures_do_not_start_raw_captures() {
+        for capacity_error in [false, true] {
+            let (client, calls) = stub(move |method, _| match method {
+                RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
+                TITAN_SCREENSHOT if capacity_error => Reply::Error(
+                    "too many screenshots in flight or awaiting renderer cleanup (limit 64)",
+                ),
+                TITAN_SCREENSHOT => Reply::Json(json!({ "unexpected": true })),
+                _ => panic!("must not bypass Titan with {method}"),
+            });
+            let err = capture(&client, &json!({})).unwrap_err();
+            assert!(
+                err.contains(if capacity_error {
+                    "too many screenshots"
+                } else {
+                    "neither a `path`"
+                }),
+                "{err}"
+            );
+            assert_eq!(methods(&calls), [RPC_DISCOVER_METHOD, TITAN_SCREENSHOT]);
+        }
+    }
+
+    #[test]
+    fn rejects_animated_png_before_decoding_frames() {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_animated(2, 0).unwrap();
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(&[1, 2, 3]).unwrap();
+            writer.write_image_data(&[4, 5, 6]).unwrap();
+            writer.finish().unwrap();
+        }
+        let error = validate_png(&bytes, Instant::now() + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("animated PNG"), "{error}");
     }
 
     /// Exercise the real reflection observer hook and raw component metadata,
@@ -1260,12 +1525,28 @@ mod tests {
         assert_eq!(timeout_from_args(&json!({})).unwrap(), DEFAULT_TIMEOUT);
 
         let png = tiny_png();
-        assert!(looks_complete(&png) && validate_png(&png).is_ok());
+        assert!(
+            looks_complete(&png) && validate_png(&png, Instant::now() + DEFAULT_TIMEOUT).is_ok()
+        );
+        assert!(validate_png(&png, Instant::now())
+            .unwrap_err()
+            .contains("timed out"));
+        let mut damaged = png.clone();
+        let idat = damaged
+            .windows(4)
+            .position(|chunk| chunk == b"IDAT")
+            .unwrap();
+        damaged[idat + 4] ^= 1;
+        assert!(looks_complete(&damaged));
+        assert!(validate_png(&damaged, Instant::now() + DEFAULT_TIMEOUT).is_err());
         assert!(!looks_complete(&png[..png.len() - 1]));
         assert!(!looks_complete(b"not a png"));
         // Signature + IEND around garbage passes the cheap check but not decoding.
         let spoof = [&PNG_SIGNATURE[..], b"garbage", &PNG_IEND[..]].concat();
-        assert!(looks_complete(&spoof) && validate_png(&spoof).is_err());
+        assert!(
+            looks_complete(&spoof)
+                && validate_png(&spoof, Instant::now() + DEFAULT_TIMEOUT).is_err()
+        );
 
         let mut buf = Vec::new();
         let mut long = BufReader::new(&b"0123456789\nok\n"[..]);
@@ -1351,6 +1632,130 @@ mod tests {
         assert!(err.contains("instead of the requested"), "{err}");
     }
 
+    #[test]
+    fn published_files_are_size_bounded_and_failures_clean_up() {
+        let destination = ScreenshotDestination::new().unwrap();
+        let path = PathBuf::from(&destination.path);
+        let parent = path.parent().unwrap().to_owned();
+        let file = fs::File::create(&path).unwrap();
+        file.set_len(MAX_PNG_BYTES + 1).unwrap();
+        drop(file);
+        let error =
+            wait_for_png(&destination, Instant::now() + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("byte limit"), "{error}");
+        drop(destination);
+        assert!(!parent.exists());
+
+        let destination = ScreenshotDestination::new().unwrap();
+        let parent = PathBuf::from(&destination.path)
+            .parent()
+            .unwrap()
+            .to_owned();
+        fs::create_dir(&destination.path).unwrap();
+        let error =
+            wait_for_png(&destination, Instant::now() + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("securely opening"), "{error}");
+        drop(destination);
+        assert!(!parent.exists());
+    }
+
+    #[test]
+    fn png_dimensions_cannot_bypass_the_pixel_budget() {
+        let width = (MAX_PIXEL_BYTES / 4 + 1) as u32;
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, 1);
+            encoder.set_color(png::ColorType::Grayscale);
+            encoder.set_depth(png::BitDepth::One);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![0; (width as usize).div_ceil(8)])
+                .unwrap();
+        }
+        assert!(looks_complete(&bytes));
+        let error = validate_png(&bytes, Instant::now() + DEFAULT_TIMEOUT).unwrap_err();
+        assert!(error.contains("dimensions"), "{error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_and_device_targets_are_never_read() {
+        use std::os::unix::fs::symlink;
+        let other = tempfile::NamedTempFile::new().unwrap();
+        fs::write(other.path(), tiny_png()).unwrap();
+        for target in [other.path(), std::path::Path::new("/dev/zero")] {
+            let destination = ScreenshotDestination::new().unwrap();
+            symlink(target, &destination.path).unwrap();
+            let start = Instant::now();
+            let error = wait_for_png(&destination, start + Duration::from_secs(1)).unwrap_err();
+            assert!(error.contains("securely opening"), "{error}");
+            assert!(start.elapsed() < Duration::from_secs(1));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_the_parent_directory_cannot_redirect_the_read() {
+        use std::os::unix::fs::symlink;
+        let destination = ScreenshotDestination::new().unwrap();
+        let parent = PathBuf::from(&destination.path)
+            .parent()
+            .unwrap()
+            .to_owned();
+        let moved = parent.with_extension("moved");
+        fs::rename(&parent, &moved).unwrap();
+        let malicious = tempfile::tempdir().unwrap();
+        fs::write(malicious.path().join(SCREENSHOT_FILE), tiny_png()).unwrap();
+        symlink(malicious.path(), &parent).unwrap();
+        // Full-path opening would accept the attacker's PNG. Anchored openat
+        // still sees the original, empty directory and times out instead.
+        let error =
+            wait_for_png(&destination, Instant::now() + Duration::from_millis(50)).unwrap_err();
+        assert!(error.contains("timed out"), "{error}");
+        drop(destination);
+        assert!(malicious.path().join(SCREENSHOT_FILE).is_file());
+        fs::remove_dir_all(moved).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_private_parent_cannot_be_replaced_on_windows() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let destination = ScreenshotDestination::new().unwrap();
+        let parent = PathBuf::from(&destination.path)
+            .parent()
+            .unwrap()
+            .to_owned();
+        assert!(fs::rename(&parent, parent.with_extension("moved")).is_err());
+        assert!(fs::remove_dir(&parent).is_err());
+        // A writable directory handle is needed to set a junction/reparse point.
+        assert!(fs::OpenOptions::new()
+            .write(true)
+            .share_mode(0x00000001 | 0x00000002 | 0x00000004)
+            .custom_flags(0x02000000) // FILE_FLAG_BACKUP_SEMANTICS
+            .open(&parent)
+            .is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_symlinks_are_rejected_when_available() {
+        use std::os::windows::fs::symlink_file;
+        let destination = ScreenshotDestination::new().unwrap();
+        let other = tempfile::NamedTempFile::new().unwrap();
+        fs::write(other.path(), tiny_png()).unwrap();
+        // Windows may not grant symlink creation without developer mode.
+        match symlink_file(other.path(), &destination.path) {
+            Ok(()) => {}
+            Err(error) if error.raw_os_error() == Some(1314) => return,
+            Err(error) => panic!("symlink creation failed: {error}"),
+        }
+        let error =
+            wait_for_png(&destination, Instant::now() + Duration::from_secs(1)).unwrap_err();
+        assert!(error.contains("reparse point"), "{error}");
+    }
+
     /// Paths the game controls can be FIFOs. Neither returning one nor
     /// swapping one in at the requested path may block the read.
     #[cfg(unix)]
@@ -1378,7 +1783,6 @@ mod tests {
             RPC_DISCOVER_METHOD => discover(&[TITAN_SCREENSHOT]),
             TITAN_SCREENSHOT => {
                 let path = params["path"].as_str().unwrap();
-                fs::remove_file(path).unwrap();
                 mkfifo(path);
                 Reply::Json(json!({ "path": path }))
             }
@@ -1386,7 +1790,7 @@ mod tests {
         });
         let start = Instant::now();
         let err = capture(&client, &json!({ "timeout_secs": 0.5 })).unwrap_err();
-        assert!(err.contains("timed out"), "{err}");
+        assert!(err.contains("not a regular file"), "{err}");
         assert!(
             start.elapsed() < Duration::from_secs(2),
             "{:?}",

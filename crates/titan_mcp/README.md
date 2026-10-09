@@ -38,10 +38,31 @@ cursor/button messages for raw readers and `ButtonInput` as well as aggregate
 window messages for picking. A native window backend may also move the OS cursor.
 
 For pause, resume, deterministic step, status, and fast file-based screenshots,
-also add the optional `TitanRemotePlugin` from `titan_remote` (#17). Without it,
-standard BRP tools still work, screenshot uses the BRP observer fallback, and
-time-control tools explain how to enable the missing methods. Pausing virtual
-time does not stop systems that ignore time.
+add the optional `TitanRemotePlugin` from `titan_remote` alongside these plugins:
+
+```rust,ignore
+use bevy::prelude::*;
+use bevy::remote::{RemotePlugin, http::RemoteHttpPlugin};
+use titan_remote::TitanRemotePlugin;
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins((
+            RemotePlugin::default(),
+            RemoteHttpPlugin::default(),
+            TitanRemotePlugin,
+        ))
+        .run();
+}
+```
+
+Enable `titan_remote`'s `render` feature for screenshot methods. Its time control
+requires `TimePlugin` and `FrameCountPlugin`, both included in `DefaultPlugins`.
+For a complete runnable setup, use the crate-local server example below. Without
+Titan Remote, standard BRP tools still work, screenshot uses the BRP observer
+fallback, and time-control tools explain how to enable the missing methods.
+Pausing virtual time does not stop systems that ignore time.
 
 ## Build and connect Claude Code
 
@@ -109,13 +130,30 @@ invalidate previously obtained entity IDs; query again after reconnecting.
 Keyboard taps and clicks use frame barriers when `titan.status` is available.
 Vanilla BRP has no frame barrier, so input phases use a best-effort 100 ms delay;
 a game updating slower than 10 Hz may need separately timed press/release calls.
+Titan's frame counter continues while paused and wraps at `u32::MAX`; input
+barriers use wrapping arithmetic. `step` waits for `pending_steps` to reach zero
+with virtual time paused, rather than comparing numerically ordered frame IDs.
+Use a single time controller: another client's `pause` or `resume` can cancel a
+pending step. `dt_secs` defaults to `1/60`, must be in `(0, 1]`, and must round to
+at least one nanosecond. Step submission and completion polling share a
+15-second deadline after method discovery; a long step may continue in the game
+after a client timeout, so use `pause` to cancel it if needed.
 
 Screenshots use the primary window. `timeout_secs` defaults to 10 (maximum 60)
 and covers the BRP capture sequence; best-effort cleanup may take another
-100 ms. The fast path asks the game to write an existing `.png` file in place
-and reads through its retained file handle, never an arbitrary returned path.
-Atomic file replacement is not supported by that path; it may time out and
-fall back to BRP observation. The fallback observes a fresh empty entity,
+100 ms. The fast path requests a `.png` inside a private temporary directory,
+polls Titan's screenshot token until publication, and securely opens the exact
+requested destination. Both atomic replacement and legacy in-place writes are
+supported. Unix reads are anchored to the held directory handle and never follow
+symlinks or block on FIFOs; Windows pins the directory and rejects reparse points
+on the opened handle. Byte, decoded-image, checksum and deadline checks apply,
+and the temporary directory is removed on ordinary success/error paths. The
+local temp-directory ancestors are trusted. Animated PNGs are rejected. OS I/O
+and individual decoder operations cannot be forcibly interrupted; deadlines are
+checked between them. If Titan advertises screenshot methods, their operational
+errors are returned without retrying through raw BRP: this preserves the server's
+limit on pending or stuck readbacks. Only games without those methods use the
+fallback, which observes a fresh empty entity,
 waits for ECS observer registration, then inserts `Screenshot`, so capture
 cannot race ahead of the observer. Its deadline-bounded reader is joined on
 all exits; an early capture failure may wait for the remaining budget rather
@@ -137,7 +175,9 @@ do not expose it on a network. Stop BRP-enabled games when finished.
 
 ```sh
 cargo test -p titan_mcp
-cargo clippy -p titan_mcp --all-targets -- -D warnings
+# Real render-gated screenshot handlers, without a window or GPU:
+cargo test -p titan_mcp --all-features --features bevy_remote/bevy_render
+cargo clippy -p titan_mcp --all-targets --all-features --features bevy_remote/bevy_render --no-deps -- -D warnings
 cargo run -p ci -- format
 cargo run -p ci -- clippy
 cargo run -p ci -- test
@@ -147,9 +187,13 @@ cargo run -p ci -- doc-check
 The integration tests launch a real headless Bevy app in a child process with
 `RemotePlugin` and `RemoteHttpPlugin` on an OS-selected free port. Killing and
 waiting on the fixture process releases the detached HTTP listener. Protocol
-tests pipe JSON through the built binary. While #17 is unmerged, Titan methods
-are covered by fixture handlers matching its contract; repeat against
-`titan_remote` once available.
+tests pipe JSON through the built binary. Time-control tests use the real
+`TitanRemotePlugin` and verify actual virtual-time deltas, paused input, and
+counter rollover. The `remote-render` test feature enables real screenshot
+handlers with synthetic GPU readback: the server publishes the PNG atomically,
+and MCP returns its decoded pixels. CI runs these tests on Linux, Windows, and
+macOS. Renderer dependencies are dev-dependencies, not default sidecar runtime
+dependencies.
 
 To reproduce the visual agent workflow:
 
@@ -162,3 +206,14 @@ with a `FeathersButton` filter, query `Window` for its entity and scale factor,
 divide the physical button center by the scale factor, and call `click`. A
 successful click logs `Button pressed!` and exits the example. Take a
 `screenshot` before clicking for visual evidence.
+
+To exercise the merged Titan Remote methods through the same MCP connection:
+
+```sh
+cargo run -p titan_remote --features render --example server
+```
+
+Ask the agent to pause, take two screenshots (the square should stay unchanged),
+step 30 frames with `dt_secs: 1/60`, take a changed screenshot, then resume and
+confirm motion. Keep the native window visible while capturing. This uses the
+real screenshot token/status fast path, not the reflected-pixel fallback.

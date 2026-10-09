@@ -2,7 +2,7 @@
 //!
 //! The HTTP plugin detaches its listener without exposing a shutdown handle. Running
 //! each fixture in a child process lets the guard reap both the app and its listener,
-//! including when an assertion panics. Titan methods are contract stubs until #17 lands.
+//! including when an assertion panics. Titan fixtures use the real `TitanRemotePlugin`.
 
 use std::{
     io::Write,
@@ -12,7 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bevy_app::{App, TaskPoolPlugin, Update};
+use bevy_app::{App, Last, TaskPoolPlugin, Update};
+use bevy_diagnostic::{update_frame_count, FrameCount, FrameCountPlugin};
 use bevy_ecs::{
     prelude::*,
     reflect::{ReflectComponent, ReflectResource},
@@ -23,13 +24,15 @@ use bevy_input::{
     ButtonInput, ButtonState, InputPlugin,
 };
 use bevy_reflect::{Reflect, TypePath};
-use bevy_remote::{http::RemoteHttpPlugin, BrpResult, RemotePlugin};
+use bevy_remote::{http::RemoteHttpPlugin, BrpReceiver, BrpResult, RemotePlugin};
+use bevy_time::{Time, TimePlugin, TimeUpdateStrategy, Virtual};
 use bevy_window::{CursorMoved, PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
 use titan_mcp::{client::Client, tools};
+use titan_remote::TitanRemotePlugin;
 
 const FIXTURE_PORT: &str = "TITAN_MCP_TEST_BRP_PORT";
-const FIXTURE_TITAN: &str = "TITAN_MCP_TEST_TITAN_STUB";
+const FIXTURE_TITAN: &str = "TITAN_MCP_TEST_TITAN";
 const WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Component, Reflect)]
@@ -173,57 +176,98 @@ fn record_mouse(
     }
 }
 
-#[derive(Resource)]
-struct StubClock {
-    paused: bool,
-    frame: u64,
-    pending_steps: u32,
-    polls_while_pending: u32,
-    last_step: Option<Value>,
+#[derive(Resource, Reflect, Default)]
+#[reflect(Resource)]
+struct TimeTrace {
+    elapsed_ns: u64,
+    last_delta_ns: u64,
+    last_unpaused_delta_ns: u64,
+    unpaused_updates: u64,
+    updates: u64,
+    first_poll_frame: u32,
+    finish_frame: u32,
 }
 
-impl StubClock {
-    fn status(&self) -> Value {
-        json!({"paused": self.paused, "frame": self.frame, "pending_steps": self.pending_steps})
+fn record_time(time: Res<Time<Virtual>>, mut trace: ResMut<TimeTrace>) {
+    trace.elapsed_ns = time.elapsed().as_nanos().try_into().unwrap();
+    trace.last_delta_ns = time.delta().as_nanos().try_into().unwrap();
+    trace.updates += 1;
+    if !time.is_paused() {
+        trace.unpaused_updates += 1;
+        trace.last_unpaused_delta_ns = trace.last_delta_ns;
     }
 }
 
-fn stub_pause(In(params): In<Option<Value>>, mut clock: ResMut<StubClock>) -> BrpResult {
-    assert!(params.is_none() || params == Some(json!({})));
-    clock.paused = true;
-    Ok(clock.status())
+#[derive(Resource, Default)]
+struct WrapProbe {
+    armed: bool,
+    first_poll_queued: bool,
+    finish_hidden: bool,
 }
 
-fn stub_resume(In(params): In<Option<Value>>, mut clock: ResMut<StubClock>) -> BrpResult {
-    assert!(params.is_none() || params == Some(json!({})));
-    clock.paused = false;
-    Ok(clock.status())
-}
+#[derive(Resource, Default)]
+struct InputFrameGate(bool);
 
-fn stub_step(In(params): In<Option<Value>>, mut clock: ResMut<StubClock>) -> BrpResult {
-    let params = params.expect("titan.step requires params");
-    clock.pending_steps = params["frames"]
+fn arm_input_wrap(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    assert!(world.resource::<Time<Virtual>>().is_paused());
+    let frame = params.unwrap()["frame"]
         .as_u64()
-        .expect("frames must be an integer") as u32;
-    clock.paused = false;
-    clock.last_step = Some(params);
-    Ok(json!({"target_frame": clock.frame + u64::from(clock.pending_steps)}))
+        .unwrap()
+        .try_into()
+        .unwrap();
+    world.resource_mut::<FrameCount>().0 = frame;
+    world.resource_mut::<InputFrameGate>().0 = true;
+    Ok(json!({"frame": frame}))
 }
 
-fn stub_status(In(_): In<Option<Value>>, mut clock: ResMut<StubClock>) -> BrpResult {
-    // Deliberately make progress only when polled: returning the target immediately
-    // from the tool is not equivalent to waiting for the requested frames to run.
-    if clock.pending_steps > 0 {
-        clock.polls_while_pending += 1;
-        clock.frame += 1;
-        clock.pending_steps -= 1;
-        clock.paused = clock.pending_steps == 0;
+// Only the counter's initial position is synthetic; Titan's clock, step state,
+// target calculation, and status handlers are unchanged.
+fn arm_wrap(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    assert!(world.resource::<Time<Virtual>>().is_paused());
+    world.resource_mut::<FrameCount>().0 = u32::MAX - 2;
+    *world.resource_mut::<WrapProbe>() = WrapProbe {
+        armed: true,
+        ..Default::default()
+    };
+    Ok(json!({"frame": u32::MAX - 2}))
+}
+
+fn hold_wrap_start(
+    probe: Res<WrapProbe>,
+    strategy: Res<TimeUpdateStrategy>,
+    mut frame: ResMut<FrameCount>,
+) {
+    if probe.armed && !probe.first_poll_queued && matches!(*strategy, TimeUpdateStrategy::Automatic)
+    {
+        frame.0 = u32::MAX - 2;
     }
-    Ok(clock.status())
 }
 
-fn stub_trace(In(_): In<Option<Value>>, clock: Res<StubClock>) -> BrpResult {
-    Ok(json!({"polls_while_pending": clock.polls_while_pending, "last_step": clock.last_step}))
+fn queue_first_step_poll(
+    strategy: Res<TimeUpdateStrategy>,
+    receiver: Option<Res<BrpReceiver>>,
+    mut probe: ResMut<WrapProbe>,
+) {
+    if !probe.armed
+        || probe.first_poll_queued
+        || !matches!(*strategy, TimeUpdateStrategy::ManualDuration(_))
+    {
+        return;
+    }
+    // The step request has already been processed. Hold the first stepped update
+    // until MCP's first real titan.status poll is queued, so it sees pending=1 at
+    // MAX-1 rather than accidentally seeing completion first.
+    let receiver = receiver.expect("first step poll needs the BRP mailbox");
+    let deadline = Instant::now() + WAIT;
+    while receiver.is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "MCP never queued its first step poll"
+        );
+        bevy_tasks::tick_global_task_pools_on_main_thread();
+        thread::sleep(Duration::from_millis(1));
+    }
+    probe.first_poll_queued = true;
 }
 
 /// Only invoked by `Fixture::start`, never as an ordinary test.
@@ -264,19 +308,16 @@ fn brp_fixture_process() {
     app.world_mut().spawn(secondary);
     let mut remote = RemotePlugin::default();
     if std::env::var_os(FIXTURE_TITAN).is_some() {
-        app.insert_resource(StubClock {
-            paused: false,
-            frame: 10,
-            pending_steps: 0,
-            polls_while_pending: 0,
-            last_step: None,
-        });
+        app.add_plugins((TimePlugin, FrameCountPlugin, TitanRemotePlugin))
+            .register_type::<TimeTrace>()
+            .init_resource::<TimeTrace>()
+            .init_resource::<WrapProbe>()
+            .init_resource::<InputFrameGate>()
+            .add_systems(Update, (record_time, queue_first_step_poll))
+            .add_systems(Last, hold_wrap_start.after(update_frame_count));
         remote = remote
-            .with_method_main("titan.pause", stub_pause)
-            .with_method_main("titan.resume", stub_resume)
-            .with_method_main("titan.step", stub_step)
-            .with_method_main("titan.status", stub_status)
-            .with_method_main("test.trace", stub_trace);
+            .with_method_main("test.arm_wrap", arm_wrap)
+            .with_method_main("test.arm_input_wrap", arm_input_wrap);
     }
     app.add_plugins((
         remote,
@@ -287,7 +328,44 @@ fn brp_fixture_process() {
     app.finish();
     app.cleanup();
     loop {
+        if app
+            .world()
+            .get_resource::<InputFrameGate>()
+            .is_some_and(|gate| gate.0)
+        {
+            // Exactly one real update per HTTP request lets input barriers start
+            // at MAX and poll across zero, without relying on wall-clock timing.
+            let deadline = Instant::now() + WAIT;
+            while app.world().resource::<BrpReceiver>().is_empty() {
+                assert!(
+                    Instant::now() < deadline,
+                    "input test never queued its next request"
+                );
+                bevy_tasks::tick_global_task_pools_on_main_thread();
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
         app.update();
+        let hide_finish = app
+            .world()
+            .get_resource::<WrapProbe>()
+            .is_some_and(|probe| probe.first_poll_queued && !probe.finish_hidden);
+        if hide_finish {
+            assert_eq!(app.world().resource::<FrameCount>().0, u32::MAX - 1);
+            app.world_mut().resource_mut::<TimeTrace>().first_poll_frame = u32::MAX - 1;
+            // Do not let any request observe the final stepped frame. Removing
+            // the mailbox for exactly one update makes this deterministic even
+            // if HTTP delivery or MCP's 20 ms poll sleep is unusually slow.
+            // Requests remain queued in the real receiver and are processed on
+            // a later paused update, after the real FrameCount wraps to zero.
+            let receiver = app.world_mut().remove_resource::<BrpReceiver>().unwrap();
+            app.update();
+            assert_eq!(app.world().resource::<FrameCount>().0, u32::MAX);
+            assert!(app.world().resource::<Time<Virtual>>().is_paused());
+            app.world_mut().resource_mut::<TimeTrace>().finish_frame = u32::MAX;
+            app.world_mut().insert_resource(receiver);
+            app.world_mut().resource_mut::<WrapProbe>().finish_hidden = true;
+        }
         thread::sleep(Duration::from_millis(2));
     }
 }
@@ -338,6 +416,10 @@ impl Fixture {
     fn tool(&self, name: &str, args: Value) -> Value {
         tools::call(&self.client, name, args)
             .unwrap_or_else(|error| panic!("{name} failed: {error}"))
+    }
+
+    fn time_trace(&self) -> Value {
+        self.tool("get_resource", json!({"resource": "TimeTrace"}))["value"].clone()
     }
 
     fn query(&self, args: Value) -> Vec<Value> {
@@ -781,37 +863,211 @@ fn binary_stdio_tools_call_queries_the_live_headless_app() {
     );
 }
 
+fn paused_frame(status: &Value) -> u32 {
+    assert_eq!(status["paused"], true, "{status}");
+    assert_eq!(status["pending_steps"], 0, "{status}");
+    status["frame"].as_u64().unwrap().try_into().unwrap()
+}
+
 #[test]
-fn titan_pause_resume_and_step_follow_issue_17_contract() {
+fn titan_pause_freezes_real_virtual_time_but_not_frames_and_resume_advances() {
     let fixture = Fixture::start(true);
-    let paused = fixture.tool("pause", json!({}));
-    assert_eq!(
-        paused,
-        json!({"paused": true, "frame": 10, "pending_steps": 0})
-    );
-    let resumed = fixture.tool("resume", json!({}));
-    assert_eq!(
-        resumed,
-        json!({"paused": false, "frame": 10, "pending_steps": 0})
-    );
-    fixture.tool("pause", json!({}));
-    let stepped = fixture.tool("step", json!({"frames": 3, "dt_secs": 0.025}));
-    assert_eq!(stepped["paused"], true);
-    assert_eq!(stepped["frame"], 13);
-    assert_eq!(stepped["pending_steps"], 0);
-    let trace = fixture.client.call("test.trace", None).unwrap();
-    assert_eq!(trace["polls_while_pending"], 3);
-    assert_eq!(trace["last_step"], json!({"frames": 3, "dt_secs": 0.025}));
-    let stepped = fixture.tool("step", json!({"frames": 2}));
-    assert_eq!(
-        stepped,
-        json!({"paused": true, "frame": 15, "pending_steps": 0})
-    );
-    let trace = fixture.client.call("test.trace", None).unwrap();
-    assert_eq!(trace["polls_while_pending"], 5);
-    assert_eq!(trace["last_step"], json!({"frames": 2}));
+    let discovery = fixture.client.call("rpc.discover", None).unwrap();
+    for name in ["titan.pause", "titan.resume", "titan.step", "titan.status"] {
+        assert!(discovery["methods"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|method| method["name"] == name));
+    }
+    let frame = paused_frame(&fixture.tool("pause", json!({})));
+    let frozen = fixture.time_trace();
+    eventually(|| {
+        fixture.time_trace()["updates"].as_u64().unwrap() >= frozen["updates"].as_u64().unwrap() + 5
+    });
     let status = fixture.tool("game_status", json!({}));
     assert_eq!(status["reachable"], true);
     assert_eq!(status["titan_remote_available"], true);
-    assert_eq!(status["status"], stepped);
+    assert!(paused_frame(&status["status"]).wrapping_sub(frame) >= 5);
+    let still_frozen = fixture.time_trace();
+    assert_eq!(still_frozen["elapsed_ns"], frozen["elapsed_ns"]);
+    assert_eq!(still_frozen["unpaused_updates"], frozen["unpaused_updates"]);
+    assert_eq!(still_frozen["last_delta_ns"], 0);
+
+    let resumed = fixture.tool("resume", json!({}));
+    assert_eq!(resumed["paused"], false);
+    assert_eq!(resumed["pending_steps"], 0);
+    eventually(|| {
+        fixture.time_trace()["elapsed_ns"].as_u64().unwrap()
+            > frozen["elapsed_ns"].as_u64().unwrap()
+    });
+    assert!(
+        fixture.time_trace()["unpaused_updates"].as_u64().unwrap()
+            > frozen["unpaused_updates"].as_u64().unwrap()
+    );
+}
+
+#[test]
+fn titan_step_runs_exact_unpaused_updates_and_real_deltas_including_defaults() {
+    let fixture = Fixture::start(true);
+    fixture.tool("pause", json!({}));
+    for (args, frames, dt_secs) in [
+        (json!({"frames": 3, "dt_secs": 0.025}), 3, 0.025_f32),
+        (json!({"frames": 2}), 2, 1.0 / 60.0),
+        (json!({"frames": 1, "dt_secs": 1.0}), 1, 1.0),
+        (json!({"frames": 2, "dt_secs": 1e-9}), 2, 1e-9),
+    ] {
+        let before = fixture.time_trace();
+        let completed = fixture.tool("step", args);
+        paused_frame(&completed);
+        let after = fixture.time_trace();
+        let dt = Duration::from_secs_f32(dt_secs);
+        assert_eq!(
+            after["unpaused_updates"].as_u64().unwrap()
+                - before["unpaused_updates"].as_u64().unwrap(),
+            u64::from(frames)
+        );
+        assert_eq!(
+            after["elapsed_ns"].as_u64().unwrap() - before["elapsed_ns"].as_u64().unwrap(),
+            u64::try_from((dt * frames).as_nanos()).unwrap()
+        );
+        assert_eq!(after["last_unpaused_delta_ns"], json!(dt.as_nanos() as u64));
+        // Keep polling after completion: app frames continue but Time<Virtual>
+        // and the count of unpaused Update invocations must stay frozen.
+        for _ in 0..3 {
+            paused_frame(&fixture.client.call("titan.status", None).unwrap());
+        }
+        let later = fixture.time_trace();
+        assert!(later["updates"].as_u64().unwrap() > after["updates"].as_u64().unwrap());
+        assert_eq!(later["elapsed_ns"], after["elapsed_ns"]);
+        assert_eq!(later["unpaused_updates"], after["unpaused_updates"]);
+        assert_eq!(later["last_delta_ns"], 0);
+    }
+}
+
+#[test]
+fn titan_step_completes_when_first_completed_status_is_after_u32_wrap() {
+    let fixture = Fixture::start(true);
+    fixture.tool("pause", json!({}));
+    fixture.client.call("test.arm_wrap", None).unwrap();
+    let before = fixture.time_trace();
+    let completed = fixture.tool("step", json!({"frames": 2, "dt_secs": 0.025}));
+    let frame = paused_frame(&completed);
+    let after = fixture.time_trace();
+    assert_eq!(after["first_poll_frame"], u32::MAX - 1);
+    assert_eq!(after["finish_frame"], u32::MAX);
+    // The real target was MAX and completion happened at MAX, but no HTTP
+    // request could observe that frame. Numeric frame>=target never succeeds
+    // for the first completed status (or until another entire u32 cycle).
+    assert!(
+        frame < u32::MAX - 2,
+        "status must be past the rollover: {completed}"
+    );
+    assert_eq!(
+        after["unpaused_updates"].as_u64().unwrap() - before["unpaused_updates"].as_u64().unwrap(),
+        2
+    );
+    assert_eq!(
+        after["elapsed_ns"].as_u64().unwrap() - before["elapsed_ns"].as_u64().unwrap(),
+        (Duration::from_secs_f32(0.025) * 2).as_nanos() as u64
+    );
+}
+
+#[test]
+fn titan_input_barriers_work_while_real_virtual_time_is_paused() {
+    let fixture = Fixture::start(true);
+    let frame = paused_frame(&fixture.tool("pause", json!({})));
+    let frozen = fixture.time_trace();
+    fixture.tool("send_key", json!({"key": "KeyW", "action": "tap"}));
+    let key = fixture.tool("get_resource", json!({"resource": "KeyState"}))["value"].clone();
+    // No eventual fallback: real titan.status frame barriers must separate
+    // press/release. This resource query observes the release's next PreUpdate.
+    assert_eq!(key, json!({"held": false, "presses": 1, "releases": 1}));
+
+    fixture.tool("click", json!({"x": 8.5, "y": 12.25}));
+    let mouse = fixture.tool("get_resource", json!({"resource": "MouseState"}))["value"].clone();
+    assert_eq!(mouse["held"], false);
+    assert_eq!(mouse["presses"], 1);
+    assert_eq!(mouse["releases"], 1);
+    assert_eq!(mouse["raw"].as_array().unwrap().len(), 2);
+    assert_eq!(mouse["aggregate"], mouse["raw"]);
+    assert_eq!(mouse["raw_cursor_moves"], 1);
+    assert_eq!(mouse["cursor_moves"], 1);
+    assert_eq!(mouse["press_positions"], json!([[8.5, 12.25]]));
+    assert!(
+        mouse["press_frames"][0][0].as_u64().unwrap()
+            < mouse["press_frames"][0][1].as_u64().unwrap()
+    );
+    let status = fixture.tool("game_status", json!({}));
+    assert_eq!(status["titan_remote_available"], true);
+    assert!(paused_frame(&status["status"]).wrapping_sub(frame) >= 4);
+    let after = fixture.time_trace();
+    assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
+    assert_eq!(after["unpaused_updates"], frozen["unpaused_updates"]);
+}
+
+#[test]
+fn titan_send_key_frame_barrier_crosses_u32_wrap_while_paused() {
+    let fixture = Fixture::start(true);
+    fixture.tool("pause", json!({}));
+    let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    let frozen = fixture.time_trace();
+    // Explicit window avoids resolution requests. Discovery, press, then the
+    // barrier's first status each run one real update: the first status is MAX.
+    fixture
+        .client
+        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 3})))
+        .unwrap();
+    fixture.tool(
+        "send_key",
+        json!({"key": "KeyW", "action": "tap", "window": window}),
+    );
+    let key = fixture.tool("get_resource", json!({"resource": "KeyState"}))["value"].clone();
+    assert_eq!(key, json!({"held": false, "presses": 1, "releases": 1}));
+    // Polls at zero and one satisfy wrapping_sub(MAX) >= 2. Ordinary or
+    // saturating subtraction instead times out, even though input is updating.
+    assert_eq!(
+        paused_frame(&fixture.client.call("titan.status", None).unwrap()),
+        5
+    );
+    let after = fixture.time_trace();
+    assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
+    assert_eq!(after["unpaused_updates"], frozen["unpaused_updates"]);
+}
+
+#[test]
+fn titan_click_cursor_frame_barrier_crosses_u32_wrap_while_paused() {
+    let fixture = Fixture::start(true);
+    fixture.tool("pause", json!({}));
+    let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    let frozen = fixture.time_trace();
+    // Discovery, get/mutate Window, both cursor messages, then the first status:
+    // six queued requests put the cursor-to-press barrier's first status at MAX.
+    fixture
+        .client
+        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 6})))
+        .unwrap();
+    fixture.tool("click", json!({"x": 8.5, "y": 12.25, "window": window}));
+    let mouse = fixture.tool("get_resource", json!({"resource": "MouseState"}))["value"].clone();
+    assert_eq!(mouse["held"], false);
+    assert_eq!(mouse["presses"], 1);
+    assert_eq!(mouse["releases"], 1);
+    assert_eq!(mouse["raw"].as_array().unwrap().len(), 2);
+    assert_eq!(mouse["aggregate"], mouse["raw"]);
+    assert_eq!(mouse["press_positions"], json!([[8.5, 12.25]]));
+    assert!(
+        mouse["press_frames"][0][0].as_u64().unwrap()
+            < mouse["press_frames"][0][1].as_u64().unwrap()
+    );
+    assert_eq!(
+        paused_frame(&fixture.client.call("titan.status", None).unwrap()),
+        11
+    );
+    let after = fixture.time_trace();
+    assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
+    assert_eq!(after["unpaused_updates"], frozen["unpaused_updates"]);
 }

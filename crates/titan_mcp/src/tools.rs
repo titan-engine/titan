@@ -8,7 +8,7 @@ use std::{
 use bevy_ecs::entity::Entity;
 use bevy_platform::collections::HashMap;
 use bevy_remote::builtin_methods::*;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::client::Client;
@@ -47,7 +47,7 @@ pub fn list() -> Value {
         tool("screenshot", "Capture the primary window as an MCP PNG image. Uses titan.screenshot when available, otherwise a slower BRP Screenshot + world.observe fallback", json!({"timeout_secs":{"type":"number","exclusiveMinimum":0,"maximum":60,"default":10}}), &[]),
         tool("pause", "Pause virtual time (requires TitanRemotePlugin)", json!({}), &[]),
         tool("resume", "Resume virtual time (requires TitanRemotePlugin)", json!({}), &[]),
-        tool("step", "Advance frames with fixed delta, wait for completion, and pause again (requires TitanRemotePlugin)", json!({"frames":{"type":"integer","minimum":1,"maximum":4294967295_u32},"dt_secs":{"type":"number","exclusiveMinimum":0}}), &["frames"]),
+        tool("step", "Advance frames with fixed delta, wait for completion, and pause again (requires TitanRemotePlugin)", json!({"frames":{"type":"integer","minimum":1,"maximum":4294967295_u32},"dt_secs":{"type":"number","exclusiveMinimum":0,"maximum":1,"description":"Seconds per frame; must round to at least one nanosecond (default 1/60)"}}), &["frames"]),
         tool("brp_call", "Call an arbitrary instant BRP method; streaming/watch methods are not supported", json!({"method":string,"params":{}}), &["method"])
     ])
 }
@@ -445,31 +445,27 @@ fn step(client: &Client, args: &Value) -> Result<Value, String> {
     if let Some(dt) = args.get("dt_secs") {
         let n = dt
             .as_f64()
-            .filter(|n| n.is_finite() && *n > 0.0 && *n <= f64::from(f32::MAX))
-            .ok_or("`dt_secs` must be a positive finite f32 number")?;
-        if (n as f32) == 0.0 {
-            return Err("`dt_secs` is too small for f32".to_owned());
+            .filter(|n| n.is_finite() && *n > 0.0 && *n <= 1.0)
+            .ok_or("`dt_secs` must be finite and in (0, 1]")?;
+        if Duration::from_secs_f32(n as f32).is_zero() {
+            return Err("`dt_secs` must round to at least one nanosecond".to_owned());
         }
         params["dt_secs"] = dt.clone();
     }
     require_titan(client, &["titan.step", "titan.status"])?;
-    let response = client.call("titan.step", Some(params))?;
+    let deadline = Instant::now() + POLL_TIMEOUT;
+    let response = client.call_with_deadline("titan.step", Some(params), deadline)?;
     let target = response
         .get("target_frame")
         .and_then(Value::as_u64)
-        .ok_or("titan.step returned no numeric target_frame")?;
-    let deadline = Instant::now() + POLL_TIMEOUT;
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or("titan.step returned no valid u32 target_frame")?;
     loop {
-        let status = client.call("titan.status", None)?;
-        let frame = status
-            .get("frame")
-            .and_then(Value::as_u64)
-            .ok_or("titan.status returned no numeric frame")?;
-        let pending = status
-            .get("pending_steps")
-            .and_then(Value::as_u64)
-            .ok_or("titan.status returned no numeric pending_steps")?;
-        if frame >= target && pending == 0 {
+        let status = client.call_with_deadline("titan.status", None, deadline)?;
+        // FrameCount continues while paused and wraps at u32::MAX. The
+        // server's pending count, not numerical ordering against target_frame,
+        // is authoritative for completion. Use a single controller for steps.
+        if parse_titan_status(&status)?.step_completed()? {
             return Ok(status);
         }
         if Instant::now() >= deadline {
@@ -477,6 +473,34 @@ fn step(client: &Client, args: &Value) -> Result<Value, String> {
         }
         thread::sleep(Duration::from_millis(20));
     }
+}
+
+#[derive(Deserialize)]
+struct TitanStatus {
+    paused: bool,
+    frame: u32,
+    pending_steps: u32,
+}
+
+impl TitanStatus {
+    fn step_completed(&self) -> Result<bool, String> {
+        if self.pending_steps != 0 {
+            return Ok(false);
+        }
+        if !self.paused {
+            return Err("Step ended without pausing; another controller may have resumed or cancelled it. Check game_status".to_owned());
+        }
+        Ok(true)
+    }
+}
+
+fn parse_titan_status(value: &Value) -> Result<TitanStatus, String> {
+    serde_json::from_value(value.clone())
+        .map_err(|e| format!("titan.status returned invalid status (expected paused, u32 frame and pending_steps): {e}"))
+}
+
+fn two_frames_elapsed(before: u32, after: u32) -> bool {
+    after.wrapping_sub(before) >= 2
 }
 
 fn input_window(client: &Client, args: &Value, allow_headless: bool) -> Result<Value, String> {
@@ -542,19 +566,13 @@ fn separate_frames(client: &Client, has_status: bool) -> Result<(), String> {
         return Ok(());
     }
     let status = client.call("titan.status", None)?;
-    let frame = status
-        .get("frame")
-        .and_then(Value::as_u64)
-        .ok_or("titan.status returned no numeric frame")?;
+    let frame = parse_titan_status(&status)?.frame;
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         thread::sleep(Duration::from_millis(10));
         let status = client.call("titan.status", None)?;
-        let now = status
-            .get("frame")
-            .and_then(Value::as_u64)
-            .ok_or("titan.status returned no numeric frame")?;
-        if now.saturating_sub(frame) >= 2 {
+        let now = parse_titan_status(&status)?.frame;
+        if two_frames_elapsed(frame, now) {
             return Ok(());
         }
         if Instant::now() >= deadline {
@@ -734,6 +752,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wrapping_status_and_input_frame_barriers() {
+        let pending =
+            parse_titan_status(&json!({"paused":false,"frame":u32::MAX,"pending_steps":1}))
+                .unwrap();
+        assert!(!pending.step_completed().unwrap());
+        let finished =
+            parse_titan_status(&json!({"paused":true,"frame":0,"pending_steps":0})).unwrap();
+        assert!(finished.step_completed().unwrap());
+        assert!(
+            parse_titan_status(&json!({"paused":true,"frame":u64::MAX,"pending_steps":0})).is_err()
+        );
+        assert!(
+            parse_titan_status(&json!({"paused":false,"frame":1,"pending_steps":0}))
+                .unwrap()
+                .step_completed()
+                .is_err()
+        );
+        assert!(!two_frames_elapsed(u32::MAX, 0));
+        assert!(two_frames_elapsed(u32::MAX - 1, 0));
+        assert!(two_frames_elapsed(u32::MAX, 1));
+        assert!(!two_frames_elapsed(5, 6));
+        assert!(two_frames_elapsed(5, 7));
+    }
+
+    #[test]
     fn schemas_are_unique_objects() {
         let tools = list();
         let mut names = std::collections::HashSet::new();
@@ -775,6 +818,8 @@ mod tests {
             ("click", json!({"x":1e100,"y":0}), "representable"),
             ("click", json!({"x":0,"y":-1e100}), "representable"),
             ("step", json!({"frames":0}), "minimum"),
+            ("step", json!({"frames":1,"dt_secs":2}), "maximum"),
+            ("step", json!({"frames":1,"dt_secs":1e-10}), "nanosecond"),
         ] {
             assert!(call(&client, tool, args).unwrap_err().contains(expected));
         }

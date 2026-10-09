@@ -8,6 +8,10 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/titan-engine/titan"
 publish = false
 
+[features]
+# Enables GPU-free integration tests of Titan Remote's render-gated methods.
+remote-render = ["titan_remote/render"]
+
 [dependencies]
 bevy_ecs = { path = "../bevy_ecs", version = "0.20.0" }
 bevy_platform = { path = "../bevy_platform", version = "0.20.0", features = [
@@ -23,8 +27,18 @@ serde_json = "1.0.140"
 tempfile = "3"
 ureq = { version = "3.0.8", default-features = false, features = ["json"] }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
 [dev-dependencies]
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
+bevy_asset = { path = "../bevy_asset", version = "0.20.0" }
+bevy_diagnostic = { path = "../bevy_diagnostic", version = "0.20.0" }
+bevy_image = { path = "../bevy_image", version = "0.20.0", features = ["png"] }
+bevy_render = { path = "../bevy_render", version = "0.20.0" }
+bevy_time = { path = "../bevy_time", version = "0.20.0" }
+bevy_tasks = { path = "../bevy_tasks", version = "0.20.0" }
+titan_remote = { path = "../titan_remote", version = "0.1.0" }
 bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
 bevy_input = { path = "../bevy_input", version = "0.20.0", features = [
   "keyboard",
