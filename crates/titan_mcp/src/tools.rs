@@ -16,6 +16,7 @@ use crate::client::Client;
 const WINDOW: &str = "bevy_window::window::Window";
 const PRIMARY_WINDOW: &str = "bevy_window::window::PrimaryWindow";
 const WINDOW_EVENT: &str = "bevy_window::event::WindowEvent";
+const CURSOR_MOVED: &str = "bevy_window::event::CursorMoved";
 const KEYBOARD_INPUT: &str = "bevy_input::keyboard::KeyboardInput";
 const MOUSE_BUTTON_INPUT: &str = "bevy_input::mouse::MouseButtonInput";
 const POLL_TIMEOUT: Duration = Duration::from_secs(15);
@@ -644,13 +645,15 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     let x = args
         .get("x")
         .and_then(Value::as_f64)
-        .filter(|n| n.is_finite())
-        .ok_or("`x` must be a finite number")?;
+        .filter(|n| n.is_finite() && (*n as f32).is_finite())
+        .map(|n| n as f32 as f64)
+        .ok_or("`x` must be a finite number representable by Bevy's Vec2")?;
     let y = args
         .get("y")
         .and_then(Value::as_f64)
-        .filter(|n| n.is_finite())
-        .ok_or("`y` must be a finite number")?;
+        .filter(|n| n.is_finite() && (*n as f32).is_finite())
+        .map(|n| n as f32 as f64)
+        .ok_or("`y` must be a finite number representable by Bevy's Vec2")?;
     let button = args
         .get("button")
         .map_or(Ok("Left"), |_| required_str(args, "button"))?;
@@ -659,11 +662,52 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     }
     let window = input_window(client, args, false)?;
     let has_status = supports(&discover(client)?, "titan.status");
-    write_message(
+    let entity = decode(window.clone())?;
+    let components = builtin(
         client,
-        WINDOW_EVENT,
-        json!({"CursorMoved":{"window":window,"position":[x,y],"delta":null}}),
+        BRP_GET_COMPONENTS_METHOD,
+        &BrpGetComponentsParams {
+            entity,
+            components: vec![WINDOW.to_owned()],
+            strict: true,
+        },
     )?;
+    let resolution = &components[WINDOW]["resolution"];
+    let scale_value = match resolution.get("scale_factor_override") {
+        Some(Value::Null) => &resolution["scale_factor"],
+        Some(value) => value,
+        None => return Err("Window resolution has no scale_factor_override field".to_owned()),
+    };
+    let scale = scale_value
+        .as_f64()
+        .filter(|scale| (*scale as f32).is_finite() && (*scale as f32) > 0.0)
+        .map(|scale| scale as f32 as f64)
+        .ok_or("Window resolution must have a positive, finite effective scale factor")?;
+    let physical = [x * scale, y * scale];
+    if physical
+        .iter()
+        .any(|n| !n.is_finite() || !(*n as f32).is_finite())
+    {
+        return Err("Scaled cursor position isn't representable by Bevy's Vec2".to_owned());
+    }
+    // Like winit, synchronize the target Window before announcing the move.
+    // Legacy UI reads this physical position; CursorMoved/picking use logical
+    // coordinates. Mutate only the cursor field, never replace a stale Window.
+    builtin(
+        client,
+        BRP_MUTATE_COMPONENTS_METHOD,
+        &BrpMutateComponentsParams {
+            entity,
+            component: WINDOW.to_owned(),
+            path: "internal.physical_cursor_position".to_owned(),
+            value: json!(physical),
+        },
+    )?;
+    let cursor = json!({"window":window,"position":[x,y],"delta":null});
+    let standalone = write_message(client, CURSOR_MOVED, cursor.clone());
+    let aggregate = write_message(client, WINDOW_EVENT, json!({"CursorMoved":cursor}));
+    standalone?;
+    aggregate?;
     separate_frames(client, has_status)?;
     let send = |state: &str| {
         let value = json!({"button":button,"state":state,"window":window});
@@ -728,6 +772,8 @@ mod tests {
                 "string",
             ),
             ("send_key", json!({"key":"KeyA","action":"typo"}), "one of"),
+            ("click", json!({"x":1e100,"y":0}), "representable"),
+            ("click", json!({"x":0,"y":-1e100}), "representable"),
             ("step", json!({"frames":0}), "minimum"),
         ] {
             assert!(call(&client, tool, args).unwrap_err().contains(expected));

@@ -20,11 +20,11 @@ use bevy_ecs::{
 use bevy_input::{
     keyboard::{KeyCode, KeyboardInput},
     mouse::{MouseButton, MouseButtonInput},
-    ButtonInput, InputPlugin,
+    ButtonInput, ButtonState, InputPlugin,
 };
 use bevy_reflect::{Reflect, TypePath};
 use bevy_remote::{http::RemoteHttpPlugin, BrpResult, RemotePlugin};
-use bevy_window::{PrimaryWindow, Window, WindowEvent};
+use bevy_window::{CursorMoved, PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
 use titan_mcp::{client::Client, tools};
 
@@ -87,6 +87,14 @@ struct MouseState {
     cursor_moves: u32,
     cursor_x: f32,
     cursor_y: f32,
+    raw_cursor_moves: u32,
+    raw_cursor_x: f32,
+    raw_cursor_y: f32,
+    raw_cursor_window: u64,
+    frame: u32,
+    cursor_frame: u32,
+    press_frames: Vec<[u32; 2]>,
+    press_positions: Vec<Option<[f32; 2]>>,
 }
 
 mod first {
@@ -121,14 +129,37 @@ fn record_mouse(
     input: Res<ButtonInput<MouseButton>>,
     mut raw: MessageReader<MouseButtonInput>,
     mut aggregate: MessageReader<WindowEvent>,
+    mut cursor: MessageReader<CursorMoved>,
+    windows: Query<&Window>,
     mut state: ResMut<MouseState>,
 ) {
+    state.frame += 1;
+    for event in cursor.read() {
+        state.raw_cursor_moves += 1;
+        state.raw_cursor_x = event.position.x;
+        state.raw_cursor_y = event.position.y;
+        state.raw_cursor_window = event.window.to_bits();
+        state.cursor_frame = state.frame;
+    }
+    for event in raw.read() {
+        if event.state == ButtonState::Pressed {
+            let frames = [state.cursor_frame, state.frame];
+            state.press_frames.push(frames);
+            state.press_positions.push(
+                windows
+                    .get(event.window)
+                    .ok()
+                    .and_then(Window::physical_cursor_position)
+                    .map(|position| position.to_array()),
+            );
+        }
+        state.raw.push(event.into());
+    }
     state.held = input.pressed(MouseButton::Left) || input.pressed(MouseButton::Right);
     for button in [MouseButton::Left, MouseButton::Right] {
         state.presses += u32::from(input.just_pressed(button));
         state.releases += u32::from(input.just_released(button));
     }
-    state.raw.extend(raw.read().map(MouseRecord::from));
     for event in aggregate.read() {
         match event {
             WindowEvent::MouseButtonInput(input) => state.aggregate.push(input.into()),
@@ -212,7 +243,9 @@ fn brp_fixture_process() {
         .register_type::<MouseRecord>()
         .register_type::<MouseButtonInput>()
         .register_type::<WindowEvent>()
+        .register_type::<CursorMoved>()
         .add_message::<WindowEvent>()
+        .add_message::<CursorMoved>()
         .register_type::<first::Ambiguous>()
         .register_type::<second::Ambiguous>()
         .register_type::<KeyboardInput>()
@@ -226,6 +259,9 @@ fn brp_fixture_process() {
     app.world_mut()
         .spawn((TestPosition { x: 3.0, y: 4.0 }, TestMarker { value: 7 }));
     app.world_mut().spawn((Window::default(), PrimaryWindow));
+    let mut secondary = Window::default();
+    secondary.resolution.set_scale_factor(1.5);
+    app.world_mut().spawn(secondary);
     let mut remote = RemotePlugin::default();
     if std::env::var_os(FIXTURE_TITAN).is_some() {
         app.insert_resource(StubClock {
@@ -492,12 +528,26 @@ fn click_updates_button_input_and_both_message_consumers() {
     let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]
         ["entity"]
         .clone();
+    fixture.tool(
+        "set_component",
+        json!({"entity":window,"component":"Window","path":"resolution.scale_factor","value":1.25}),
+    );
+    fixture.tool("set_component", json!({"entity":window,"component":"Window","path":"resolution.scale_factor_override","value":2.0}));
+    let secondary = fixture
+        .query(json!({"components":[],"with":["Window"],"without":["PrimaryWindow"]}))[0]["entity"]
+        .clone();
     let state = || fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
-    for (index, button) in ["Left", "Right"].into_iter().enumerate() {
-        let mut args = json!({"x":8.5,"y":12.25});
+    for (index, (button, target, x, y, scale)) in [
+        ("Left", window.clone(), 8.5, 12.25, 2.0),
+        ("Right", secondary, 10.25, 16.5, 1.5),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut args = json!({"x":x,"y":y});
         if button == "Right" {
             args["button"] = json!(button);
-            args["window"] = window.clone();
+            args["window"] = target.clone();
         }
         // First click exercises defaults and primary-window resolution.
         fixture.tool("click", args);
@@ -508,12 +558,13 @@ fn click_updates_button_input_and_both_message_consumers() {
                 && actual["releases"] == expected
                 && actual["raw"].as_array().unwrap().len() == expected * 2
                 && actual["aggregate"].as_array().unwrap().len() == expected * 2
+                && actual["raw_cursor_moves"] == expected
                 && actual["held"] == false
         });
         let actual = state();
         let records = json!([
-            {"button":button,"state":"Pressed","window":window},
-            {"button":button,"state":"Released","window":window}
+            {"button":button,"state":"Pressed","window":target},
+            {"button":button,"state":"Released","window":target}
         ]);
         for channel in ["raw", "aggregate"] {
             assert_eq!(
@@ -522,9 +573,62 @@ fn click_updates_button_input_and_both_message_consumers() {
             );
         }
         assert_eq!(actual["cursor_moves"], expected);
-        assert_eq!(actual["cursor_x"], 8.5);
-        assert_eq!(actual["cursor_y"], 12.25);
+        assert_eq!(actual["cursor_x"], x);
+        assert_eq!(actual["cursor_y"], y);
+        assert_eq!(actual["raw_cursor_x"], x);
+        assert_eq!(actual["raw_cursor_y"], y);
+        assert_eq!(actual["raw_cursor_window"], target);
+        // These positions were read by the raw button consumer on press,
+        // exactly as legacy UI reads Window::physical_cursor_position().
+        assert_eq!(
+            actual["press_positions"][index],
+            json!([x * scale, y * scale])
+        );
+        let frames = &actual["press_frames"][index];
+        assert!(frames[0].as_u64().unwrap() > 0);
+        assert!(frames[0].as_u64().unwrap() < frames[1].as_u64().unwrap());
     }
+    // Clicking the explicit secondary window must not move the primary cursor.
+    let primary = fixture.tool(
+        "get_components",
+        json!({"entity":window,"components":["Window"],"strict":true}),
+    );
+    assert_eq!(
+        primary[Window::type_path()]["internal"]["physical_cursor_position"],
+        json!([17.0, 24.5])
+    );
+}
+
+#[test]
+fn click_rejects_invalid_scale_before_mutating_cursor_or_sending_input() {
+    let fixture = Fixture::start(false);
+    let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    for (scale, x, expected) in [
+        (0.0, 10.0, "positive"),
+        (-2.0, 10.0, "positive"),
+        (1e38, 10.0, "representable"),
+    ] {
+        fixture.tool("set_component", json!({"entity":window,"component":"Window","path":"resolution.scale_factor_override","value":scale}));
+        let error = tools::call(&fixture.client, "click", json!({"x":x,"y":0})).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+    let state = fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
+    assert_eq!(state["presses"], 0);
+    assert_eq!(state["releases"], 0);
+    assert_eq!(state["raw"], json!([]));
+    assert_eq!(state["aggregate"], json!([]));
+    assert_eq!(state["raw_cursor_moves"], 0);
+    assert_eq!(state["cursor_moves"], 0);
+    let component = fixture.tool(
+        "get_components",
+        json!({"entity":window,"components":["Window"],"strict":true}),
+    );
+    assert_eq!(
+        component[Window::type_path()]["internal"]["physical_cursor_position"],
+        Value::Null
+    );
 }
 
 #[test]

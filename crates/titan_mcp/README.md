@@ -31,9 +31,11 @@ BRP access. Custom components generally need `#[derive(Component, Reflect)]`,
 `#[reflect(Component)]`, and `app.register_type::<YourComponent>()`.
 Keyboard injection needs the keyboard input plugin and a registered
 `KeyboardInput` message. Mouse injection needs the usual window/input/picking
-plugins and registered `MouseButtonInput` and `WindowEvent` messages. Clicks
-send standalone mouse-button messages for `ButtonInput`/raw readers as well as
-aggregate window messages for picking.
+plugins and registered `CursorMoved`, `MouseButtonInput` and `WindowEvent`
+messages. Clicks first update the target window's physical cursor position,
+using its effective scale factor (including any override), then send standalone
+cursor/button messages for raw readers and `ButtonInput` as well as aggregate
+window messages for picking. A native window backend may also move the OS cursor.
 
 For pause, resume, deterministic step, status, and fast file-based screenshots,
 also add the optional `TitanRemotePlugin` from `titan_remote` (#17). Without it,
