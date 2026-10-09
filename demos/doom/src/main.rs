@@ -1,5 +1,6 @@
 //! Windowed presentation for the demo; all gameplay lives in the library.
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::{
     env,
     error::Error,
@@ -13,6 +14,7 @@ use bevy::{
     core_pipeline::tonemapping::Tonemapping,
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
     input::mouse::AccumulatedMouseMotion,
+    platform::sync::Arc,
     prelude::*,
     render::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
@@ -26,6 +28,7 @@ use titan_doom::{GameplayActions, GameplayPlugin, Level, PlayerState, FIXED_HZ};
 struct Capture {
     path: Option<PathBuf>,
     frames: u32,
+    saved: Arc<AtomicBool>,
 }
 
 fn main() -> Result<AppExit, Box<dyn Error>> {
@@ -50,7 +53,10 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
         }
     }
 
-    Ok(App::new()
+    // App::run transfers the world to the runner. Keep an independent completion
+    // signal so every exit path, including an early window close, is checked.
+    let capture_saved = capture.path.as_ref().map(|_| Arc::clone(&capture.saved));
+    let exit = App::new()
         .insert_resource(level)
         .insert_resource(capture)
         .insert_resource(Time::<Fixed>::from_hz(FIXED_HZ))
@@ -64,13 +70,27 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
             ..default()
         }))
         .add_plugins(GameplayPlugin)
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, presentation_scene.spawn()))
         .add_systems(
             RunFixedMainLoop,
             human_actions.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
         )
         .add_systems(Update, (present_player, capture_frame))
-        .run())
+        .run();
+    Ok(checked_exit(
+        exit,
+        capture_saved.map(|saved| saved.load(Ordering::Relaxed)),
+    ))
+}
+
+/// A requested capture must have saved its image, regardless of how the app exited.
+fn checked_exit(exit: AppExit, capture_saved: Option<bool>) -> AppExit {
+    if exit.is_success() && capture_saved == Some(false) {
+        error!("Automatic capture ended before an image was saved");
+        AppExit::error()
+    } else {
+        exit
+    }
 }
 
 // Input is just an adapter. Pending look survives frames with no fixed tick and
@@ -157,47 +177,43 @@ fn setup(
         brightness: 450.0,
         ..default()
     });
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 3500.0,
-            ..default()
-        },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.9, -0.5, 0.0)),
-    ));
-    commands.spawn((
-        Camera3d::default(),
-        Tonemapping::Reinhard,
-        Transform::default(),
-    ));
-    commands.spawn((
-        Text::new("WASD: walk | Arrows: aim | Click: mouse look | Esc: release | F12: screenshot"),
-        TextFont {
-            font_size: FontSize::Px(16.0),
-            ..default()
-        },
+}
+
+/// Fixed presentation objects, expressed as a composable Bevy Scene Notation list.
+fn presentation_scene() -> impl SceneList {
+    bsn_list! {
+        #WorldLight
+        DirectionalLight { illuminance: 3500.0 }
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.9, -0.5, 0.0))
+        --
+        #PlayerView
+        Camera3d
+        Tonemapping::Reinhard
+        Transform
+        --
+        #Controls
+        Text("WASD: walk | Arrows: aim | Click: mouse look | Esc: release | F12: screenshot")
+        TextFont { font_size: FontSize::Px(16.0) }
         Node {
             position_type: PositionType::Absolute,
             left: px(16),
             bottom: px(16),
-            ..default()
-        },
-    ));
-    commands
-        .spawn(Node {
+        }
+        --
+        #CrosshairOverlay
+        Node {
             position_type: PositionType::Absolute,
             width: percent(100),
             height: percent(100),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
-            ..default()
-        })
-        .with_child((
-            Text::new("+"),
-            TextFont {
-                font_size: FontSize::Px(22.0),
-                ..default()
-            },
-        ));
+        }
+        Children [
+            #Crosshair
+            Text("+")
+            TextFont { font_size: FontSize::Px(22.0) }
+        ]
+    }
 }
 
 // Original procedural assets: no Doom/Freedoom assets or external downloads.
@@ -275,8 +291,12 @@ fn capture_frame(
         && let Some(path) = capture.path.take()
     {
         commands.spawn(Screenshot::primary_window()).observe(
-            move |captured: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
-                exit.write(capture_exit(&captured.image, &path));
+            move |captured: On<ScreenshotCaptured>,
+                  capture: Res<Capture>,
+                  mut exit: MessageWriter<AppExit>| {
+                let result = capture_exit(&captured.image, &path);
+                capture.saved.store(result.is_success(), Ordering::Relaxed);
+                exit.write(result);
             },
         );
     }
@@ -290,6 +310,52 @@ fn capture_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bsn_presentation_spawns_camera_light_and_hud_hierarchy() {
+        use bevy::{app::TaskPoolPlugin, asset::AssetPlugin, scene::ScenePlugin};
+
+        let mut app = App::new();
+        app.add_plugins((
+            TaskPoolPlugin::default(),
+            AssetPlugin::default(),
+            ScenePlugin,
+        ));
+        let world = app.world_mut();
+        let roots = world.spawn_scene_list(presentation_scene()).unwrap();
+        assert_eq!(roots.len(), 4);
+        assert_eq!(
+            world
+                .query_filtered::<Entity, With<Camera3d>>()
+                .iter(world)
+                .count(),
+            1
+        );
+        assert_eq!(
+            world
+                .query_filtered::<Entity, With<DirectionalLight>>()
+                .iter(world)
+                .count(),
+            1
+        );
+        let overlay = roots
+            .iter()
+            .copied()
+            .find(|entity| {
+                world
+                    .get::<Name>(*entity)
+                    .is_some_and(|name| name.as_str() == "CrosshairOverlay")
+            })
+            .unwrap();
+        let children = world.get::<Children>(overlay).unwrap();
+        assert_eq!(children.len(), 1);
+        let crosshair = children[0];
+        assert_eq!(world.get::<Text>(crosshair).unwrap().0, "+");
+        assert_eq!(
+            world.get::<TextFont>(crosshair).unwrap().font_size,
+            FontSize::Px(22.0)
+        );
+    }
 
     #[test]
     fn mouse_grab_discards_free_cursor_motion_on_activation() {
@@ -347,6 +413,50 @@ mod tests {
             app.world().get::<CursorOptions>(window).unwrap().grab_mode,
             CursorGrabMode::None
         );
+    }
+
+    #[test]
+    fn early_exit_fails_before_and_after_a_capture_request_is_submitted() {
+        let mut capture = Capture {
+            path: Some("capture.png".into()),
+            ..default()
+        };
+        let saved = Arc::clone(&capture.saved);
+        let observed = || Some(saved.load(Ordering::Relaxed));
+        assert!(checked_exit(AppExit::Success, observed()).is_error());
+        // Taking the path to submit the request must not count as completion.
+        capture.path.take();
+        assert!(checked_exit(AppExit::Success, observed()).is_error());
+        capture.saved.store(true, Ordering::Relaxed);
+        assert_eq!(checked_exit(AppExit::Success, observed()), AppExit::Success);
+        assert!(checked_exit(AppExit::error(), observed()).is_error());
+        assert_eq!(checked_exit(AppExit::Success, None), AppExit::Success);
+
+        for submitted in [false, true] {
+            let mut app = App::new();
+            app.add_plugins(WindowPlugin::default());
+            let mut capture = Capture {
+                path: Some("capture.png".into()),
+                ..default()
+            };
+            let saved = Arc::clone(&capture.saved);
+            if submitted {
+                capture.path.take();
+            }
+            app.insert_resource(capture);
+            let world = app.world_mut();
+            let window = world
+                .query_filtered::<Entity, With<Window>>()
+                .single(world)
+                .unwrap();
+            world.write_message(bevy::window::WindowCloseRequested { window });
+            // Bevy marks the window closing, then despawns it on the next frame.
+            app.update();
+            app.update();
+            let exit = app.should_exit().unwrap();
+            assert_eq!(exit, AppExit::Success);
+            assert!(checked_exit(exit, Some(saved.load(Ordering::Relaxed))).is_error());
+        }
     }
 
     #[test]

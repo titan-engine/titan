@@ -37,7 +37,8 @@ cargo run -p titan_doom -- --capture /tmp/titan-doom.png
 
 `--capture` requests a screenshot after 120 presentation frames and exits only
 with success after the image is saved. Conversion errors, unsupported file
-extensions, or write failures produce a nonzero exit status and a diagnostic.
+extensions, write failures, or closing the window before the image is saved
+produce a nonzero exit status and a diagnostic.
 Allow the window to render; this is not a headless screenshot command.
 The committed image below was captured from the running macOS/Metal build and
 visually checked for floor/wall textures, perspective, and controls. There is
@@ -98,7 +99,10 @@ this foundation does not require every marker to be reachable.
 `src/lib.rs` contains the level representation and `GameplayPlugin`. It has no
 rendering, filesystem loading, OS input, asset, or window requirement. The
 optional `render` feature enables only the windowed binary and presentation in
-`src/main.rs`. No engine internals were modified.
+`src/main.rs`. The fixed camera, light, and HUD hierarchy are composed using
+Bevy Scene Notation (`bsn_list!` and `Children`), while grid geometry is spawned
+procedurally from the validated level. BSN's presentation entity names do not
+replace authored object IDs. No engine internals were modified.
 
 Install a validated `Level` resource before `GameplayPlugin`. Gameplay executes
 in `FixedUpdate` at **60 Hz**, one 1/60-second movement step per schedule run.
@@ -166,8 +170,9 @@ consumption, non-finite actions, malformed levels, and stable identity despite
 unrelated ECS entity allocation. CI tests the no-default-feature combination
 explicitly; workspace CI covers the rendered build.
 
-`cargo test -p titan_doom --bin titan_doom` additionally checks mouse-grab
-activation/focus loss and automatic screenshot success/failure handling without
+`cargo test -p titan_doom --bin titan_doom` additionally checks the BSN scene
+hierarchy, mouse-grab activation/focus loss, and screenshot success/failure
+handling (including early window closure) without
 opening a window or creating a GPU device (rendering dependencies are compiled).
 
 For presentation changes, also run the windowed demo and inspect a fresh capture.

@@ -14,6 +14,7 @@ render = [
   "bevy/async_executor",
   "bevy/multi_threaded",
   "bevy/bevy_asset",
+  "bevy/bevy_scene",
   "bevy/bevy_log",
   "bevy/bevy_window",
   "bevy/bevy_winit",
