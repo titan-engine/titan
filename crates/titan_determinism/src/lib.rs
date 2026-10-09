@@ -308,6 +308,12 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
         if !self.diff_config.float_tolerance.is_finite() || self.diff_config.float_tolerance < 0.0 {
             self.diff_config.float_tolerance = 0.0;
         }
+        // Sort once, stably, so equal-tick actions retain recording order.
+        // Keep the original script unchanged for the reproduction payload.
+        let mut sorted_script = self.script.clone();
+        if let Some(script) = &mut sorted_script {
+            script.events.sort_by_key(|event| event.tick);
+        }
         let mut reference = (self.factory)();
         assert_eq!(
             reference.current_tick(),
@@ -319,14 +325,16 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             .get_resource::<SimSeed>()
             .map(|seed| seed.0);
         let mut snapshots = Vec::new();
+        let mut playback = Playback::new(sorted_script.as_ref());
         for _ in 0..ticks {
-            advance(&mut reference, self.script.as_ref());
+            playback.advance(&mut reference);
             snapshots.push(WorldSnapshot::capture(
                 reference.world(),
                 &self.snapshot_config,
             ));
         }
-        // Do not retain the reference world while executing candidates.
+        // Do not retain the reference world or input buffer while executing candidates.
+        drop(playback);
         drop(reference);
         let mut earliest: Option<Divergence> = None;
         for run in 2..=self.runs {
@@ -343,6 +351,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             if self.variant == Variant::MultiThreaded {
                 candidate = candidate.with_executor_kind(ExecutorKind::MultiThreaded);
             }
+            let mut playback = Playback::new(sorted_script.as_ref());
             for reference in &snapshots {
                 if earliest
                     .as_ref()
@@ -350,7 +359,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
                 {
                     break;
                 }
-                advance(&mut candidate, self.script.as_ref());
+                playback.advance(&mut candidate);
                 let snapshot = WorldSnapshot::capture(candidate.world(), &self.snapshot_config);
                 let diff = reference.diff(&snapshot, &self.diff_config);
                 if !diff.is_empty() {
@@ -390,10 +399,79 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
     }
 }
 
-fn advance(sim: &mut Sim, script: Option<&InputScript>) {
-    if let Some(script) = script {
-        sim.run_script(script, sim.current_tick() + 1);
-    } else {
-        sim.tick();
+// Pass only the current tick's events to Sim::run_script. Calling it with the
+// entire recording at every tick would repeatedly scan all events (quadratic
+// for recordings with one event per tick). A fresh cursor is used for each run;
+// the same Sim preserves pending automatic tap releases across these calls.
+struct Playback<'a> {
+    events: Option<core::iter::Peekable<core::slice::Iter<'a, titan_test::ScriptEvent>>>,
+    frame: InputScript,
+}
+
+impl<'a> Playback<'a> {
+    fn new(sorted_script: Option<&'a InputScript>) -> Self {
+        Self {
+            events: sorted_script.map(|script| script.events.iter().peekable()),
+            frame: InputScript::default(),
+        }
+    }
+
+    fn advance(&mut self, sim: &mut Sim) {
+        let Some(events) = &mut self.events else {
+            sim.tick();
+            return;
+        };
+        self.frame.events.clear();
+        while let Some(event) = events.next_if(|event| event.tick == sim.current_tick()) {
+            self.frame.events.push(event.clone());
+        }
+        sim.run_script(&self.frame, sim.current_tick() + 1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_input::keyboard::KeyCode;
+    use titan_test::{InputAction, ScriptEvent};
+
+    #[test]
+    fn playback_consumes_each_event_once_and_passes_only_current_tick_events() {
+        let script = InputScript {
+            events: (0..100)
+                .map(|tick| ScriptEvent {
+                    tick,
+                    action: InputAction::Tap(KeyCode::Space.into()),
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let mut playback = Playback::new(Some(&script));
+        let mut sim = Sim::new(|_| {});
+        for remaining in (0..100).rev() {
+            playback.advance(&mut sim);
+            assert_eq!(playback.frame.events.len(), 1);
+            assert_eq!(playback.events.as_ref().unwrap().len(), remaining);
+        }
+        playback.advance(&mut sim);
+        assert!(playback.frame.events.is_empty());
+        assert_eq!(sim.current_tick(), 101);
+        assert_eq!(script.events.len(), 100);
+    }
+
+    #[test]
+    fn unsupported_script_is_rejected_before_constructing_a_world() {
+        let script = InputScript {
+            version: SCRIPT_VERSION + 1,
+            ..Default::default()
+        };
+        let panic = std::panic::catch_unwind(|| {
+            DeterminismCheck::new(|| panic!("factory must not run"))
+                .ticks(1)
+                .script(script)
+                .run();
+        });
+        let message = panic.unwrap_err().downcast::<String>().unwrap();
+        assert!(message.contains("unsupported script version"));
     }
 }

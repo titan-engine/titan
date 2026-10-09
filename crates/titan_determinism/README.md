@@ -129,7 +129,11 @@ according to `titan_test`'s executor-policy limitations.
 ## Input, bounds, and memory
 
 `.script(InputScript::from_ron(text).unwrap())` replays the same recording on each
-fresh simulation through `Sim::run_script`, one update at a time. Without a
+fresh simulation through `Sim::run_script`, one update at a time. The checker
+stably sorts a playback copy once and uses a fresh event cursor per run, passing
+only the current tick's events to `Sim::run_script`. It does not rescan the entire
+recording on every tick; equal-tick action order and automatic tap releases are
+preserved. The original recording remains unchanged in the report. Without a
 script, the checker injects no input. Use the same seed, timestep, starting world,
 plugins, and external state for repeatable replay.
 
@@ -147,8 +151,9 @@ advance through ticks that could beat it. Ties keep the lowest run number. A
 mismatch at tick 1 ends the entire check, since no earlier compared tick exists.
 Memory is **O(ticks × captured world size)** for the reference history, plus a
 live candidate world, one candidate snapshot, and the retained divergence/diff.
-No candidate snapshot histories are retained. There is no on-disk history or
-hash-only compression.
+No candidate snapshot histories are retained. Scripted checks additionally
+retain an O(event count) sorted playback copy and a reusable current-tick input
+buffer. There is no on-disk history or hash-only compression.
 
 ## Read a report
 
