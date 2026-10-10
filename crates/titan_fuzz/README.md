@@ -335,16 +335,19 @@ for tick in 0..total_ticks {
 }
 ```
 
-The regression depends only on `titan_test`; it does not need to generate random
-inputs or shrink again.
+This button regression depends only on `titan_test`; it does not need to
+generate random inputs or shrink again. Action regressions use
+`ActionScript::replay` from `titan_fuzz`, without running a campaign.
 
 ## Limits and determinism
 
-This is property-based **input** testing, not coverage-guided fuzzing or direct
-world-state mutation. It only supports button input: keyboard keys and mouse
-buttons, not mouse motion, gamepads, analog axes, or an action mapping layer.
-It explores the chosen inputs and starting state, so a passing campaign is not
-proof of correctness or exhaustive coverage.
+This is property-based **input/action** testing, not coverage-guided fuzzing or
+arbitrary world-state mutation. The raw `Fuzz` API supports keyboard keys and
+mouse buttons, not mouse motion, gamepads, or analog axes. `ActionFuzz` supports
+user-defined gameplay actions, including analog movement and aim, through the
+game's own adapter; it does not provide a standard action-mapping layer.
+Both modes explore the chosen inputs and starting state, so a passing campaign
+is not proof of correctness or exhaustive coverage.
 
 The generated input stream is seedable and portable. That does not make an
 arbitrary game deterministic. `Sim::with_seed` supplies a `SimSeed` resource;

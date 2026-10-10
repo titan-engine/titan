@@ -1,4 +1,6 @@
 //! Headless Doom acceptance scenario. Only the demo's public gameplay API is used.
+use bevy_app::Update;
+use bevy_ecs::prelude::{ResMut, Resource};
 use bevy_math::Vec2;
 use serde::{Deserialize, Serialize};
 use titan_doom::{GameplayActions, GameplayPlugin, Level, PlayerState};
@@ -13,13 +15,20 @@ struct Actions {
     look_delta: [f32; 2],
 }
 
+#[derive(Resource, Default)]
+struct SimulationTicks(u64);
+
 #[test]
 fn doom_player_never_enters_a_wall_under_generated_gameplay_actions() {
     ActionFuzz::new(
         || {
             Sim::new(|app| {
                 app.insert_resource(Level::demo())
-                    .add_plugins(GameplayPlugin);
+                    .init_resource::<SimulationTicks>()
+                    .add_plugins(GameplayPlugin)
+                    .add_systems(Update, |mut ticks: ResMut<SimulationTicks>| {
+                        ticks.0 += 1;
+                    });
             })
         },
         Actions::default(),
@@ -58,10 +67,14 @@ fn doom_player_never_enters_a_wall_under_generated_gameplay_actions() {
         }
     })
     .invariant("gameplay advances every tick", |world| {
-        if world.resource::<PlayerState>().tick > 0 {
+        let gameplay_tick = world.resource::<PlayerState>().tick;
+        let simulation_tick = world.resource::<SimulationTicks>().0;
+        if gameplay_tick == simulation_tick {
             Ok(())
         } else {
-            Err("no fixed gameplay update".into())
+            Err(format!(
+                "gameplay tick {gameplay_tick} != simulation tick {simulation_tick}"
+            ))
         }
     })
     .no_nan_transforms()
