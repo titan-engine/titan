@@ -5,7 +5,6 @@ permissions:
 
 on:
   merge_group:
-  pull_request:
   # also run when pushed to main to update reference screenshots
   push:
     branches:
@@ -19,6 +18,10 @@ env:
   CARGO_PROFILE_DEV_DEBUG: 0
   # Keep in sync between all workflows
   RUSTFLAGS: "-C debuginfo=0 -D warnings"
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
 
 jobs:
   run-examples-macos-metal:

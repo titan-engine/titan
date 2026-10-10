@@ -59,6 +59,10 @@ screenshots, and attach them to the PR.
 
 ## Conventions
 
+- New `titan_*` crates must not add their own workflow. Workspace tests in
+  `.github/workflows/ci.yml` and the shared Linux-only `.github/workflows/titan.yml`
+  cover them automatically; document any special feature combinations in the
+  shared workflow's per-crate list.
 - Follow the existing style of the file you're editing. `rustfmt.toml` and
   `clippy.toml` are authoritative.
 - Public items need doc comments. Changes to examples need an updated entry in
