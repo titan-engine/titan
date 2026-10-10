@@ -168,12 +168,59 @@ stdout and stderr concurrently, with 4 KiB of prefix and 4 KiB of tail per
 stream and explicit middle-byte omission counts. The tail retains compiler
 errors emitted after long dependency-build progress logs. Use Cargo's default human-readable diagnostics (optionally
 `--color=never`); JSON diagnostic lines are returned as text, not parsed. Build
-success returns process state, not logs. Game stdout/stderr are currently
-discarded (log access is tracked in #62), and game stdin is closed; no child
-output can corrupt MCP stdout or fill an unread pipe.
+success returns process state, not logs. Game stdout/stderr are continuously
+drained into a shared bounded ring (1,024 lines and 512 KiB of text). Each line
+retains at most 1 KiB of input, with discarded bytes counted in `truncated_bytes`;
+invalid UTF-8 is replaced lossily. Game stdin is closed. No child output is
+written to MCP stdout or left in an unread pipe.
+
+### Read game logs
+
+`launch_game` and `restart_game` include `log_cursor`, the exclusive cursor just
+before that run's output. Use `game_logs { "since": <log_cursor> }`, then poll with
+the returned `cursor`. Cursors never reset across restarts within one MCP server;
+old output remains available until evicted. Without `since`, `game_logs` returns
+the most recent matching tail. `max_lines` defaults to 50 and accepts `1..=100`;
+serialized lines also share a 16 KiB budget, below MCP's 24 KiB text cap.
+
+Each entry has `cursor`, `stream` (`stdout`/`stderr`), `level`, `text`, and
+`truncated_bytes`. ANSI CSI color sequences and CRLF terminators are removed.
+`level` accepts `error`, `warn`, `info`, `debug`, or `trace` and matches the exact
+level parsed from Bevy's default formatter, not a severity threshold. Custom or
+unstructured lines (including panic messages) have `level: null` and remain
+readable without a level filter. `contains` is a case-sensitive substring filter.
+Stream order is preserved, but cross-stream order is observation order, not an
+exact timestamp ordering. A final partial line is published at EOF; while the
+game runs, lines appear when their newline arrives.
+
+The response includes `process` (including the last exit status), `oldest_cursor`,
+`latest_cursor`, `dropped_lines` (evicted entries since the requested cursor, or
+all evictions without one), and `omitted_lines` (matching retained entries not
+returned due to output caps). With `since`, `has_more: true` means continue with
+`cursor` to read the next page; otherwise the cursor advances past nonmatching
+entries too. Without `since`, older omitted matches are intentionally skipped;
+use an explicit cursor to page through history. Keep filters unchanged while
+paging, or go back to an earlier cursor when changing them. A future cursor is
+rejected. `reader_error` reports a pipe I/O failure or a reader-cleanup timeout
+without discarding captured output; it is cleared at the next successful spawn.
+Attach-only mode explains that logs require `--game-cmd`.
+
+Exit/crash cleanup normally drains the final output before returning process
+state. Both readers share a cleanup deadline based on the stop timeout, clamped
+to 1–2 seconds. If an escaped descendant still holds an inherited pipe open,
+unfinished readers are detached and `reader_error` explains that capture continues
+in the background. A new launch invalidates old readers' generation atomically
+with taking its launch cursor: late output or I/O errors from those readers cannot
+enter the new run's logs. A blocked detached reader may remain until its pipe
+closes, but it never blocks MCP lifecycle calls. Already captured logs and exit
+status survive a crash or intentional stop, and failed readiness errors
+include a bounded recent log tail, so startup panics and missing assets are
+visible even when BRP never starts. Builds still use their separate diagnostic
+capture; they do not enter the game log ring.
 
 `game_status` adds a `process` object: `configured`, `owned`, `state`, live
-command `pid`, and last `exit` (`code`, `success`, `description`). States are
+command `pid`, last `exit` (`code`, `success`, `description`), and `log_cursor`
+(`null` before the first spawn). States are
 `attached`, `stopped` (never launched), `running`, and `exited` (including an
 intentional stop). The PID can be Cargo's PID. Managed status works even when
 BRP is unreachable, returning `reachable: false` and the BRP error; attach-only
@@ -189,7 +236,9 @@ start suspended into a Job Object; stop makes a bounded best-effort
 `taskkill /T` request, then terminates the job (console apps may not support
 graceful shutdown). Builds get the same tree isolation. Commands must not
 intentionally detach/escape their group or hand inherited pipes to unrelated
-processes. Normal stdio EOF, protocol I/O errors, and dropping the process
+processes: those escaped processes cannot be stopped by the manager. Such an
+inherited game pipe does not prevent MCP from returning process state or stopping
+its owned tree; bounded reader cleanup reports the incomplete drain. Normal stdio EOF, protocol I/O errors, and dropping the process
 manager stop its game. Ctrl-C and Unix SIGTERM/SIGHUP request cooperative
 shutdown, interrupt idle stdin, blocked stdout, and readiness/build polling,
 then clean up the owned tree. The binary uses bounded 8 KiB stdio chunks and
@@ -219,6 +268,7 @@ Use `tools/list` for the authoritative JSON input schemas.
 | Tool | Purpose |
 | --- | --- |
 | `game_status` | Process ownership/PID/exit, reachability, discovered BRP methods, optional Titan status |
+| `game_logs` | Bounded owned stdout/stderr, polling cursor, level/substring filters, retained crash output and exit status |
 | `launch_game`, `stop_game` | Start or stop only the configured, owned game tree |
 | `rebuild_game` | Stop, run the fixed build command, and stay stopped |
 | `restart_game` | Stop, optionally `rebuild: true`, then launch and wait for BRP |
@@ -347,7 +397,14 @@ exit codes, bounded dual-pipe output, readiness/build timeouts, attach-only
 safety, argument rejection, owned descendants/inherited build pipes, descendant
 graceful shutdown, cooperative cancellation, and cleanup on stdio EOF/SIGTERM
 (including an unread, backpressured stdout pipe). They do not modify or rely
-on the timing-sensitive frame-count fixtures tracked in #73.
+on the timing-sensitive frame-count fixtures tracked in #73. Dedicated log tests
+launch the headless example, poll new output, filter colored Bevy-format lines,
+check cursors across restarts, crash after readiness, expose startup panic/timeout
+diagnostics, drain chatty dual pipes and partial final lines, report retention
+loss, and verify that child output cannot corrupt MCP stdio. Unix detached-helper
+tests use `setsid` with inherited pipes to verify bounded status/stop cleanup and
+log isolation across launches; a controlled reader test also rejects late lines
+and I/O errors from an earlier generation.
 
 To reproduce the visual agent workflow:
 
