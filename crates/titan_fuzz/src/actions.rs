@@ -363,12 +363,19 @@ where
     }
 
     fn shrink(&mut self) {
-        let mut script = self.failure.script.clone();
-        script.ticks = script
+        let end = self
+            .failure
+            .script
             .ticks
             .min(self.failure.failing_tick.saturating_add(1));
-        script.events.retain(|event| event.tick < script.ticks);
-        self.consider(script);
+        // A finding on the final tick already has this endpoint. Do not spend
+        // candidate/confirmation runs on an unchanged reproduction.
+        if end < self.failure.script.ticks {
+            let mut script = self.failure.script.clone();
+            script.ticks = end;
+            script.events.retain(|event| event.tick < end);
+            self.consider(script);
+        }
 
         // Delta debugging deletes action chunks, leaving explicit neutral ticks.
         let mut chunk = self.failure.script.events.len().div_ceil(2).max(1);

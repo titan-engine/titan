@@ -397,6 +397,46 @@ struct Flags {
 }
 
 #[test]
+fn final_tick_failure_spends_its_small_shrink_budget_on_deletion() {
+    let report = ActionFuzz::new(
+        || {
+            Sim::new(|app| {
+                app.init_resource::<Flags>()
+                    .add_systems(Update, |mut flags: ResMut<Flags>| {
+                        flags.frame += 1;
+                    });
+            })
+        },
+        0,
+        |_| 1,
+        |world, action| {
+            if *action != 0 {
+                world.resource_mut::<Flags>().a = true;
+            }
+        },
+    )
+    .invariant("final tick", |world| {
+        let flags = world.resource::<Flags>();
+        if flags.frame == 2 && flags.a {
+            Err("action received".into())
+        } else {
+            Ok(())
+        }
+    })
+    .cases(1)
+    .ticks(2)
+    .max_shrink_runs(2)
+    .run();
+    let FuzzReport::Failed(failure) = report else {
+        panic!("expected failure");
+    };
+    assert_eq!(failure.failing_tick, 1);
+    assert_eq!(failure.original_events, 2);
+    assert_eq!(failure.script.events.len(), 1);
+    assert_eq!(failure.shrink_runs, 2);
+}
+
+#[test]
 fn moving_an_action_across_another_event_keeps_minimizing_that_action() {
     let mut rng = ActionRng::new(0, 0);
     let draws: Vec<_> = (0..12).map(|_| rng.next_u64()).collect();
