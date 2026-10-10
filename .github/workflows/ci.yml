@@ -105,7 +105,10 @@ jobs:
           xkb: true
           x264: true
           fontconfig: true
+      - name: Restore cached source timestamps
+        run: node .github/scripts/cache-source-mtimes.cjs restore
       - name: CI job
+        # Keep clippy in sync with update-caches.yml / Build Linux clippy cache.
         # See tools/ci/src/main.rs for the commands this runs
         run: cargo run -p ci -- lints
 
@@ -166,7 +169,10 @@ jobs:
       - uses: ./.github/actions/install-rust
       - name: Install Linux dependencies
         uses: ./.github/actions/install-linux-deps
+      - name: Restore cached source timestamps
+        run: node .github/scripts/cache-source-mtimes.cjs restore
       - name: Check Compile
+        # Keep in sync with update-caches.yml / Build Linux compile cache.
         # See tools/ci/src/main.rs for the commands this runs
         run: cargo run -p ci -- compile
 
@@ -415,7 +421,10 @@ jobs:
           xkb: true
           x264: true
           fontconfig: true
+      - name: Restore cached source timestamps
+        run: node .github/scripts/cache-source-mtimes.cjs restore
       - name: Build and check doc
+        # Keep in sync with update-caches.yml / Build Linux doc cache.
         # See tools/ci/src/main.rs for the commands this runs
         run: cargo run -p ci -- doc
       # This currently report a lot of false positives

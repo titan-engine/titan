@@ -22,6 +22,7 @@ concurrency:
 
 # Environment variables must be kept in sync with all workflows that defines them.
 env:
+  CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_TEST_DEBUG: 0
   CARGO_PROFILE_DEV_DEBUG: 0
@@ -70,7 +71,8 @@ jobs:
           - os: ubuntu-latest
             toolchain: stable
             target: ""
-            cache-suffix: -workspace-tests-v3
+            components: clippy
+            cache-suffix: -workspace-tests-lints-v4
           # ci.yml / build (macos-latest); example-run.yml / run-examples-macos-metal
           - os: macos-latest
             toolchain: stable
@@ -212,6 +214,21 @@ jobs:
       - name: Build workspace bench cache
         if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo run -p ci -- test --no-run
+
+      # Keep these commands in sync with ci.yml / ci, check-compiles and
+      # check-doc, including the CI wrapper's environment and doc-check's
+      # RUSTDOCFLAGS. Record source timestamps only after all warming finishes.
+      - name: Build Linux clippy cache
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: cargo run -p ci -- clippy
+
+      - name: Build Linux compile cache
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: cargo run -p ci -- compile
+
+      - name: Build Linux doc cache
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: cargo run -p ci -- doc
 
       # Preserve the non-stable native cache recipe for its other consumers.
       - name: Build test cache
