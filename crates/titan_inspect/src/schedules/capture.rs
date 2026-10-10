@@ -35,8 +35,7 @@ pub(super) struct Conditions {
 // keys (or, after the old schedule is dropped, allocator addresses) are reused.
 pub(super) fn identity(system: &bevy_ecs::system::ScheduleSystem) -> Option<usize> {
     // A boxed zero-sized system has no unique allocation (ApplyDeferred is one).
-    (core::mem::size_of_val(&**system) != 0)
-        .then(|| core::ptr::from_ref(&**system).cast::<()>() as usize)
+    (size_of_val(&**system) != 0).then(|| core::ptr::from_ref(&**system).cast::<()>() as usize)
 }
 
 impl ScheduleBuildPass for Capture {
