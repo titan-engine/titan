@@ -65,10 +65,11 @@ jobs:
         shell: bash
         env:
           SCOPED: ${{ needs.changes.result == 'success' && needs.changes.outputs.upstream == 'false' }}
+          TITAN_PACKAGES: ${{ needs.changes.outputs.titan_packages }}
         run: |
           if [[ "$SCOPED" == true ]]; then
             # Keep native Titan tests in merge groups without building all of Bevy.
-            bash .github/scripts/titan-scoped-ci.sh test
+            bash .github/scripts/titan-scoped-ci.sh test "$TITAN_PACKAGES"
           else
             # Benchmark smoke tests only need to run on Linux.
             cargo run -p ci -- test ${{ runner.os != 'Linux' && '--skip-benches' || '' }}
@@ -143,6 +144,7 @@ jobs:
       titan: ${{ steps.filter.outputs.titan }}
       docs: ${{ steps.filter.outputs.docs }}
       ecs: ${{ steps.filter.outputs.ecs }}
+      titan_packages: ${{ steps.filter.outputs.titan_packages }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

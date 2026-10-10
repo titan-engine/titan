@@ -128,6 +128,7 @@ git add . && git commit -qm unrelated
 awk '
   /^    - name: Select jobs$/ { select_step=1 }
   select_step && /^      run: \|$/ { body=1; next }
+  body && /^    - / { exit }
   body { sub(/^        /, ""); print }
 ' "$script_dir/../actions/ci-changes/action.yml" > select-jobs.sh
 [[ -s select-jobs.sh ]]
