@@ -9,9 +9,9 @@ use std::{
 };
 
 use bevy::{prelude::*, time::TimeUpdateStrategy};
-use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use titan_doom::{remote::DoomRemotePlugin, GameplayPlugin, Level, FIXED_HZ};
+use ureq::Agent;
 
 const TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -19,7 +19,7 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 // the harness also releases the socket, even on assertion failure.
 struct Server {
     child: Child,
-    client: Client,
+    client: Agent,
     url: String,
 }
 
@@ -47,11 +47,12 @@ impl Server {
             .unwrap();
         let mut server = Self {
             child,
-            client: Client::builder()
-                .no_proxy()
-                .timeout(TIMEOUT)
-                .build()
-                .unwrap(),
+            client: Agent::new_with_config(
+                Agent::config_builder()
+                    .proxy(None)
+                    .timeout_global(Some(TIMEOUT))
+                    .build(),
+            ),
             url: format!("http://127.0.0.1:{port}"),
         };
         let deadline = Instant::now() + TIMEOUT;
@@ -66,13 +67,12 @@ impl Server {
         server
     }
 
-    fn request(&self, method: &str, params: Value) -> Result<Value, reqwest::Error> {
+    fn request(&self, method: &str, params: Value) -> Result<Value, ureq::Error> {
         self.client
             .post(&self.url)
-            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
-            .send()?
-            .error_for_status()?
-            .json()
+            .send_json(json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))?
+            .body_mut()
+            .read_json()
     }
 
     fn call(&self, method: &str, params: Value) -> Value {
