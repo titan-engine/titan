@@ -114,25 +114,76 @@ fn normalized_map_entries_sort_by_nested_matched_and_raw_references_first() {
 }
 
 #[test]
+fn reference_valued_map_associations_cannot_reorder_distinct_keys_even_with_float_tolerance() {
+    // Both keys refer to A and differ only in a scalar field. References in the
+    // values must not decide which key is paired, even for tolerated key floats.
+    for (first, second) in [(json!(0.0), json!(0.5)), (json!(0), json!(1))] {
+        let before = snapshot(
+            id(1),
+            id(2),
+            json!({"$titan_entity_map": [
+                [{"field": first, "target": reference(id(1))}, reference(id(1))],
+                [{"field": second, "target": reference(id(1))}, reference(id(2))],
+            ]}),
+        );
+        let after = snapshot(
+            id(2),
+            id(1),
+            json!({"$titan_entity_map": [
+                [{"field": first, "target": reference(id(2))}, reference(id(1))],
+                [{"field": second, "target": reference(id(2))}, reference(id(2))],
+            ]}),
+        );
+        let config = DiffConfig {
+            float_tolerance: 1.0,
+        }
+        .with_entity_matching(EntityMatching::ByName);
+        let diff = before.diff_matched(&after, &config);
+        assert!(
+            !diff.is_empty(),
+            "swapped associations for {first} and {second}"
+        );
+        assert!(diff.diff.entities.is_empty());
+        assert_eq!(diff.diff.resources.len(), 1);
+        let fields = &diff.diff.resources[0].fields;
+        assert_eq!(fields.len(), 2, "{diff}");
+        for (index, (before_name, after_name)) in [("A", "B"), ("B", "A")].into_iter().enumerate() {
+            assert_eq!(
+                fields[index].path,
+                format!("$[\"$titan_entity_map\"][{index}][1]")
+            );
+            assert_eq!(
+                fields[index].before,
+                Some(json!({"$titan_entity_key": {"kind": "name", "name": before_name}}))
+            );
+            assert_eq!(
+                fields[index].after,
+                Some(json!({"$titan_entity_key": {"kind": "name", "name": after_name}}))
+            );
+        }
+    }
+}
+
+#[test]
 fn raw_references_also_stabilize_order_and_identical_references_use_full_value_ties() {
     for marker in ["$titan_entity_set", "$titan_entity_map"] {
-        // Both entries start with the same matched reference, so the later raw
-        // reference must be visited too. Sorting by only the first reference or
-        // by the float would incorrectly reverse the entries after the change.
+        // Both keys start with the same matched reference, so the later raw
+        // reference in each key must be visited too. Sorting by only the first
+        // reference or by the float would incorrectly reverse the entries.
         let before = snapshot(
             id(1),
             id(2),
             json!({marker: [
-                [[2.0, reference(id(1))], reference(id(999))],
-                [[10.0, reference(id(1))], reference(id(998))],
+                [[2.0, reference(id(1)), reference(id(999))], 100],
+                [[10.0, reference(id(1)), reference(id(998))], 200],
             ]}),
         );
         let after = snapshot(
             id(2),
             id(1),
             json!({marker: [
-                [[3.0, reference(id(2))], reference(id(999))],
-                [[9.0, reference(id(2))], reference(id(998))],
+                [[3.0, reference(id(2)), reference(id(999))], 100],
+                [[9.0, reference(id(2)), reference(id(998))], 200],
             ]}),
         );
         let config = DiffConfig {

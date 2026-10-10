@@ -206,15 +206,17 @@ numbers and ID-like strings are never treated as references.
 
 Reflected sets containing references use `{"$titan_entity_set":[...]}` and maps
 with reference-containing keys use `{"$titan_entity_map":[[key,value],...]}`.
-After normalization, these sort first by the canonical JSON of their contained
+After normalization, sets sort first by the canonical JSON of their contained
 `$titan_entity_key` and raw `$titan_entity` references, in traversal order (object
-keys canonically sorted, array elements in order). The full canonical element or
-entry value is only a tie-breaker. This keeps tolerated float changes from
-reordering elements with distinct reference sequences; lists/arrays are **not**
-re-sorted. Elements with identical references that differ only in tolerated floats
-may still pair by full value and report a difference: this is not tolerance-aware
-set matching. Ordinary maps and reference-free sets keep their original capture
-representation.
+keys canonically sorted, array elements in order), then by the full canonical
+element value. Maps sort by references **in the key only**, then by the full
+canonical key. The full `[key,value]` entry is only a final tie-breaker for keys
+that serialize identically: references in values cannot decide pairing between
+distinct keys. This keeps tolerated float changes from reordering elements or keys
+with distinct reference sequences; lists/arrays are **not** re-sorted. Set elements
+or map keys with identical references that differ only in tolerated floats may
+still pair by full value: this is not tolerance-aware collection matching. Ordinary
+maps and reference-free sets keep their original capture representation.
 Custom serializers must not emit these reserved `$titan_entity*` object shapes as
 ordinary data.
 
