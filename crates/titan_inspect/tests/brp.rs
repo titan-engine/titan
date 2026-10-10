@@ -514,6 +514,34 @@ fn long_ordering_chain_is_paged_before_expanding_system_details() {
 }
 
 #[test]
+fn large_ambiguity_list_materializes_only_the_requested_prefix() {
+    use bevy_ecs::system::IntoSystem;
+    let mut app = app();
+    let mut schedule = Schedule::new(Demo);
+    for i in 0..300 {
+        schedule.add_systems(IntoSystem::into_system(a).with_name(format!("writer_{i:03}")));
+    }
+    observe_schedule(&mut schedule);
+    schedule.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(schedule);
+    let response = call(
+        &mut app,
+        "titan.ambiguities",
+        Some(json!({"schedule":"Demo","limit":1})),
+    )
+    .unwrap();
+    let pairs = &response["ambiguities"];
+    assert_eq!(pairs["total"], 300 * 299 / 2);
+    assert_eq!(pairs["items"].as_array().unwrap().len(), 1);
+    assert_eq!(pairs["truncated"], true);
+    assert_eq!(
+        pairs["items"][0]["systems"],
+        json!(["writer_000", "writer_001"])
+    );
+    assert!(contains(&pairs["items"][0]["conflicts"], "::Counter"));
+}
+
+#[test]
 fn ambiguity_pairs_are_sorted_by_system_names() {
     #[derive(Resource)]
     struct A;

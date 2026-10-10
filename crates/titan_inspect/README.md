@@ -28,7 +28,9 @@ Unknown fields and invalid values return JSON-RPC `INVALID_PARAMS` (`-32602`).
 Lists use `{ "items": [...], "total": N, "truncated": bool }`. The same limit
 applies independently to the outer list and each nested list. System details are
 computed only for the selected outer page, using a compact declaration graph
-rather than materializing its transitive closure. Thus a system with
+rather than materializing its transitive closure. Ambiguity paging selects a
+bounded prefix of borrowed pair-name keys before building conflict details,
+without allocating a JSON object for every conflicting pair. Thus a system with
 many sets, conditions, edges, or conflicts cannot silently overflow the limit.
 `total` counts the full list before truncation. No pagination is provided.
 

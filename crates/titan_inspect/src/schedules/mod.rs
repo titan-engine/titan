@@ -2,7 +2,7 @@
 
 mod capture;
 
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
 use bevy_ecs::{
     prelude::*,
@@ -298,10 +298,26 @@ pub(crate) fn ambiguities(In(input): In<Option<Value>>, world: &mut World) -> Br
         .expect("checked initialization")
         .map(|(key, system)| (key, system.name().to_string()))
         .collect();
-    let mut items = Vec::new();
-    for (a, b, conflicts) in &schedule.graph().conflicting_systems().0 {
-        let mut pair = [system_names[a].clone(), system_names[b].clone()];
+    let conflicts = &schedule.graph().conflicting_systems().0;
+    let total = conflicts.len();
+    // Keep only the lexical prefix using borrowed pair names. Bevy already owns
+    // the full pair list; do not create O(N²) nested JSON objects just to page it.
+    let mut selected = BinaryHeap::new();
+    for (index, (a, b, _)) in conflicts.iter().enumerate() {
+        let mut pair = [system_names[a].as_str(), system_names[b].as_str()];
         pair.sort();
+        let candidate = (pair[0], pair[1], index);
+        if selected.len() < params.limit {
+            selected.push(candidate);
+        } else if selected.peek().is_some_and(|largest| &candidate < largest) {
+            selected.pop();
+            selected.push(candidate);
+        }
+    }
+    let mut items = Vec::new();
+    for (a, b, index) in selected.into_sorted_vec() {
+        let conflicts = &conflicts[index].2;
+        let pair = [a, b];
         let types = conflicts
             .iter()
             .filter_map(|id| world.components().get_info(*id))
@@ -309,12 +325,7 @@ pub(crate) fn ambiguities(In(input): In<Option<Value>>, world: &mut World) -> Br
             .collect();
         items.push(json!({"systems": pair, "conflicts": names(types, params.limit), "world_access": conflicts.is_empty()}));
     }
-    items.sort_by_key(Value::to_string);
-    items.sort_by(|a, b| {
-        (a["systems"][0].as_str(), a["systems"][1].as_str())
-            .cmp(&(b["systems"][0].as_str(), b["systems"][1].as_str()))
-    });
     Ok(
-        json!({"schedule": params.schedule, "status": state, "ambiguities": page(items, params.limit)}),
+        json!({"schedule": params.schedule, "status": state, "ambiguities": crate::protocol::page_with_total(items, total)}),
     )
 }
