@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 function full(reason) {
-  return { packages: '*', reason };
+  return { packages: '*', upstream: true, reason };
 }
 
 function select({ event, base, head, cwd = process.cwd(), run = execFileSync }) {
@@ -20,7 +20,7 @@ function select({ event, base, head, cwd = process.cwd(), run = execFileSync }) 
     // No rename detection: both the old and new location must be classified.
     const changed = command('git', ['diff', '--name-only', '--no-renames', '-z', `${base}...${head}`]).split('\0').filter(Boolean);
     if (changed.some(file => path.posix.basename(file) === 'Cargo.toml')) return full('Package/dependency/feature manifest changed');
-    if (!classification.includes('titan=true')) return { packages: 'none', reason: 'No applicable Titan changes' };
+    if (!classification.includes('titan=true')) return { packages: 'none', upstream: false, reason: 'No applicable Titan changes' };
 
     const metadata = JSON.parse(command('cargo', ['metadata', '--no-deps', '--format-version', '1']));
     const members = new Set(metadata.workspace_members);
@@ -68,7 +68,9 @@ function select({ event, base, head, cwd = process.cwd(), run = execFileSync }) 
     for (const name of affected) {
       for (const consumer of consumers.get(name)) affected.add(consumer);
     }
+    if ([...affected].some(name => !name.startsWith('titan_'))) return full('Affected non-Titan workspace consumer requires upstream coverage');
     return {
+      upstream: false,
       packages: titan.filter(pkg => affected.has(pkg.name)).map(pkg => pkg.name).sort().join(' '),
       reason: 'Changed packages and transitive workspace consumers (all declared dependency/feature/target edges)',
     };
@@ -79,7 +81,7 @@ function select({ event, base, head, cwd = process.cwd(), run = execFileSync }) 
 
 if (require.main === module) {
   const result = select({ event: process.env.EVENT_NAME, base: process.env.BASE_SHA, head: process.env.HEAD_SHA });
-  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `packages=${result.packages}\n`);
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `packages=${result.packages}\nupstream=${result.upstream}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
     `## Titan test selection\n\nPackages: \`${result.packages}\` (\`*\` = all Titan workspace packages).\n\nReason: ${result.reason}\n`);
   console.log(JSON.stringify(result));

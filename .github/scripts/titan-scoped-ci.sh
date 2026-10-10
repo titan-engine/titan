@@ -10,7 +10,8 @@ if [[ ( $mode == test || $mode == extra ) && $selection == none ]]; then
 fi
 # Native Windows jq writes CRLF even when invoked from Git Bash. Normalize the
 # text boundary before read builds package arguments; JSON itself accepts CRLF.
-crates=$(cargo metadata --no-deps --format-version 1 \
+metadata=$(cargo metadata --no-deps --format-version 1)
+crates=$(printf '%s\n' "$metadata" \
   | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' \
   | tr -d '\r' | sort)
 if [[ -z "$crates" ]]; then
@@ -37,6 +38,26 @@ summary() {
   echo "$*"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '%s\n' "$*" >> "$GITHUB_STEP_SUMMARY"; fi
 }
+default_features=()
+bench_features=()
+if [[ $mode == test ]]; then
+  script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+  # Word splitting is intentional: validated package names have no whitespace.
+  feature_plan=$(printf '%s\n' "$metadata" | node "$script_dir/titan-test-features.cjs" $crates)
+  if [[ $(jq -r '.fallback' <<< "$feature_plan" | tr -d '\r') == true ]]; then
+    summary "$(jq -r '.reason' <<< "$feature_plan" | tr -d '\r')"
+    crates=$(printf '%s\n' "$metadata" | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' | tr -d '\r' | sort)
+    feature_plan=$(printf '%s\n' "$metadata" | node "$script_dir/titan-test-features.cjs" $crates)
+    if [[ $(jq -r '.fallback' <<< "$feature_plan" | tr -d '\r') == true ]]; then
+      echo '::error::Cannot preserve required workspace test features' >&2
+      exit 1
+    fi
+  fi
+  default_list=$(jq -r '.default | join(",")' <<< "$feature_plan" | tr -d '\r')
+  bench_list=$(jq -r '.benches | join(",")' <<< "$feature_plan" | tr -d '\r')
+  if [[ -n $default_list ]]; then default_features=(--features "$default_list"); fi
+  if [[ -n $bench_list ]]; then bench_features=(--features "$bench_list"); fi
+fi
 summary "## Titan $mode recipes"
 summary "Packages: $(echo "$crates" | tr '\n' ' ')"
 packages=()
@@ -58,14 +79,14 @@ case "$mode" in
       "${features[@]}" --no-deps --document-private-items --keep-going
     ;;
   test)
-    summary 'Default features: --lib --bins --tests; bevy_ecs/track_location,bevy_remote/bevy_render'
-    cargo test "${packages[@]}" --lib --bins --tests --features bevy_ecs/track_location,bevy_remote/bevy_render
+    summary "Default features: --lib --bins --tests ${default_features[*]}"
+    cargo test "${packages[@]}" --lib --bins --tests "${default_features[@]}"
     if [[ ${RUNNER_OS:-$(uname -s)} == Linux ]]; then
       # Match tools/ci's Linux benchmark smoke run. The full workspace unifies
       # render implicitly; a separate scoped invocation needs it explicitly.
       # Windows/macOS keep the full driver's --skip-benches behavior.
-      summary 'Linux benchmark smoke: --benches; bevy_remote/bevy_render'
-      cargo test "${packages[@]}" --benches "${features[@]}"
+      summary "Linux benchmark smoke: --benches ${bench_features[*]}"
+      cargo test "${packages[@]}" --benches "${bench_features[@]}"
     fi
     ;;
   extra)

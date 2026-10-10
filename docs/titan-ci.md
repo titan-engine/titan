@@ -9,9 +9,10 @@ result, even when no Titan tests apply. There is no workflow-level path filter.
 ## Conservative policy
 
 - A known Titan package change selects that package plus transitive downstream
-  workspace consumers. Only Titan consumers are tested, but traversal includes
-  non-Titan workspace intermediaries. Packages in `demos/` are identified from
-  Cargo metadata, not inferred from their directory names.
+  workspace consumers. If the closure contains a non-Titan consumer, it requests
+  upstream/full workspace coverage instead of silently omitting that consumer.
+  Packages in `demos/` are identified from Cargo metadata, not inferred from their
+  directory names.
 - The graph uses `cargo metadata --no-deps` and **all declared workspace path
   dependencies**: normal, build, dev, optional, renamed, and target-specific.
   It deliberately over-approximates feature activation rather than relying on
@@ -34,8 +35,15 @@ result, even when no Titan tests apply. There is no workflow-level path filter.
 ## Recipes and auditing
 
 Default-feature tests retain `--lib --bins --tests` (including integration tests)
-with `bevy_ecs/track_location,bevy_remote/bevy_render`, plus Linux `--benches`
-smoke coverage with render unification. Full upstream runs retain the workspace
+with ECS tracking and applicable remote render unification, plus Linux
+`--benches` smoke coverage with applicable render unification. Feature arguments
+are routed through direct dependencies accepted by Cargo: ECS-only leaves do not
+request unrelated remote features, and demos use `bevy/track_location`. A
+metadata-only feature planner follows default/forwarded features (including
+optional and weak forwarding), conservatively unions target predicates, and
+falls back to all Titan packages if an active dependency has no valid CLI route.
+Current Titan leaves and demos all have valid selective routes. Full upstream
+runs retain the workspace
 CI default-feature tests instead. Extra tests run `--all-features` for each
 selected package, adding `bevy_remote/bevy_render` for `titan_remote` and
 `titan_mcp`. `titan_doom` and `titan_puzzle` also retain headless
@@ -49,10 +57,11 @@ recorded by the CI workspace test job.
 
 The classifier tests use disposable Git repositories and synthetic Cargo
 metadata; command tests use stubbed Cargo plus real jq. They exercise LF/CRLF
-boundaries without compiling Rust:
+boundaries without compiling Rust. Feature-routing regressions also run real
+`cargo tree --offline` in tiny registry-free workspaces (no builds):
 
 ```sh
-node --test .github/scripts/titan-packages-changed.test.cjs
+node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs
 bash .github/scripts/test-ci-paths-changed.sh
 bash .github/scripts/test-titan-scoped-ci.sh
 ```

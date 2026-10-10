@@ -47,13 +47,23 @@ function fixture(t) {
   return { cwd, git, write, metadata, commit, selection, base, run };
 }
 
-test('leaf selects only itself; upstream union includes normal/build/dev/optional/renamed/target edges and transitive non-Titan bridges', t => {
+test('leaf selects only itself; graph includes normal/build/dev/optional/renamed/target edges', t => {
   const f = fixture(t);
   f.write('crates/titan_chain/tests/integration.rs'); f.commit();
   assert.equal(f.selection().packages, 'titan_chain');
+  f.metadata.packages.find(pkg => pkg.name === 'bevy_bridge').dependencies = [];
   f.git('reset', '--hard', f.base);
   f.write('crates/titan_leaf/src/lib.rs'); f.commit();
-  assert.equal(f.selection().packages, 'titan_bridge_consumer titan_build titan_chain titan_dev titan_leaf titan_normal titan_optional');
+  assert.equal(f.selection().packages, 'titan_build titan_chain titan_dev titan_leaf titan_normal titan_optional');
+});
+
+test('non-Titan downstream consumers request upstream/full coverage', t => {
+  const f = fixture(t);
+  f.write('crates/titan_leaf/src/lib.rs'); f.commit();
+  const result = f.selection();
+  assert.equal(result.packages, '*');
+  assert.equal(result.upstream, true);
+  assert.match(result.reason, /non-Titan workspace consumer/);
 });
 
 test('multiple changed packages and demo ownership', t => {

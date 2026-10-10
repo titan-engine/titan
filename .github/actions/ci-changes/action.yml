@@ -3,7 +3,7 @@ description: Conservative PR and merge-group job selection; all other events run
 outputs:
   upstream:
     description: Run Bevy-wide coverage
-    value: ${{ steps.filter.outputs.upstream }}
+    value: ${{ steps.filter.outputs.upstream == 'true' || steps.titan-filter.outputs.upstream != 'false' }}
   titan:
     description: Run Titan coverage
     value: ${{ steps.filter.outputs.titan }}
@@ -25,7 +25,7 @@ runs:
         bash .github/scripts/test-ci-paths-changed.sh
         bash .github/scripts/test-miri-paths-changed.sh
         bash .github/scripts/test-titan-scoped-ci.sh
-        node --test .github/scripts/titan-packages-changed.test.cjs
+        node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs
     - name: Select jobs
       id: filter
       shell: bash

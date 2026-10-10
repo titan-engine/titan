@@ -17,7 +17,11 @@ if [[ $1 == metadata ]]; then
   # Node is native on Windows, like cargo/jq; MSYS shell producers can translate
   # CRLF in their pipes, defeating a fixture that only uses Bash printf.
   node -e '
-    const metadata = {packages: [{name: "titan_test"}, {name: "bevy_ecs"}, {name: "titan_doom"}]};
+    const dependencies = ["bevy_ecs", "bevy_remote"].map(name => ({name, kind: null, optional: false, uses_default_features: true}));
+    const metadata = {packages: [{name: "titan_test", dependencies}, {name: "bevy_ecs", dependencies: []}, {name: "bevy_remote", dependencies: []}, {name: "titan_doom", dependencies}]};
+    if (process.env.EXTRA_METADATA === "1") {
+      metadata.packages.push(...["titan_remote", "titan_mcp", "titan_puzzle"].map(name => ({name, dependencies})));
+    }
     process.stdout.write(JSON.stringify(metadata) + (process.env.TOOL_ENDING === "CRLF" ? "\r\n" : "\n"));
   '
 
@@ -51,7 +55,10 @@ assert_modes() {
   assert_commands doc "|test $packages --doc --features bevy_remote/bevy_render"$'\n'"-D warnings|doc $packages --all-features --features bevy_remote/bevy_render --no-deps --document-private-items --keep-going"
   RUNNER_OS=Linux assert_commands test '|test -p titan_test --lib --bins --tests --features bevy_ecs/track_location,bevy_remote/bevy_render'$'\n''|test -p titan_test --benches --features bevy_remote/bevy_render' titan_test
   assert_commands extra '|test -p titan_test --all-features' titan_test
+  assert_commands extra '|test -p titan_doom --no-default-features'$'\n''|clippy -p titan_doom --no-default-features --all-targets -- -D warnings'$'\n''|test -p titan_doom --all-features'$'\n''|test -p titan_test --all-features' '*'
   assert_commands extra '|test -p titan_doom --no-default-features'$'\n''|clippy -p titan_doom --no-default-features --all-targets -- -D warnings'$'\n''|test -p titan_doom --all-features' titan_doom
+  EXTRA_METADATA=1 assert_commands extra '|test -p titan_mcp --all-features --features bevy_remote/bevy_render'$'\n''|test -p titan_remote --all-features --features bevy_remote/bevy_render' 'titan_remote titan_mcp'
+  EXTRA_METADATA=1 assert_commands extra '|test -p titan_puzzle --no-default-features'$'\n''|clippy -p titan_puzzle --no-default-features --all-targets -- -D warnings'$'\n''|test -p titan_puzzle --all-features' titan_puzzle
   assert_commands test '' none
   assert_commands extra '' none
   # Stale/invalid outputs must run all packages, not silently drop tests.
