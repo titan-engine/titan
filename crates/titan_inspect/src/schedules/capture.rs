@@ -93,14 +93,45 @@ impl ScheduleBuildPass for Capture {
                 .collect(),
         };
         let mut captured = world.get_resource_or_init::<Captured>();
+        // Transient schedules can use a new label on every build. Prune the
+        // entire cache, not just this label, so their dead metadata cannot grow
+        // indefinitely. Dead metadata is released on subsequent builds.
+        captured.0.retain(|_, candidates| {
+            candidates.retain(|candidate| candidate.lifetime.upgrade().is_some());
+            !candidates.is_empty()
+        });
         let candidates = captured.0.entry(self.label).or_default();
         // A detached, still-live schedule may rebuild under the same label.
         // Replace only this pass's candidate and keep other live instances.
-        candidates.retain(|candidate| {
-            candidate.lifetime.upgrade().is_some()
-                && !candidate.lifetime.ptr_eq(&conditions.lifetime)
-        });
+        candidates.retain(|candidate| !candidate.lifetime.ptr_eq(&conditions.lifetime));
         candidates.push(conditions);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
+    struct Transient(u32);
+
+    #[test]
+    fn dead_capture_is_pruned_across_distinct_labels() {
+        fn noop() {}
+        fn condition() -> bool {
+            true
+        }
+        let mut world = World::new();
+        for i in 0..32 {
+            let mut schedule = Schedule::new(Transient(i));
+            schedule.add_systems(noop.run_if(condition));
+            crate::schedules::observe_schedule(&mut schedule);
+            schedule.initialize(&mut world).unwrap();
+            let captured = world.resource::<Captured>();
+            assert_eq!(captured.0.len(), 1);
+            assert_eq!(captured.0[&Transient(i).intern()].len(), 1);
+            drop(schedule);
+        }
     }
 }
