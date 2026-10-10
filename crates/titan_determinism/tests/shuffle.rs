@@ -1,6 +1,6 @@
 //! Hidden single-threaded order dependencies, reproducible without timing races.
 
-use bevy_app::{First, FixedUpdate, Startup, Update};
+use bevy_app::{First, FixedUpdate, Main, Startup, Update};
 use bevy_ecs::{
     prelude::*,
     schedule::{ScheduleLabel, Schedules},
@@ -507,6 +507,36 @@ fn prebuilt_factory_schedules_are_rejected_even_after_sim_resets_the_executor() 
             message.contains("cannot configure already-initialized schedule Late"),
             "{message}"
         );
+    }
+}
+
+#[test]
+fn maintenance_does_not_introduce_ambiguity_errors_with_other_main_predrivers() {
+    fn predriver(mut decision: ResMut<Decision>) {
+        decision.0 += 1;
+    }
+    let factory = || {
+        Sim::new(|app| {
+            app.register_type::<Decision>()
+                .init_resource::<Decision>()
+                .add_systems(Main, predriver.before(Main::run_main));
+            let mut schedules = app.world_mut().resource_mut::<Schedules>();
+            let main = schedules.get_mut(Main).unwrap();
+            let mut settings = main.get_build_settings();
+            settings.ambiguity_detection = bevy_ecs::schedule::LogLevel::Error;
+            main.set_build_settings(settings);
+        })
+    };
+    DeterminismCheck::new(factory)
+        .ticks(3)
+        .run()
+        .assert_deterministic();
+    for seed in 0..4 {
+        DeterminismCheck::new(factory)
+            .ticks(3)
+            .variant(Variant::ShuffleAmbiguous { seed })
+            .run()
+            .assert_deterministic();
     }
 }
 

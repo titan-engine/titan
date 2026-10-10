@@ -162,7 +162,9 @@ All existing main-world schedules are configured before the first candidate
 update, including `FixedUpdate` and startup schedules. A maintenance system in
 Bevy's `Main` driver, ordered before `Main::run_main`, configures new or replaced
 **not-yet-initialized** schedules at subsequent update boundaries without
-resetting existing executors.
+resetting existing executors. Only this harness-owned maintenance system is
+exempt from ambiguity detection, so other pre-driver systems do not acquire
+synthetic conflicts or order hints from the instrumentation.
 Normal lazy initialization is preserved: startup-dependent `Local::from_world`
 values initialize at their normal execution time, and dormant schedules do not
 initialize. Unchanged schedules are not rebuilt on every tick, preserving pending

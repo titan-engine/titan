@@ -31,7 +31,14 @@ pub(crate) fn install(world: &mut World, seed: u64) {
         .resource_mut::<Schedules>()
         .get_mut(Main)
         .expect("ShuffleAmbiguous requires Bevy's Main schedule driver")
-        .add_systems((move |world: &mut World| configure(world, seed)).before(Main::run_main));
+        .add_systems(
+            (move |world: &mut World| configure(world, seed))
+                .before(Main::run_main)
+                // This instrumentation is not a gameplay ambiguity. Other Main
+                // pre-drivers may also be ordered only before run_main; do not
+                // manufacture warnings/errors or causal hints for this peer.
+                .ambiguous_with_all(),
+        );
 }
 
 /// Validate without changing the world, including immediately after each tick.
