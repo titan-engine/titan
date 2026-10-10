@@ -72,6 +72,8 @@ struct Capture {
 fn main() -> Result<AppExit, Box<dyn Error>> {
     let mut level = Level::demo();
     let mut capture = Capture::default();
+    #[cfg(feature = "remote")]
+    let mut brp_port = 15702;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -82,9 +84,16 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
             "--capture" => {
                 capture.path = Some(args.next().ok_or("--capture requires a PNG path")?.into());
             }
+            #[cfg(feature = "remote")]
+            "--brp-port" => {
+                brp_port = args.next().ok_or("--brp-port requires a TCP port")?.parse()?;
+                if brp_port == 0 {
+                    return Err("--brp-port must be in 1..=65535".into());
+                }
+            }
             _ => {
                 return Err(format!(
-                    "unknown argument {arg:?}; use --level FILE or --capture FILE.png"
+                    "unknown argument {arg:?}; use --level FILE or --capture FILE.png (with the remote feature: --brp-port PORT)"
                 )
                 .into())
             }
@@ -94,8 +103,8 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
     // App::run transfers the world to the runner. Keep an independent completion
     // signal so every exit path, including an early window close, is checked.
     let capture_saved = capture.path.as_ref().map(|_| Arc::clone(&capture.saved));
-    let exit = App::new()
-        .insert_resource(level)
+    let mut app = App::new();
+    app.insert_resource(level)
         .insert_resource(capture)
         .init_resource::<HudFeedback>()
         .insert_resource(Time::<Fixed>::from_hz(FIXED_HZ))
@@ -113,13 +122,17 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
         .add_systems(FixedPostUpdate, remember_outcome)
         .add_systems(
             RunFixedMainLoop,
-            human_actions.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+            human_actions
+                .run_if(human_input_enabled)
+                .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
         )
         .add_systems(
             Update,
             (present_player, present_objects, present_hud, capture_frame),
-        )
-        .run();
+        );
+    #[cfg(feature = "remote")]
+    app.add_plugins(titan_doom::remote::DoomRemotePlugin { port: brp_port });
+    let exit = app.run();
     Ok(checked_exit(
         exit,
         capture_saved.map(|saved| saved.load(Ordering::Relaxed)),
@@ -134,6 +147,12 @@ fn checked_exit(exit: AppExit, capture_saved: Option<bool>) -> AppExit {
     } else {
         exit
     }
+}
+
+// Remote builds give the agent exclusive ownership of GameplayActions. In
+// particular, unfocused windows and idle keyboards must not erase BRP writes.
+fn human_input_enabled() -> bool {
+    !cfg!(feature = "remote")
 }
 
 // Input is just an adapter. Pending look and one-shots survive frames with no
@@ -406,6 +425,11 @@ fn object_texture(kind: ObjectKind) -> Image {
 
 /// Fixed presentation objects, expressed as a composable Bevy Scene Notation list.
 fn presentation_scene() -> impl SceneList {
+    let controls = if cfg!(feature = "remote") {
+        "BRP agent control | Starts paused\nDrive GameplayActions and titan.step | F12: screenshot"
+    } else {
+        "WASD: walk | Arrows/mouse: aim | Space/held click: fire\nE: open door | R: restart | Click: capture mouse | Esc: release | F12: screenshot"
+    };
     bsn_list! {
         #WorldLight
         DirectionalLight { illuminance: 3500.0 }
@@ -417,7 +441,7 @@ fn presentation_scene() -> impl SceneList {
         Transform
         --
         #Controls
-        Text("WASD: walk | Arrows/mouse: aim | Space/held click: fire\nE: open door | R: restart | Click: capture mouse | Esc: release | F12: screenshot")
+        Text(controls)
         TextFont { font_size: FontSize::Px(16.0) }
         Node {
             position_type: PositionType::Absolute,
@@ -612,15 +636,27 @@ fn outcome_message(outcome: &GameplayOutcome) -> (u8, &'static str) {
         GameplayOutcome::EmptyAmmo => (1, "Out of ammo! Find a yellow ammo box."),
         GameplayOutcome::EnemyKilled => (2, "Sentry down."),
         GameplayOutcome::PlayerDamaged => (1, "Taking damage! Move away from the sentry."),
+        GameplayOutcome::PlayerDied if cfg!(feature = "remote") => (
+            3,
+            "You died. Set GameplayActions.restart = true, then step to restart.",
+        ),
         GameplayOutcome::PlayerDied => (3, "You died. Press R to restart."),
         GameplayOutcome::HealthCollected => (2, "Health collected."),
         GameplayOutcome::AmmoCollected => (2, "Ammo collected."),
+        GameplayOutcome::KeyCollected if cfg!(feature = "remote") => (
+            2,
+            "Red key collected. Approach the red door, set GameplayActions.interact = true, then step.",
+        ),
         GameplayOutcome::KeyCollected => {
             (2, "Red key collected. Approach the red door and press E.")
         }
         GameplayOutcome::MissingKey => (2, "Door locked: find the red key first."),
         GameplayOutcome::DoorOpened => (2, "Red door opened. Reach the green exit."),
         GameplayOutcome::NoDoor => (1, "No door in reach. Move closer and face the red door."),
+        GameplayOutcome::ExitReached if cfg!(feature = "remote") => (
+            3,
+            "Exit reached! Set GameplayActions.restart = true, then step to play again.",
+        ),
         GameplayOutcome::ExitReached => (3, "Exit reached! Press R to play again."),
         GameplayOutcome::Restarted => (3, "Restarted: health, ammo, pickups and enemies reset."),
     }
@@ -671,6 +707,9 @@ fn present_hud(
     status.remaining = (status.remaining - time.delta_secs()).max(0.0);
     feedback.0 = if status.remaining > 0.0 {
         status.message.clone()
+    } else if combat.red_key && cfg!(feature = "remote") {
+        "Open the red door: set GameplayActions.interact = true, then step. Reach the green exit."
+            .into()
     } else if combat.red_key {
         "Open the red door with E, then walk into the green exit.".into()
     } else {
@@ -678,6 +717,12 @@ fn present_hud(
     };
     phase.0 = match combat.phase {
         GamePhase::Playing => String::new(),
+        GamePhase::Dead if cfg!(feature = "remote") => {
+            "YOU DIED\nSet GameplayActions.restart = true,\nthen step to restart".into()
+        }
+        GamePhase::Won if cfg!(feature = "remote") => {
+            "EXIT REACHED\nSet GameplayActions.restart = true,\nthen step to play again".into()
+        }
         GamePhase::Dead => "YOU DIED\nPress R to restart".into(),
         GamePhase::Won => "EXIT REACHED\nPress R to play again".into(),
     };
@@ -780,6 +825,67 @@ mod tests {
             world.get::<TextFont>(crosshair).unwrap().font_size,
             FontSize::Px(22.0)
         );
+    }
+
+    #[test]
+    fn outcome_prompts_match_the_enabled_control_adapter() {
+        for (outcome, action, key) in [
+            (
+                GameplayOutcome::PlayerDied,
+                "GameplayActions.restart",
+                "Press R",
+            ),
+            (
+                GameplayOutcome::ExitReached,
+                "GameplayActions.restart",
+                "Press R",
+            ),
+            (
+                GameplayOutcome::KeyCollected,
+                "GameplayActions.interact",
+                "press E",
+            ),
+        ] {
+            let message = outcome_message(&outcome).1;
+            if cfg!(feature = "remote") {
+                assert!(message.contains(action) && message.contains("step"));
+                assert!(!message.contains(key));
+            } else {
+                assert!(message.contains(key));
+                assert!(!message.contains("GameplayActions"));
+            }
+        }
+    }
+
+    #[test]
+    fn phase_and_key_hud_prompts_match_the_enabled_control_adapter() {
+        let mut app = App::new();
+        app.insert_resource(Level::demo())
+            .add_plugins(GameplayPlugin)
+            .init_resource::<Time>()
+            .init_resource::<HudFeedback>()
+            .add_systems(Update, present_hud);
+        app.world_mut().spawn((Text::default(), CombatHud));
+        let feedback = app.world_mut().spawn((Text::default(), FeedbackHud)).id();
+        let phase = app.world_mut().spawn((Text::default(), PhaseHud)).id();
+        app.world_mut()
+            .spawn((BackgroundColor::default(), WeaponFlash));
+        app.world_mut().resource_mut::<CombatState>().red_key = true;
+        for game_phase in [GamePhase::Dead, GamePhase::Won] {
+            app.world_mut().resource_mut::<CombatState>().phase = game_phase;
+            app.update();
+            let message = &app.world().get::<Text>(phase).unwrap().0;
+            let feedback = &app.world().get::<Text>(feedback).unwrap().0;
+            if cfg!(feature = "remote") {
+                assert!(message.contains("GameplayActions.restart") && message.contains("step"));
+                assert!(!message.contains("Press R"));
+                assert!(feedback.contains("GameplayActions.interact") && feedback.contains("step"));
+                assert!(!feedback.contains("with E"));
+            } else {
+                assert!(message.contains("Press R"));
+                assert!(feedback.contains("with E"));
+            }
+        }
     }
 
     #[test]
@@ -947,6 +1053,26 @@ mod tests {
             assert_eq!(*visibility, Visibility::Inherited);
             assert_eq!(transform.scale.y, 1.0);
         }
+    }
+
+    #[test]
+    #[cfg(feature = "remote")]
+    fn remote_actions_are_not_overwritten_by_the_human_adapter() {
+        let mut app = App::new();
+        app.insert_resource(GameplayActions {
+            movement: Vec2::Y,
+            look_delta: Vec2::new(0.1, 0.2),
+            fire: true,
+            interact: true,
+            restart: true,
+        })
+        .add_systems(Update, human_actions.run_if(human_input_enabled));
+        // No keyboard, pointer, or focused window is needed in agent mode.
+        app.update();
+        let actions = app.world().resource::<GameplayActions>();
+        assert_eq!(actions.movement, Vec2::Y);
+        assert_eq!(actions.look_delta, Vec2::new(0.1, 0.2));
+        assert!(actions.fire && actions.interact && actions.restart);
     }
 
     #[test]

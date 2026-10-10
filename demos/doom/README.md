@@ -238,14 +238,138 @@ scenarios in the same build/platform, not universal cross-platform floating-poin
 determinism. Advanced navigation, additional weapons/enemy types, multiplayer,
 and jumping/stairs are out of scope.
 
+## Agent control over BRP (opt-in)
+
+The default build serves **no BRP**. Enable `remote` explicitly:
+
+```sh
+cargo run -p titan_doom --features remote -- --brp-port 15702
+# For MCP lifecycle management, compile first rather than compiling at launch:
+cargo build -p titan_doom --features remote
+cargo build -p titan_mcp
+```
+
+The single gameplay-world listener is always **127.0.0.1**, never a wildcard or
+network address. The renderer is not exposed over BRP, and no second listener
+is opened at upstream BRP's default render port 15703.
+`--brp-port` accepts 1–65535 and defaults to 15702; choose an unused port and
+match the MCP URL. BRP has no authentication and allows powerful world/file
+operations. Use only with trusted local agents, do not forward/expose the port,
+and stop the game when done. `remote` installs Bevy's `RemotePlugin` and
+`RemoteHttpPlugin`, plus `TitanRemotePlugin`. `render + remote` enables Titan's
+screenshot token/status methods; `--no-default-features --features remote`
+provides the same gameplay/time-control plugins without rendering.
+
+Remote builds start **paused** and give agents exclusive control of
+`GameplayActions`: the keyboard/mouse gameplay adapter is disabled, including
+its focus-loss reset. HUD feedback and death/win prompts name the corresponding
+`GameplayActions` fields and a step instead of the disabled E/R keys.
+F12/window close still work. Build without `remote` to play with human controls.
+No gameplay rules or action fields change.
+
+### MCP setup and walkthrough
+
+Put this in the MCP client's `.mcp.json`, replacing every absolute path (and
+adding `.exe` on Windows). Adjust executable paths for `CARGO_TARGET_DIR`:
+
+```json
+{
+  "mcpServers": {
+    "titan": {
+      "command": "/absolute/path/to/titan/target/debug/titan_mcp",
+      "args": [
+        "--url", "http://127.0.0.1:15702",
+        "--game-dir", "/absolute/path/to/titan",
+        "--game-cmd", "[\"/absolute/path/to/titan/target/debug/titan_doom\",\"--brp-port\",\"15702\"]",
+        "--build-cmd", "[\"cargo\",\"build\",\"-p\",\"titan_doom\",\"--features\",\"remote\"]"
+      ]
+    }
+  }
+}
+```
+
+Use these MCP tools in order (arguments shown as JSON):
+
+1. `launch_game {}` then `game_status {}`: the process is owned/running and
+   virtual time is paused.
+2. `get_resource {"resource":"titan_doom::PlayerState"}` and
+   `get_resource {"resource":"titan_doom::combat::CombatState"}`. The latter
+   includes stable object IDs and latest-tick events. This is **debug-mode**
+   inspection, not screenshot-only/player-visible playtesting.
+3. `set_resource {"resource":"titan_doom::GameplayActions","value":
+   {"movement":[0,1],"look_delta":[0,0],"fire":false,"interact":false,"restart":false}}`.
+   Write actions, **not** `PlayerState`, `CombatState`, raw input, or transforms.
+4. `step {"frames":6}` then query `PlayerState` again: six playing ticks and
+   0.3 units of forward movement in unobstructed space. `step` waits until all
+   pending frames finish and leaves virtual time paused.
+5. Clear held actions with `set_resource` (same object, `movement:[0,0]`), then
+   `screenshot {}`. Keep the native window visible; capture requires rendering.
+6. `stop_game {}`. `restart_game {}` starts a fresh paused game; use
+   `restart_game {"rebuild":true}` after changing demo code.
+
+A recorded macOS/Metal MCP smoke session launched on port 15703, queried state,
+set forward movement plus held fire, stepped six frames, cleared held actions,
+captured the primary window, and stopped the owned process. Player tick advanced
+0 → 6, Z moved 9.5 → 9.2, ammo changed 12 → 11, and the corridor sentry's health
+changed 50 → 25. These captures were returned by MCP's `screenshot` tool, then
+scaled to 960×600 for documentation; this is a control/connectivity smoke test,
+not a claim of autonomous level completion (#30).
+
+<details>
+<summary>MCP screenshots before and after the six-frame action</summary>
+
+![Paused spawn through MCP](docs/remote-before.png)
+
+![After forward movement and one shot through GameplayActions](docs/remote-after.png)
+
+A separate session stepped 660 idle frames to let the sentry kill the player,
+then followed the displayed action/step prompt: `GameplayActions.restart = true`
+and one step restored health 100, phase `Playing`, and player tick zero.
+
+![Remote death HUD with an actionable restart prompt](docs/remote-death.png)
+
+</details>
+
+To restart gameplay without relaunching, set `GameplayActions.restart` to true
+and step one tick. One-shot aim/interact/restart are consumed by a fixed tick;
+held movement/fire persist until explicitly replaced. Events are latest-tick
+only, so step one tick at a time to retain an action/outcome trace.
+
+### What a Titan step means
+
+`titan.step` advances **app frames**, each adding `dt_secs` of virtual time;
+it does not directly invoke `FixedUpdate`. The demo's fixed clock is configured
+at `FIXED_HZ = 60`, and each fixed tick always simulates 1/60 second. With the
+MCP/Titan default `dt_secs = 1/60`, N frames advance N gameplay ticks while
+playing. `PlayerState.tick` freezes on death/win and resets on restart.
+
+In general, the number of fixed ticks is the whole timesteps in the existing
+fixed-clock overstep plus `frames * dt_secs`; fractional overstep carries into
+the next request. For example, from a clean paused clock, two frames at 1/120
+second run one tick, and one frame at 1/30 runs two ticks. A shorter single
+frame may run no tick and leave one-shot actions pending. Float-to-duration
+rounding can accumulate at very large step counts; inspect `PlayerState.tick`
+when exact tick budgets matter. Pause freezes virtual/fixed time, but app frames,
+BRP, and rendering continue. Use one time-controlling client; other clients'
+pause/resume requests can cancel a pending step.
+
 ## Headless verification
 
 No renderer, GPU, desktop, LLM, or credentials are required:
 
 ```sh
 cargo test -p titan_doom --no-default-features
+cargo test -p titan_doom --no-default-features --features remote
+cargo test -p titan_doom --features remote
 cargo clippy -p titan_doom --no-default-features --all-targets -- -D warnings
 ```
+
+[`tests/remote.rs`](tests/remote.rs), enabled by `remote`, starts a child-process
+headless demo on an OS-selected loopback port. It reads reflected player/combat
+state (including nested objects/events), writes `GameplayActions` over real
+HTTP BRP, and verifies startup pause, movement, pause/status/resume, and fixed
+timing at full, half, and double dt. The rendered binary additionally checks that
+its human input adapter cannot overwrite remote actions, without opening a GPU.
 
 [`tests/movement.rs`](tests/movement.rs) uses the existing `titan_test::Sim`
 harness to drive the real fixed schedule at controlled 60 Hz. The same pattern

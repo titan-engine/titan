@@ -144,14 +144,67 @@ also stops the game and builds, but leaves it stopped until `launch_game`.
 `restart_game` without `rebuild` only stops and launches. A second launch of an
 owned running game is rejected; `stop_game` is idempotent in configured mode.
 
-For Doom, set `--game-dir` to your Titan checkout, `--game-cmd` to
-`["cargo","run","-p","titan_doom"]`, and `--build-cmd` to
-`["cargo","build","-p","titan_doom"]`. The selected game must enable BRP at the
-configured URL; these flags do not inject plugins or change Doom code. Prefer a
-prebuilt binary for `--game-cmd` so build time is separate from readiness. If you
-use `cargo run`, raise `--ready-timeout-secs` to include compilation. Cargo must
-be on the server's PATH (or use an absolute path). Binary names on Windows have
-an `.exe` suffix. Respect any custom `CARGO_TARGET_DIR` in executable paths.
+### Doom demo
+
+Doom serves BRP only with its opt-in `remote` feature. Build first:
+
+```sh
+cargo build -p titan_doom --features remote
+cargo build -p titan_mcp
+```
+
+Use this `.mcp.json`, replacing every absolute path:
+
+```json
+{
+  "mcpServers": {
+    "titan": {
+      "command": "/absolute/path/to/titan/target/debug/titan_mcp",
+      "args": [
+        "--url", "http://127.0.0.1:15702",
+        "--game-dir", "/absolute/path/to/titan",
+        "--game-cmd", "[\"/absolute/path/to/titan/target/debug/titan_doom\",\"--brp-port\",\"15702\"]",
+        "--build-cmd", "[\"cargo\",\"build\",\"-p\",\"titan_doom\",\"--features\",\"remote\"]"
+      ]
+    }
+  }
+}
+```
+
+The demo's single gameplay-world listener always binds to IPv4 loopback; it
+does not expose a separate render-world listener. `--brp-port` defaults to 15702;
+match it to `--url` and reserve an unused port. Remote builds start paused and disable
+the human gameplay input adapter so idle/unfocused windows cannot erase agent
+actions. The default build has no BRP listener. Cargo must be on the sidecar's
+PATH (or use an absolute path); Windows binaries have an `.exe` suffix. Respect
+any custom `CARGO_TARGET_DIR` in executable paths. Prefer the prebuilt command
+above; using `["cargo","run","-p","titan_doom","--features","remote"]` instead
+requires raising `--ready-timeout-secs` to include compilation.
+
+Walkthrough:
+
+1. `launch_game {}`, then
+   `get_resource {"resource":"titan_doom::PlayerState"}` (initial tick zero).
+   `get_resource {"resource":"titan_doom::combat::CombatState"}` exposes combat,
+   stable object IDs, and latest-tick events. This is debug-mode inspection, not
+   screenshot-only playtesting.
+2. `set_resource {"resource":"titan_doom::GameplayActions","value":
+   {"movement":[0,1],"look_delta":[0,0],"fire":false,"interact":false,"restart":false}}`.
+   Drive this shared action API rather than writing gameplay state or raw input.
+3. `step {"frames":6}`, then query `PlayerState`: six playing ticks and 0.3
+   units of unobstructed movement. Clear held movement with `set_resource`
+   before advancing again. `step` advances app frames, not fixed ticks: the
+   default 1/60-second dt matches Doom's 60 Hz fixed clock; other dt values can
+   produce zero or multiple ticks per frame, carrying fractional overstep.
+4. `screenshot {}` (keep the native window visible), then `stop_game {}`.
+   `render + remote` enables Titan's screenshot fast path automatically.
+
+See the [demo README](../../demos/doom/README.md#agent-control-over-brp-opt-in)
+for action consumption, pause/restart semantics, fixed-step timing, and headless
+verification. BRP is unauthenticated: use only trusted local agents and stop the
+game when finished.
+
+### Lifecycle limits
 
 Timeout flags accept integer seconds in `1..=3600`; defaults are 30/3/300.
 Readiness checks valid BRP `rpc.discover` responses within one shared deadline,
