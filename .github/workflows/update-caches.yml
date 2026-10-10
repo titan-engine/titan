@@ -69,14 +69,17 @@ jobs:
           - os: ubuntu-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v1
           # ci.yml / build (macos-latest); example-run.yml / run-examples-macos-metal
           - os: macos-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v1
           # ci.yml / build (windows-latest); example-run.yml / run-examples-on-windows-dx12
           - os: windows-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v1
           # validation-jobs.yml / check-unused-dependencies
           - os: ubuntu-latest
             toolchain: nightly
@@ -168,7 +171,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          # The suffix invalidates the old recipe even on a same-day rerun;
+          # consumer restore prefixes and cache paths remain compatible.
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
           # Manual runs restore caches but still build to validate the selected revision.
           lookup-only: ${{ github.event_name != 'workflow_dispatch' }}
 
@@ -190,9 +195,22 @@ jobs:
         if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile dev --package bevy
 
-      # Build Bevy for the test profile, used by test
+      # Match ci.yml / build and tools/ci/src/commands/test.rs, without running
+      # tests. Warm the CI runner too, so a leaf change does not rebuild it.
+      - name: Build workspace test cache
+        if: matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: |
+          cargo build --package ci
+          cargo test --workspace --lib --bins --tests --features bevy_ecs/track_location --no-run
+
+      # Since #46, only Linux compiles and runs the benchmark smoke tests.
+      - name: Build workspace bench cache
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: cargo test --workspace --benches --no-run
+
+      # Preserve the non-stable native cache recipe for its other consumers.
       - name: Build test cache
-        if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        if: matrix.toolchain != 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile test --package bevy
 
       - name: Build cross-target cache
@@ -211,7 +229,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
 
       # Also prune on an exact hit, so a rerun can finish interrupted cleanup.
       # Keep producer/consumer paths in sync. Mixed cache versions are left
@@ -221,7 +239,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           CACHE_PREFIX: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-
-          CACHE_KEY: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          CACHE_KEY: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
         with:
           script: |
             const { prune } = require('./.github/scripts/prune-actions-caches.cjs');
