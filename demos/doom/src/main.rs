@@ -636,15 +636,27 @@ fn outcome_message(outcome: &GameplayOutcome) -> (u8, &'static str) {
         GameplayOutcome::EmptyAmmo => (1, "Out of ammo! Find a yellow ammo box."),
         GameplayOutcome::EnemyKilled => (2, "Sentry down."),
         GameplayOutcome::PlayerDamaged => (1, "Taking damage! Move away from the sentry."),
+        GameplayOutcome::PlayerDied if cfg!(feature = "remote") => (
+            3,
+            "You died. Set GameplayActions.restart = true, then step to restart.",
+        ),
         GameplayOutcome::PlayerDied => (3, "You died. Press R to restart."),
         GameplayOutcome::HealthCollected => (2, "Health collected."),
         GameplayOutcome::AmmoCollected => (2, "Ammo collected."),
+        GameplayOutcome::KeyCollected if cfg!(feature = "remote") => (
+            2,
+            "Red key collected. Approach the red door, set GameplayActions.interact = true, then step.",
+        ),
         GameplayOutcome::KeyCollected => {
             (2, "Red key collected. Approach the red door and press E.")
         }
         GameplayOutcome::MissingKey => (2, "Door locked: find the red key first."),
         GameplayOutcome::DoorOpened => (2, "Red door opened. Reach the green exit."),
         GameplayOutcome::NoDoor => (1, "No door in reach. Move closer and face the red door."),
+        GameplayOutcome::ExitReached if cfg!(feature = "remote") => (
+            3,
+            "Exit reached! Set GameplayActions.restart = true, then step to play again.",
+        ),
         GameplayOutcome::ExitReached => (3, "Exit reached! Press R to play again."),
         GameplayOutcome::Restarted => (3, "Restarted: health, ammo, pickups and enemies reset."),
     }
@@ -695,6 +707,9 @@ fn present_hud(
     status.remaining = (status.remaining - time.delta_secs()).max(0.0);
     feedback.0 = if status.remaining > 0.0 {
         status.message.clone()
+    } else if combat.red_key && cfg!(feature = "remote") {
+        "Open the red door: set GameplayActions.interact = true, then step. Reach the green exit."
+            .into()
     } else if combat.red_key {
         "Open the red door with E, then walk into the green exit.".into()
     } else {
@@ -702,6 +717,12 @@ fn present_hud(
     };
     phase.0 = match combat.phase {
         GamePhase::Playing => String::new(),
+        GamePhase::Dead if cfg!(feature = "remote") => {
+            "YOU DIED\nSet GameplayActions.restart = true,\nthen step to restart".into()
+        }
+        GamePhase::Won if cfg!(feature = "remote") => {
+            "EXIT REACHED\nSet GameplayActions.restart = true,\nthen step to play again".into()
+        }
         GamePhase::Dead => "YOU DIED\nPress R to restart".into(),
         GamePhase::Won => "EXIT REACHED\nPress R to play again".into(),
     };
@@ -804,6 +825,67 @@ mod tests {
             world.get::<TextFont>(crosshair).unwrap().font_size,
             FontSize::Px(22.0)
         );
+    }
+
+    #[test]
+    fn outcome_prompts_match_the_enabled_control_adapter() {
+        for (outcome, action, key) in [
+            (
+                GameplayOutcome::PlayerDied,
+                "GameplayActions.restart",
+                "Press R",
+            ),
+            (
+                GameplayOutcome::ExitReached,
+                "GameplayActions.restart",
+                "Press R",
+            ),
+            (
+                GameplayOutcome::KeyCollected,
+                "GameplayActions.interact",
+                "press E",
+            ),
+        ] {
+            let message = outcome_message(&outcome).1;
+            if cfg!(feature = "remote") {
+                assert!(message.contains(action) && message.contains("step"));
+                assert!(!message.contains(key));
+            } else {
+                assert!(message.contains(key));
+                assert!(!message.contains("GameplayActions"));
+            }
+        }
+    }
+
+    #[test]
+    fn phase_and_key_hud_prompts_match_the_enabled_control_adapter() {
+        let mut app = App::new();
+        app.insert_resource(Level::demo())
+            .add_plugins(GameplayPlugin)
+            .init_resource::<Time>()
+            .init_resource::<HudFeedback>()
+            .add_systems(Update, present_hud);
+        app.world_mut().spawn((Text::default(), CombatHud));
+        let feedback = app.world_mut().spawn((Text::default(), FeedbackHud)).id();
+        let phase = app.world_mut().spawn((Text::default(), PhaseHud)).id();
+        app.world_mut()
+            .spawn((BackgroundColor::default(), WeaponFlash));
+        app.world_mut().resource_mut::<CombatState>().red_key = true;
+        for game_phase in [GamePhase::Dead, GamePhase::Won] {
+            app.world_mut().resource_mut::<CombatState>().phase = game_phase;
+            app.update();
+            let message = &app.world().get::<Text>(phase).unwrap().0;
+            let feedback = &app.world().get::<Text>(feedback).unwrap().0;
+            if cfg!(feature = "remote") {
+                assert!(message.contains("GameplayActions.restart") && message.contains("step"));
+                assert!(!message.contains("Press R"));
+                assert!(feedback.contains("GameplayActions.interact") && feedback.contains("step"));
+                assert!(!feedback.contains("with E"));
+            } else {
+                assert!(message.contains("Press R"));
+                assert!(feedback.contains("with E"));
+            }
+        }
     }
 
     #[test]

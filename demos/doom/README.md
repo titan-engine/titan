@@ -262,8 +262,10 @@ provides the same gameplay/time-control plugins without rendering.
 
 Remote builds start **paused** and give agents exclusive control of
 `GameplayActions`: the keyboard/mouse gameplay adapter is disabled, including
-its focus-loss reset. F12/window close still work. Build without `remote` to
-play with human controls. No gameplay rules or action fields change.
+its focus-loss reset. HUD feedback and death/win prompts name the corresponding
+`GameplayActions` fields and a step instead of the disabled E/R keys.
+F12/window close still work. Build without `remote` to play with human controls.
+No gameplay rules or action fields change.
 
 ### MCP setup and walkthrough
 
@@ -319,6 +321,12 @@ not a claim of autonomous level completion (#30).
 ![Paused spawn through MCP](docs/remote-before.png)
 
 ![After forward movement and one shot through GameplayActions](docs/remote-after.png)
+
+A separate session stepped 660 idle frames to let the sentry kill the player,
+then followed the displayed action/step prompt: `GameplayActions.restart = true`
+and one step restored health 100, phase `Playing`, and player tick zero.
+
+![Remote death HUD with an actionable restart prompt](docs/remote-death.png)
 
 </details>
 
