@@ -51,6 +51,8 @@ pub enum Action {
 pub struct BoardState {
     player: Cell,
     blocks: BTreeMap<String, Cell>,
+    // Reverse lookup is part of each snapshot and restored atomically with it.
+    occupancy: BTreeMap<Cell, String>,
     moves: u32,
     complete: bool,
 }
@@ -63,6 +65,11 @@ impl BoardState {
                 .blocks()
                 .iter()
                 .map(|o| (o.id.clone(), o.position))
+                .collect(),
+            occupancy: level
+                .blocks()
+                .iter()
+                .map(|o| (o.position, o.id.clone()))
                 .collect(),
             moves: 0,
             complete: false,
@@ -87,10 +94,7 @@ impl BoardState {
     }
     /// Stable ID of the block at a cell, if any.
     pub fn block_at(&self, cell: Cell) -> Option<&str> {
-        self.blocks
-            .iter()
-            .find(|(_, p)| **p == cell)
-            .map(|(id, _)| id.as_str())
+        self.occupancy.get(&cell).map(String::as_str)
     }
 }
 
@@ -310,11 +314,15 @@ impl Game {
                 }
             }
         }
-        // A level boundary has its own reset event, not cross-level target diffs.
-        if !kinds
-            .iter()
-            .any(|kind| matches!(kind, EventKind::LevelStarted { .. }))
-        {
+        // No-op/rejected actions cannot alter coverage. Boundaries have their
+        // own reset fact, never cross-level target diffs. Occupancy lookup is
+        // logarithmic rather than scanning every block for every target.
+        if !matches!(
+            kinds.first(),
+            Some(
+                EventKind::LevelStarted { .. } | EventKind::Blocked { .. } | EventKind::Ignored(_)
+            )
+        ) {
             for target in self.level().targets() {
                 let old = before.block_at(target.position);
                 let new = self.state.block_at(target.position);
@@ -363,6 +371,8 @@ impl Game {
         self.undo.push(self.state.clone());
         self.redo.clear();
         if let Some(id) = block {
+            self.state.occupancy.remove(&to);
+            self.state.occupancy.insert(pushed_to, id.clone());
             self.state.blocks.insert(id.clone(), pushed_to);
             events.push(EventKind::Pushed {
                 id,

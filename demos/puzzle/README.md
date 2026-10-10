@@ -142,8 +142,10 @@ use event endpoints for intermediate animation, final state for reconciliation.
 Levels, player, blocks, and targets have authored string IDs. The canonical key
 is `(level_id, object_id)`; preserve IDs when moving/redecorating objects. `Entity`
 IDs, sprite entities, insertion order, and frame counts are not gameplay identity.
-`BoardState::blocks()` is a `BTreeMap` in stable ID order; the validated level
-preserves declaration order for targets and metadata. Names/IDs remain intact
+`BoardState::blocks()` is a `BTreeMap` in stable ID order; `block_at(cell)` uses a
+reverse position index restored atomically with every snapshot, so coverage checks
+do not scan all blocks for each target. The validated level preserves declaration
+order for targets and metadata. Names/IDs remain intact
 through undo/redo/restart. `Game::clone()` includes history, useful for solver
 branching; snapshots expose player, sorted blocks, move count, and completion.
 
@@ -217,6 +219,8 @@ known solution runs through the shared ECS action queue and asserts completion
 and progression. Parser tests exercise filename/physical location diagnostics,
 format syntax, bounds, IDs, counts, overlaps, walls, and structural validation.
 The `titan_test::Sim` harness also exercises real frame/fixed-loop timing.
+A dense valid board with over 3,000 blocks verifies reverse occupancy and history;
+headless presentation tests check viewport fitting and retained entity identity.
 
 For visual changes, run the binary and inspect a fresh screenshot; compiling
 cannot prove a correct rendered view. Full workspace checks use
