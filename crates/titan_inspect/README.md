@@ -127,7 +127,7 @@ Requires `AssetPlugin` and types registered with Bevy's usual `init_asset::<T>()
 Example result (IDs are illustrative, session-local opaque strings):
 
 ```json
-{"items":[{"id":"game::Texture:index:7","path":"textures/missing.png","type":"game::Texture","state":"failed","error":"Path not found: textures/missing.png","server_managed":true,"dependency_state":"not_loaded","dependency_error":null,"recursive_dependency_state":"not_loaded","recursive_dependency_error":null,"dependencies":null,"dependency_chain":{"items":[],"total":0,"truncated":false},"dependency_chain_complete":false}],"total":1,"truncated":false}
+{"items":[{"id":"game::Texture:index:7","path":"textures/missing.png","type":"game::Texture","state":"failed","error":"Path not found: textures/missing.png","server_managed":true,"dependency_state":"failed","dependency_error":"Path not found: textures/missing.png","recursive_dependency_state":"failed","recursive_dependency_error":"Path not found: textures/missing.png","dependencies":null,"dependency_chain":{"items":[],"total":0,"truncated":false},"dependency_chain_complete":false}],"total":1,"truncated":false}
 ```
 
 Optional filters are combined with AND, applied **before** computing `total`
@@ -196,6 +196,8 @@ because every record is a failure. `total` counts matching **retained** records.
 `dropped` counts all evicted records (before filtering), and
 `history_truncated` explicitly reports retention loss, distinct from response
 page truncation. These are historical errors, not claims about current state.
+Failures of pathless `AssetServer::add_async` assets retain `path: null` and
+never match `path_prefix`, including an empty prefix.
 
 Both asset methods are read-only: they never load, reload, or retain assets.
 A BRP handler does not advance tasks, alter asset storage, or drain messages.

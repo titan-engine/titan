@@ -5,8 +5,8 @@ use bevy_platform::collections::{HashMap, HashSet};
 use core::any::TypeId;
 
 use bevy_asset::{
-    AssetServer, DependencyLoadState, LoadState, RecursiveDependencyLoadState, ReflectHandle,
-    UntypedAssetId, UntypedAssetLoadFailedEvent,
+    AssetLoadError, AssetServer, DependencyLoadState, LoadState, RecursiveDependencyLoadState,
+    ReflectHandle, UntypedAssetId, UntypedAssetLoadFailedEvent,
 };
 use bevy_ecs::{prelude::*, reflect::AppTypeRegistry};
 use bevy_remote::BrpResult;
@@ -28,7 +28,7 @@ pub(crate) struct FailureHistory {
 struct Failure {
     sequence: u64,
     id: UntypedAssetId,
-    path: String,
+    path: Option<String>,
     error: String,
 }
 
@@ -47,7 +47,10 @@ pub(crate) fn capture_failures(
         history.entries.push_back(Failure {
             sequence,
             id: event.id,
-            path: event.path.to_string(),
+            // `add_async` failures carry an empty-path sentinel, not a real path.
+            // Identify them by error kind so genuine empty paths remain distinguishable.
+            path: (!matches!(&event.error, AssetLoadError::AddAsyncError(_)))
+                .then(|| event.path.to_string()),
             error: event.error.to_string(),
         });
     }
@@ -355,7 +358,7 @@ pub(crate) fn failures(In(input): In<Option<Value>>, world: &mut World) -> BrpRe
     let matching = history.entries.iter().rev().filter(|failure| {
         matches(
             &inventory.asset_type(failure.id),
-            &Some(failure.path.clone()),
+            &failure.path,
             &params.asset_type,
             &params.path_prefix,
         )
@@ -367,7 +370,7 @@ pub(crate) fn failures(In(input): In<Option<Value>>, world: &mut World) -> BrpRe
             sequence: failure.sequence,
             summary: Summary {
                 id: inventory.id(failure.id),
-                path: Some(failure.path.clone()),
+                path: failure.path.clone(),
                 asset_type: inventory.asset_type(failure.id),
                 state: Some(State::Failed),
                 error: Some(failure.error.clone()),

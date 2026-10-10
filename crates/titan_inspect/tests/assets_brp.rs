@@ -34,6 +34,10 @@ fn assets_brp_valid_missing_and_startup_history() {
     assert_eq!(loaded["dependency_chain_complete"], true);
     let failed = at_path(&response, "missing.demo");
     assert_eq!(failed["state"], "failed");
+    assert_eq!(failed["dependency_state"], "failed");
+    assert_eq!(failed["recursive_dependency_state"], "failed");
+    assert_eq!(failed["dependency_error"], failed["error"]);
+    assert_eq!(failed["recursive_dependency_error"], failed["error"]);
     assert!(failed["error"].as_str().unwrap().contains("missing.demo"));
     assert!(failed["dependencies"].is_null());
     assert_eq!(failed["dependency_chain_complete"], false);
@@ -288,6 +292,75 @@ fn assets_brp_invalid_params_and_no_asset_plugin() {
         .code,
         error_codes::INVALID_PARAMS
     );
+}
+
+#[test]
+fn assets_brp_pathless_async_failure_preserves_null_path_and_prefix_semantics() {
+    use core::time::Duration;
+    use std::time::Instant;
+
+    let mut app = demo_app();
+    settle(&mut app);
+    let handle = app
+        .world()
+        .resource::<AssetServer>()
+        .add_async(async { Err::<DemoAsset, _>(std::io::Error::other("pathless async failure")) });
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !app
+        .world()
+        .resource::<AssetServer>()
+        .load_state(handle.id())
+        .is_failed()
+    {
+        assert!(Instant::now() < deadline, "async failure did not settle");
+        app.update();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let assets = call(&mut app, "titan.assets", Some(json!({"state":"failed"}))).unwrap();
+    let pathless = assets["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["path"].is_null())
+        .unwrap();
+    assert_eq!(pathless["state"], "failed");
+    assert!(pathless["error"]
+        .as_str()
+        .unwrap()
+        .contains("pathless async failure"));
+    let failures = call(&mut app, "titan.asset_failures", None).unwrap();
+    let failure = failures["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == pathless["id"])
+        .unwrap()
+        .clone();
+    assert!(failure["path"].is_null());
+    assert_eq!(failure["type"], pathless["type"]);
+    assert_eq!(failure["error"], pathless["error"]);
+    for method in ["titan.assets", "titan.asset_failures"] {
+        let filtered = call(&mut app, method, Some(json!({"path_prefix":""}))).unwrap();
+        assert!(filtered["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| !item["path"].is_null() && item["id"] != pathless["id"]));
+    }
+    drop(handle);
+    for _ in 0..300 {
+        app.update();
+    }
+    let retained = call(&mut app, "titan.asset_failures", None).unwrap();
+    assert!(retained["items"].as_array().unwrap().contains(&failure));
+    let filtered = call(
+        &mut app,
+        "titan.asset_failures",
+        Some(json!({"path_prefix":""})),
+    )
+    .unwrap();
+    assert_eq!(filtered["total"], 1);
+    assert_eq!(filtered["items"][0]["path"], "missing.demo");
 }
 
 #[test]
