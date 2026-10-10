@@ -33,7 +33,9 @@ render = [
   "bevy/default_font",
   "bevy/png",
   "bevy/x11",
+  "titan_remote?/render",
 ]
+remote = ["bevy/bevy_remote", "dep:titan_remote"]
 
 [dependencies]
 bevy = { path = "../..", version = "0.20.0", default-features = false, features = [
@@ -41,10 +43,13 @@ bevy = { path = "../..", version = "0.20.0", default-features = false, features 
 ] }
 serde = { version = "1", features = ["derive"] }
 ron = "0.12"
+titan_remote = { path = "../../crates/titan_remote", optional = true }
 
 [dev-dependencies]
 titan_test = { path = "../../crates/titan_test" }
 tempfile = "3"
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json"] }
 
 [[bin]]
 name = "titan_doom"

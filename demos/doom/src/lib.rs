@@ -8,6 +8,8 @@
 //! No window, renderer, or runtime entity identity is required by this simulation.
 
 mod combat;
+#[cfg(feature = "remote")]
+pub mod remote;
 pub use combat::{
     CombatState, EnemyState, GamePhase, GameplayEvent, GameplayObject, GameplayOutcome,
     FIRE_COOLDOWN, MAX_AMMO, MAX_HEALTH, SHOT_DAMAGE,

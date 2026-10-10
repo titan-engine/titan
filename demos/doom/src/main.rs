@@ -72,6 +72,8 @@ struct Capture {
 fn main() -> Result<AppExit, Box<dyn Error>> {
     let mut level = Level::demo();
     let mut capture = Capture::default();
+    #[cfg(feature = "remote")]
+    let mut brp_port = 15702;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -82,9 +84,16 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
             "--capture" => {
                 capture.path = Some(args.next().ok_or("--capture requires a PNG path")?.into());
             }
+            #[cfg(feature = "remote")]
+            "--brp-port" => {
+                brp_port = args.next().ok_or("--brp-port requires a TCP port")?.parse()?;
+                if brp_port == 0 {
+                    return Err("--brp-port must be in 1..=65535".into());
+                }
+            }
             _ => {
                 return Err(format!(
-                    "unknown argument {arg:?}; use --level FILE or --capture FILE.png"
+                    "unknown argument {arg:?}; use --level FILE or --capture FILE.png (with the remote feature: --brp-port PORT)"
                 )
                 .into())
             }
@@ -94,8 +103,8 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
     // App::run transfers the world to the runner. Keep an independent completion
     // signal so every exit path, including an early window close, is checked.
     let capture_saved = capture.path.as_ref().map(|_| Arc::clone(&capture.saved));
-    let exit = App::new()
-        .insert_resource(level)
+    let mut app = App::new();
+    app.insert_resource(level)
         .insert_resource(capture)
         .init_resource::<HudFeedback>()
         .insert_resource(Time::<Fixed>::from_hz(FIXED_HZ))
@@ -113,13 +122,17 @@ fn main() -> Result<AppExit, Box<dyn Error>> {
         .add_systems(FixedPostUpdate, remember_outcome)
         .add_systems(
             RunFixedMainLoop,
-            human_actions.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+            human_actions
+                .run_if(human_input_enabled)
+                .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
         )
         .add_systems(
             Update,
             (present_player, present_objects, present_hud, capture_frame),
-        )
-        .run();
+        );
+    #[cfg(feature = "remote")]
+    app.add_plugins(titan_doom::remote::DoomRemotePlugin { port: brp_port });
+    let exit = app.run();
     Ok(checked_exit(
         exit,
         capture_saved.map(|saved| saved.load(Ordering::Relaxed)),
@@ -134,6 +147,12 @@ fn checked_exit(exit: AppExit, capture_saved: Option<bool>) -> AppExit {
     } else {
         exit
     }
+}
+
+// Remote builds give the agent exclusive ownership of GameplayActions. In
+// particular, unfocused windows and idle keyboards must not erase BRP writes.
+fn human_input_enabled() -> bool {
+    !cfg!(feature = "remote")
 }
 
 // Input is just an adapter. Pending look and one-shots survive frames with no
@@ -406,6 +425,11 @@ fn object_texture(kind: ObjectKind) -> Image {
 
 /// Fixed presentation objects, expressed as a composable Bevy Scene Notation list.
 fn presentation_scene() -> impl SceneList {
+    let controls = if cfg!(feature = "remote") {
+        "BRP agent control | Starts paused\nDrive GameplayActions and titan.step | F12: screenshot"
+    } else {
+        "WASD: walk | Arrows/mouse: aim | Space/held click: fire\nE: open door | R: restart | Click: capture mouse | Esc: release | F12: screenshot"
+    };
     bsn_list! {
         #WorldLight
         DirectionalLight { illuminance: 3500.0 }
@@ -417,7 +441,7 @@ fn presentation_scene() -> impl SceneList {
         Transform
         --
         #Controls
-        Text("WASD: walk | Arrows/mouse: aim | Space/held click: fire\nE: open door | R: restart | Click: capture mouse | Esc: release | F12: screenshot")
+        Text(controls)
         TextFont { font_size: FontSize::Px(16.0) }
         Node {
             position_type: PositionType::Absolute,
@@ -947,6 +971,26 @@ mod tests {
             assert_eq!(*visibility, Visibility::Inherited);
             assert_eq!(transform.scale.y, 1.0);
         }
+    }
+
+    #[test]
+    #[cfg(feature = "remote")]
+    fn remote_actions_are_not_overwritten_by_the_human_adapter() {
+        let mut app = App::new();
+        app.insert_resource(GameplayActions {
+            movement: Vec2::Y,
+            look_delta: Vec2::new(0.1, 0.2),
+            fire: true,
+            interact: true,
+            restart: true,
+        })
+        .add_systems(Update, human_actions.run_if(human_input_enabled));
+        // No keyboard, pointer, or focused window is needed in agent mode.
+        app.update();
+        let actions = app.world().resource::<GameplayActions>();
+        assert_eq!(actions.movement, Vec2::Y);
+        assert_eq!(actions.look_delta, Vec2::new(0.1, 0.2));
+        assert!(actions.fire && actions.interact && actions.restart);
     }
 
     #[test]
