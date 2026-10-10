@@ -169,11 +169,14 @@ initialize. Unchanged schedules are not rebuilt on every tick, preserving pendin
 deferred buffers. A private empty set records which schedule instances the
 harness configured and requests their first build. Copying a schedule's public
 shuffle seed does **not** copy this marker or establish its executor policy.
+System-free schedules are left untouched and exempt from ownership validation:
+there is nothing to shuffle, and inserting an empty marker would synthesize an
+observable `ScheduleBuilt` event for a pristine empty graph.
 
 This variant requires the standard Bevy `Main` driver used by `Sim::new`; custom
 app update drivers or replacing `Main` itself are not supported. Like `Sim`'s
 executor policy, it cannot configure schedules created and immediately run
-*within* a system. A newly discovered schedule that has already initialized
+*within* a system. A newly discovered nonempty schedule that has already initialized
 causes a clear panic **before** the harness changes its executor or settings.
 Read-only validation also runs immediately after each candidate tick, before any
 report is returned or `Sim` can reset a newly seen label's executor on the next

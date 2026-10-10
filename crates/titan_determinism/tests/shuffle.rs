@@ -412,6 +412,38 @@ fn immediately_run_new_labels_are_rejected_before_any_report_or_next_policy_pass
 }
 
 #[test]
+fn empty_schedules_do_not_synthesize_observable_build_events() {
+    let factory = || {
+        Sim::new(|app| {
+            app.register_type::<Decision>()
+                .init_resource::<Decision>()
+                .add_observer(
+                    |event: On<bevy_ecs::schedule::ScheduleBuilt>,
+                     mut decision: ResMut<Decision>| {
+                        if event.label == Late.intern() {
+                            decision.0 += 1;
+                        }
+                    },
+                )
+                .add_systems(Update, |world: &mut World| world.run_schedule(Late));
+            app.world_mut()
+                .resource_mut::<Schedules>()
+                .insert(Schedule::new(Late));
+        })
+    };
+    let mut reference = factory();
+    reference.tick();
+    assert_eq!(reference.world().resource::<Decision>().0, 0);
+    for seed in 0..4 {
+        DeterminismCheck::new(factory)
+            .ticks(3)
+            .variant(Variant::ShuffleAmbiguous { seed })
+            .run()
+            .assert_deterministic();
+    }
+}
+
+#[test]
 fn empty_scenarios_do_not_diverge_from_diagnostic_state() {
     DeterminismCheck::new(|| Sim::new(|_| {}))
         .ticks(3)

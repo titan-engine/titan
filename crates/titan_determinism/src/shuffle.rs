@@ -48,7 +48,9 @@ pub(crate) fn validate(world: &World, seed: u64) {
     // instead of producing an instrumentation-induced divergence or false pass.
     for (label, schedule) in schedules.iter() {
         assert!(
-            is_configured(schedule, seed) || schedule.systems().is_err(),
+            schedule.graph().systems.is_empty()
+                || is_configured(schedule, seed)
+                || schedule.systems().is_err(),
             "ShuffleAmbiguous cannot configure already-initialized schedule {label:?}; \
              make new/replacement schedules available before their first run, and do not \
              override a live schedule's shuffle settings"
@@ -62,7 +64,10 @@ pub(crate) fn configure(world: &mut World, seed: u64) {
         return;
     };
     for (_, schedule) in schedules.iter_mut() {
-        if is_configured(schedule, seed) {
+        // A pristine empty schedule needs no executor/order change. Even an
+        // empty ownership set would dirty it and synthesize ScheduleBuilt, so
+        // leave its graph, settings, and executor completely untouched.
+        if schedule.graph().systems.is_empty() || is_configured(schedule, seed) {
             continue;
         }
         let mut settings = schedule.get_build_settings();
@@ -124,9 +129,9 @@ mod tests {
             let mut world = World::new();
             world.init_resource::<Trace>();
             world.init_resource::<Schedules>();
-            world
-                .resource_mut::<Schedules>()
-                .insert(Schedule::new(Test));
+            let mut original = Schedule::new(Test);
+            original.add_systems(a);
+            world.resource_mut::<Schedules>().insert(original);
             configure(&mut world, 42);
             let settings = world
                 .resource::<Schedules>()
@@ -167,9 +172,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(Thread(std::thread::current().id(), true));
         world.init_resource::<Schedules>();
-        world
-            .resource_mut::<Schedules>()
-            .insert(Schedule::new(Test));
+        let mut original = Schedule::new(Test);
+        original.add_systems(a);
+        world.resource_mut::<Schedules>().insert(original);
         configure(&mut world, 42);
         let settings = world
             .resource::<Schedules>()
