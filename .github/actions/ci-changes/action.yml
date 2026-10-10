@@ -13,6 +13,9 @@ outputs:
   ecs:
     description: Run ECS Miri tests
     value: ${{ steps.filter.outputs.ecs }}
+  titan_packages:
+    description: Affected Titan test packages, * for full coverage, none for inapplicable
+    value: ${{ steps.titan-filter.outputs.packages }}
 runs:
   using: composite
   steps:
@@ -22,6 +25,7 @@ runs:
         bash .github/scripts/test-ci-paths-changed.sh
         bash .github/scripts/test-miri-paths-changed.sh
         bash .github/scripts/test-titan-scoped-ci.sh
+        node --test .github/scripts/titan-packages-changed.test.cjs
     - name: Select jobs
       id: filter
       shell: bash
@@ -52,3 +56,11 @@ runs:
         fi
         printf '%s\necs=%s\n' "$selection" "$ecs" >> "$GITHUB_OUTPUT"
         printf '## CI classification\n\n```text\n%s\necs=%s\n```\n' "$selection" "$ecs" >> "$GITHUB_STEP_SUMMARY"
+    - name: Select Titan test packages
+      id: titan-filter
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+      run: node .github/scripts/titan-packages-changed.cjs

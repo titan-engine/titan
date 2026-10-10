@@ -33,6 +33,7 @@ jobs:
       titan: ${{ steps.filter.outputs.titan }}
       docs: ${{ steps.filter.outputs.docs }}
       ecs: ${{ steps.filter.outputs.ecs }}
+      titan_packages: ${{ steps.filter.outputs.titan_packages }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -43,14 +44,22 @@ jobs:
 
   titan-tests:
     needs: changes
-    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.titan != 'false') }}
+    # Always emit the required check, including an explicit inapplicable result.
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      TITAN_PACKAGES: ${{ needs.changes.result == 'success' && needs.changes.outputs.titan_packages || '*' }}
     steps:
+      - name: No applicable Titan changes
+        if: ${{ env.TITAN_PACKAGES == 'none' }}
+        run: echo '## Titan tests — no applicable changes' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: ${{ env.TITAN_PACKAGES != 'none' }}
         with:
           persist-credentials: false
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ env.TITAN_PACKAGES != 'none' }}
         with:
           # key won't match, will rely on restore-keys
           key: ${{ runner.os }}-stable--${{ hashFiles('**/Cargo.toml') }}-
@@ -65,44 +74,17 @@ jobs:
             ~/.cargo/git/db/
             target/
       - uses: ./.github/actions/install-rust
+        if: ${{ env.TITAN_PACKAGES != 'none' }}
         with:
           components: clippy
       - uses: ./.github/actions/install-linux-deps
+        if: ${{ env.TITAN_PACKAGES != 'none' }}
       - name: Test Titan crates with default features
-        if: ${{ needs.changes.outputs.upstream == 'false' }}
-        run: bash .github/scripts/titan-scoped-ci.sh test
-      - name: Test all Titan crates with extra features
+        if: ${{ env.TITAN_PACKAGES != 'none' && needs.changes.outputs.upstream == 'false' }}
+        run: bash .github/scripts/titan-scoped-ci.sh test "$TITAN_PACKAGES"
+      # Default features remain covered by workspace tests on full runs.
+      # New titan_* workspace crates automatically get all-features coverage.
+      - name: Test selected Titan crates with extra features
+        if: ${{ env.TITAN_PACKAGES != 'none' }}
         shell: bash
-        run: |
-          set -euo pipefail
-          crates=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' \
-            | tr -d '\r' | sort)
-          if [[ -z "$crates" ]]; then
-            echo "::error::No titan_* workspace crates found"
-            exit 1
-          fi
-
-          # Default features: workspace tests on full runs, scoped tests above otherwise.
-          # New titan_* workspace crates are automatically tested with all features.
-          while IFS= read -r crate; do
-            test_args=(test -p "$crate" --all-features)
-            case "$crate" in
-              titan_remote|titan_mcp)
-                # The upstream http-only combination emits a dead-code warning;
-                # match workspace CI's render feature while keeping tests GPU-free.
-                test_args+=(--features bevy_remote/bevy_render)
-                ;;
-              titan_doom|titan_puzzle)
-                # All-features tests do not verify that gameplay builds without
-                # the optional presentation feature. Preserve renderer-free coverage.
-                echo "::group::Test and lint $crate (headless)"
-                cargo test -p "$crate" --no-default-features
-                cargo clippy -p "$crate" --no-default-features --all-targets -- -D warnings
-                echo "::endgroup::"
-                ;;
-            esac
-            echo "::group::Test $crate (all features)"
-            cargo "${test_args[@]}"
-            echo "::endgroup::"
-          done <<< "$crates"
+        run: bash .github/scripts/titan-scoped-ci.sh extra "$TITAN_PACKAGES"

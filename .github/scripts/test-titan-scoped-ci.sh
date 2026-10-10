@@ -34,9 +34,9 @@ SH
 chmod +x "$fixture/bin/cargo"
 packages='-p titan_doom -p titan_test'
 assert_commands() {
-  local mode=$1 expected=$2
+  local mode=$1 expected=$2 selection=${3:-'*'}
   : > "$COMMAND_LOG"
-  bash "$script_dir/titan-scoped-ci.sh" "$mode"
+  bash "$script_dir/titan-scoped-ci.sh" "$mode" "$selection"
   if [[ $(< "$COMMAND_LOG") != "$expected" ]]; then
     printf 'Unexpected %s commands:\n%s\n' "$mode" "$(< "$COMMAND_LOG")" >&2
     exit 1
@@ -49,6 +49,13 @@ assert_modes() {
   RUNNER_OS=Windows assert_commands test "$test_command"
   RUNNER_OS=macOS assert_commands test "$test_command"
   assert_commands doc "|test $packages --doc --features bevy_remote/bevy_render"$'\n'"-D warnings|doc $packages --all-features --features bevy_remote/bevy_render --no-deps --document-private-items --keep-going"
+  RUNNER_OS=Linux assert_commands test '|test -p titan_test --lib --bins --tests --features bevy_ecs/track_location,bevy_remote/bevy_render'$'\n''|test -p titan_test --benches --features bevy_remote/bevy_render' titan_test
+  assert_commands extra '|test -p titan_test --all-features' titan_test
+  assert_commands extra '|test -p titan_doom --no-default-features'$'\n''|clippy -p titan_doom --no-default-features --all-targets -- -D warnings'$'\n''|test -p titan_doom --all-features' titan_doom
+  assert_commands test '' none
+  assert_commands extra '' none
+  # Stale/invalid outputs must run all packages, not silently drop tests.
+  RUNNER_OS=Linux assert_commands test "$test_command"$'\n'"|test $packages --benches --features bevy_remote/bevy_render" titan_missing
 }
 
 # Exercise the installed jq too (native jq.exe on the Windows Actions runner).
