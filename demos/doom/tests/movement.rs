@@ -10,7 +10,7 @@ use titan_test::Sim;
 
 fn simulation() -> Sim {
     Sim::new(|app| {
-        app.insert_resource(Level::demo())
+        app.insert_resource(Level::parse(include_str!("foundation.ron")).unwrap())
             .add_plugins(GameplayPlugin);
     })
     .with_fixed_dt(1.0 / FIXED_HZ)
@@ -20,6 +20,7 @@ fn actions(sim: &mut Sim, movement: Vec2, look_delta: Vec2, ticks: u64) {
     *sim.world_mut().resource_mut::<GameplayActions>() = GameplayActions {
         movement,
         look_delta,
+        ..default()
     };
     sim.run_ticks(ticks);
 }

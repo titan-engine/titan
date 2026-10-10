@@ -1,12 +1,12 @@
-// One world unit per cell; # is a solid wall, . is flat walkable floor.
-// Two chambers connected by the two-cell-wide east/west corridor at z=5..7.
-// Object positions are authored separately, in (x, z) world coordinates.
+// Original placeholder industrial chambers. North is -Z.
+// The two-cell corridor leads east to the key room. A single red door seals
+// the north exit vestibule: no route can bypass it.
 (
     rows: [
         "#################",
         "#......###......#",
         "#......###......#",
-        "#......###......#",
+        "#......######.###",
         "#......###......#",
         "#...............#",
         "#...............#",
@@ -19,6 +19,14 @@
     ],
     objects: [
         (id: "player-spawn", kind: Spawn, position: (3.5, 9.5), yaw: 0.0),
-        (id: "industrial-marker", kind: Marker, position: (13.5, 3.5), yaw: 0.0),
+        (id: "industrial-marker", kind: Marker, position: (11.5, 4.5), yaw: 0.0),
+        (id: "corridor-sentry", kind: Enemy, position: (3.5, 5.5), yaw: 0.0),
+        (id: "key-guard", kind: Enemy, position: (13.5, 8.5), yaw: 0.0),
+        (id: "spawn-ammo", kind: Ammo, position: (4.5, 9.5), yaw: 0.0),
+        (id: "room-health", kind: Health, position: (12.5, 9.5), yaw: 0.0),
+        (id: "room-ammo", kind: Ammo, position: (11.5, 7.5), yaw: 0.0),
+        (id: "red-key", kind: RedKey, position: (13.5, 9.5), yaw: 0.0),
+        (id: "red-door", kind: RedDoor, position: (13.5, 3.5), yaw: 0.0),
+        (id: "exit", kind: Exit, position: (13.5, 1.5), yaw: 0.0),
     ],
 )
