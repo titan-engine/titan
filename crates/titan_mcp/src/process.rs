@@ -287,7 +287,7 @@ impl ProcessManager {
         })
     }
 
-    /// Returns a clonable shutdown handle for signal handlers or other threads.
+    /// Returns a cloneable shutdown handle for signal handlers or other threads.
     pub fn cancellation(&self) -> ProcessCancellation {
         self.cancellation.clone()
     }

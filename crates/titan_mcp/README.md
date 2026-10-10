@@ -207,7 +207,7 @@ configuration from lifecycle operations. `launch`, `stop`, `rebuild`, `restart`,
 serialize them with other game operations. `tools::call_managed` and
 `protocol::serve_managed` take that manager; the original `call`/`serve` APIs
 remain attach-only wrappers. The caller owns the manager and drops it on
-shutdown. `cancellation()` returns a clonable, one-way `ProcessCancellation`
+shutdown. `cancellation()` returns a cloneable, one-way `ProcessCancellation`
 handle for shutdown from another thread; cancellation forbids new launches/builds
 but does not replace dropping/stopping the manager. Log/fuzz/playtest tooling can build on this API without granting MCP
 callers a command-execution interface.

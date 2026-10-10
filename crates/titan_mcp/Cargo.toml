@@ -34,7 +34,10 @@ rustix = { version = "1", features = ["fs", "process"] }
 [target.'cfg(windows)'.dependencies]
 cap-primitives = "4.0.3"
 # Spawn suspended into a Job Object, so forceful cleanup includes descendants.
-process-wrap = { version = "10.0.1", default-features = false, features = ["std", "job-object"] }
+process-wrap = { version = "10.0.1", default-features = false, features = [
+  "std",
+  "job-object",
+] }
 
 [dev-dependencies]
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
