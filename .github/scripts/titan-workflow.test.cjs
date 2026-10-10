@@ -10,14 +10,17 @@ const workflow = fs.readFileSync(path.join(__dirname, '../workflows/titan.yml'),
 const evaluate = (expression, context) => vm.runInNewContext(expression.replaceAll('steps.titan-filter', 'steps.titanFilter'), {
   always: () => true, cancelled: () => false, ...context,
 });
-const actionOutput = name => action.match(new RegExp(`  ${name}:\\n[\\s\\S]*?value: \\$\\{\\{ (.*?) \\}\\}`))[1];
+const actionOutput = (name, source = action) => source.replace(/\r\n/g, '\n')
+  .match(new RegExp(`  ${name}:\\n[\\s\\S]*?value: \\$\\{\\{ (.*?) \\}\\}`))[1];
 const packageExpression = workflow.match(/TITAN_PACKAGES: \$\{\{ (.*?) \}\}/)[1];
 
 test('upstream and ECS escalation includes non-Titan consumers and missing classifier output', () => {
   for (const flag of ['true', undefined, '']) {
     const context = { steps: { filter: { outputs: { upstream: 'false', ecs: 'false' } }, titanFilter: { outputs: { upstream: flag } } } };
-    assert.equal(evaluate(actionOutput('upstream'), context), true);
-    assert.equal(evaluate(actionOutput('ecs'), context), true);
+    for (const source of [action, action.replace(/\r?\n/g, '\r\n')]) {
+      assert.equal(evaluate(actionOutput('upstream', source), context), true);
+      assert.equal(evaluate(actionOutput('ecs', source), context), true);
+    }
   }
   const context = { steps: { filter: { outputs: { upstream: 'false', ecs: 'false' } }, titanFilter: { outputs: { upstream: 'false' } } } };
   assert.equal(evaluate(actionOutput('upstream'), context), false);

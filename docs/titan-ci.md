@@ -72,10 +72,23 @@ bash .github/scripts/test-titan-scoped-ci.sh
 
 The issue's all-Titan baselines were 17m32s for PR #100 (4m48s default,
 10m59s extra) and 15m28s for PR #101 (3m49s default, 8m42s extra).
-[PR #104](https://github.com/titan-engine/titan/pull/104) records the
-representative `titan_determinism` leaf comparison, with CI run links, per-step
-durations and cache details. Its temporary stacked probe PR is closed without
-merging after the measurement.
+A representative leaf probe in temporary [PR #105](https://github.com/titan-engine/titan/pull/105)
+added one `titan_determinism` integration test and selected only that package.
+Its [successful CI job](https://github.com/titan-engine/titan/actions/runs/38075902187/job/114282764024)
+on October 10, 2026 took **3m35s**: default/integration plus Linux benchmark
+smoke coverage took **37s**, and all-features tests (including doctests) took
+**4s**. The approximately 3,147 MB workspace cache restored in **2m26s**.
+
+For comparison, the same-day [all-Titan job for PR #101](https://github.com/titan-engine/titan/actions/runs/38064376148/job/114249100017)
+changed the same leaf crate and took **15m28s**: default plus benchmark tests
+**3m49s**, extra tests **8m42s**, cache restore **2m26s**. The selected job was
+about 77% shorter overall in this sample. This is not a controlled benchmark:
+source changes and cached feature footprints differ, and runner variability
+still applies. The selective run rebuilt targets for **23.81s** initially,
+**11.85s** for the separate benchmark invocation and **2.83s** for all features;
+a cache hit did not eliminate feature-unification rebuilds. PR #105 is closed
+without merging after the measurement; [PR #104](https://github.com/titan-engine/titan/pull/104)
+retains the audit trail.
 
 Selection reduces unrelated test targets, not necessarily all their dependency
 compilation. Restored workspace artifacts may need rebuilding when package or
