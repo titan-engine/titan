@@ -31,6 +31,7 @@ pub fn list() -> Value {
     let limit = json!({"type":"integer","minimum":1,"maximum":100,"default":50});
     json!([
         tool("game_status", "Process ownership, PID/exit status, discovered BRP methods and optional Titan status", json!({}), &[]),
+        tool("game_logs", "Read stdout/stderr of launched games, including after exit. Without since returns recent tail; poll with returned cursor. Exact level and case-sensitive contains filters; dropped/omitted lines are reported", json!({"since":{"type":"integer","minimum":0},"max_lines":limit,"level":{"type":"string","enum":["error","warn","info","debug","trace"]},"contains":string}), &[]),
         tool("launch_game", "Launch the configured game command and wait for BRP; accepts no command or extra arguments", json!({}), &[]),
         tool("stop_game", "Stop only the owned game tree; attached games are never stopped", json!({}), &[]),
         tool("rebuild_game", "Stop the owned game, run the configured build, and stay stopped; failures include bounded diagnostics", json!({}), &[]),
@@ -81,6 +82,11 @@ pub fn call_managed(
 ) -> Result<Value, String> {
     validate_args(name, &args)?;
     match name {
+        "game_logs" => {
+            return Ok(json!(
+                manager.game_logs(&decode::<crate::logs::LogQuery>(args)?)?
+            ))
+        }
         "launch_game" => return Ok(json!(manager.launch(client)?)),
         "stop_game" => return Ok(json!(manager.stop()?)),
         "rebuild_game" => {
@@ -899,7 +905,7 @@ mod tests {
             assert!(names.insert(tool["name"].as_str().unwrap()));
             assert_eq!(tool["inputSchema"]["type"], "object");
         }
-        assert_eq!(names.len(), 24);
+        assert_eq!(names.len(), 25);
     }
 
     #[test]

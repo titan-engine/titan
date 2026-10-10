@@ -7,6 +7,7 @@
 extern crate alloc;
 
 pub mod client;
+pub mod logs;
 pub mod process;
 pub mod protocol;
 pub mod screenshot;

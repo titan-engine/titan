@@ -6,7 +6,10 @@
 //! Windows requests graceful shutdown via `taskkill /T`, then terminates the job.
 //! Ordinary EOF/errors clean up via `Drop`; SIGKILL/power loss cannot run cleanup.
 
-use crate::client::Client;
+use crate::{
+    client::Client,
+    logs::{GameLogs, LogPage, LogQuery},
+};
 use alloc::{collections::VecDeque, sync::Arc};
 use serde::Serialize;
 use std::{
@@ -215,6 +218,18 @@ pub struct ProcessStatus {
     pub pid: Option<u32>,
     /// Most recently observed game exit; cleared when a new game is launched.
     pub exit: Option<ProcessExit>,
+    /// Exclusive log cursor at the most recent successful spawn, retained after exit.
+    pub log_cursor: Option<u64>,
+}
+
+/// Captured output and process state, readable even after a crash or stop.
+#[derive(Debug, Serialize)]
+pub struct GameLogResult {
+    /// Bounded log entries and continuation/retention metadata.
+    #[serde(flatten)]
+    pub page: LogPage,
+    /// Process state and most recently observed exit status.
+    pub process: ProcessStatus,
 }
 
 /// Cooperative, thread-safe shutdown request for a process manager.
@@ -255,6 +270,9 @@ pub struct ProcessManager {
     child: Option<Child>,
     exit: Option<ProcessExit>,
     cancellation: ProcessCancellation,
+    logs: GameLogs,
+    log_cursor: Option<u64>,
+    readers: Vec<thread::JoinHandle<()>>,
 }
 
 impl ProcessManager {
@@ -265,6 +283,9 @@ impl ProcessManager {
             child: None,
             exit: None,
             cancellation: ProcessCancellation::default(),
+            logs: GameLogs::default(),
+            log_cursor: None,
+            readers: Vec::new(),
         }
     }
 
@@ -284,6 +305,9 @@ impl ProcessManager {
             child: None,
             exit: None,
             cancellation: ProcessCancellation::default(),
+            logs: GameLogs::default(),
+            log_cursor: None,
+            readers: Vec::new(),
         })
     }
 
@@ -302,6 +326,7 @@ impl ProcessManager {
             let status = wait_child(child).map_err(|e| format!("Reaping game: {e}"))?;
             self.exit = Some(status.into());
             self.child = None;
+            self.finish_readers()?;
         }
         Ok(ProcessStatus {
             configured: self.config.is_some(),
@@ -317,7 +342,57 @@ impl ProcessManager {
             },
             pid: self.child.as_ref().map(child_id),
             exit: self.exit.clone(),
+            log_cursor: self.log_cursor,
         })
+    }
+
+    // The owned tree has been terminated before joining, closing inherited pipes.
+    fn finish_readers(&mut self) -> Result<(), String> {
+        let mut panicked = false;
+        for reader in self.readers.drain(..) {
+            panicked |= reader.join().is_err();
+        }
+        if panicked {
+            Err("Game log reader panicked".to_owned())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Reads bounded logs without requiring a reachable BRP endpoint.
+    /// Attach-only mode cannot read another process's output.
+    pub fn game_logs(&mut self, query: &LogQuery) -> Result<GameLogResult, String> {
+        self.config.as_ref().ok_or("Game logs are only available for launched games; configure --game-cmd (attach-only mode cannot capture logs)")?;
+        let process = self.status()?;
+        Ok(GameLogResult {
+            page: self.logs.read(query)?,
+            process,
+        })
+    }
+
+    fn launch_diagnostics(&self) -> String {
+        let page = self
+            .logs
+            .read(&LogQuery {
+                max_lines: 50,
+                ..Default::default()
+            })
+            .expect("valid diagnostic query");
+        let mut text = format!(
+            "\nRecent game logs (dropped lines: {}, omitted lines: {}):",
+            page.dropped_lines, page.omitted_lines
+        );
+        for line in page
+            .lines
+            .iter()
+            .filter(|line| line.cursor > self.log_cursor.unwrap_or(0))
+        {
+            text.push_str(&format!("\n[{}] {}", line.stream, line.text));
+            if line.truncated_bytes > 0 {
+                text.push_str(&format!(" [truncated: {} bytes]", line.truncated_bytes));
+            }
+        }
+        text
     }
 
     /// Returns a process-specific diagnostic before attempting BRP after a crash.
@@ -364,21 +439,33 @@ impl ProcessManager {
             );
         }
         self.cancellation.check()?;
-        let child = spawn(
+        let mut child = spawn(
             config
                 .game
                 .command(&config.directory)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null()),
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped()),
         )
         .map_err(|e| format!("Launching configured game: {e}"))?;
+        self.log_cursor = Some(self.logs.cursor());
+        self.readers.push(self.logs.capture(
+            take_stdout(&mut child).expect("game stdout was piped"),
+            "stdout",
+        ));
+        self.readers.push(self.logs.capture(
+            take_stderr(&mut child).expect("game stderr was piped"),
+            "stderr",
+        ));
         self.child = Some(child);
         self.exit = None;
         let result = self.wait_ready(client, deadline);
         if let Err(error) = result {
-            self.stop()
-                .map_err(|cleanup| format!("{error}; cleanup failed: {cleanup}"))?;
-            return Err(error);
+            let cleanup = self.stop();
+            let diagnostics = self.launch_diagnostics();
+            return Err(match cleanup {
+                Ok(_) => format!("{error}{diagnostics}"),
+                Err(cleanup) => format!("{error}; cleanup failed: {cleanup}{diagnostics}"),
+            });
         }
         self.status()
     }
@@ -413,6 +500,7 @@ impl ProcessManager {
             let status = stop_child(child, timeout)?;
             self.exit = Some(status.into());
             self.child = None;
+            self.finish_readers()?;
         }
         self.status()
     }
