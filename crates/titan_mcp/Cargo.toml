@@ -40,6 +40,7 @@ process-wrap = { version = "10.0.1", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+async-channel = "2"
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_asset = { path = "../bevy_asset", version = "0.20.0" }
 bevy_diagnostic = { path = "../bevy_diagnostic", version = "0.20.0" }

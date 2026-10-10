@@ -5,9 +5,10 @@
 //! including when an assertion panics. Titan fixtures use the real `TitanRemotePlugin`.
 
 use std::{
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     net::{Ipv4Addr, TcpListener},
     process::{Child, Command, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -24,7 +25,7 @@ use bevy_input::{
     ButtonInput, ButtonState, InputPlugin,
 };
 use bevy_reflect::{Reflect, TypePath};
-use bevy_remote::{http::RemoteHttpPlugin, BrpReceiver, BrpResult, RemotePlugin};
+use bevy_remote::{http::RemoteHttpPlugin, BrpMessage, BrpReceiver, BrpResult, RemotePlugin};
 use bevy_time::{Time, TimePlugin, TimeUpdateStrategy, Virtual};
 use bevy_window::{CursorEntered, CursorMoved, PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
@@ -34,6 +35,15 @@ use titan_remote::TitanRemotePlugin;
 const FIXTURE_PORT: &str = "TITAN_MCP_TEST_BRP_PORT";
 const FIXTURE_TITAN: &str = "TITAN_MCP_TEST_TITAN";
 const WAIT: Duration = Duration::from_secs(10);
+// Many child fixtures initialize their task pools and HTTP listeners at once.
+// Startup has its own budget; input/step synchronization still uses WAIT.
+const STARTUP_WAIT: Duration = Duration::from_secs(60);
+const STARTUP_ATTEMPTS: usize = 3;
+const STARTUP_ATTEMPT_WAIT: Duration = Duration::from_secs(20);
+const STARTUP_PROBE_WAIT: Duration = Duration::from_secs(2);
+const LOG_TAIL_BYTES: u64 = 16 * 1024;
+// Only serialize startup, not the requests or assertions in ready fixtures.
+static FIXTURE_STARTUP: Mutex<()> = Mutex::new(());
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
@@ -274,7 +284,31 @@ struct WrapProbe {
 }
 
 #[derive(Resource, Default)]
-struct InputFrameGate(bool);
+struct InputFrameGate(Option<GatedRequests>);
+
+struct GatedRequests {
+    incoming: async_channel::Receiver<BrpMessage>,
+    staged: async_channel::Sender<BrpMessage>,
+}
+
+impl GatedRequests {
+    fn stage_next_request(&self) {
+        let deadline = Instant::now() + WAIT;
+        while self.incoming.is_empty() {
+            assert!(
+                Instant::now() < deadline,
+                "input test never queued its next request"
+            );
+            bevy_tasks::tick_global_task_pools_on_main_thread();
+            thread::sleep(Duration::from_millis(1));
+        }
+        // Only this loop consumes the HTTP mailbox or writes to the staged one.
+        // Later arrivals stay in incoming until the next complete app update.
+        self.staged
+            .try_send(self.incoming.try_recv().unwrap())
+            .unwrap();
+    }
+}
 
 fn arm_input_wrap(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     assert!(world.resource::<Time<Virtual>>().is_paused());
@@ -283,8 +317,14 @@ fn arm_input_wrap(In(params): In<Option<Value>>, world: &mut World) -> BrpResult
         .unwrap()
         .try_into()
         .unwrap();
+    assert!(world.resource::<InputFrameGate>().0.is_none());
     world.resource_mut::<FrameCount>().0 = frame;
-    world.resource_mut::<InputFrameGate>().0 = true;
+    let (staged, receiver) = async_channel::bounded(1);
+    // BRP sends responses before its mailbox drain finishes. Swap here, before
+    // the arming response can prompt another HTTP request in this same update.
+    // BrpSender still writes to the original mailbox, not the staged receiver.
+    let incoming = std::mem::replace(&mut **world.resource_mut::<BrpReceiver>(), receiver);
+    world.resource_mut::<InputFrameGate>().0 = Some(GatedRequests { incoming, staged });
     Ok(json!({"frame": frame}))
 }
 
@@ -341,10 +381,33 @@ fn queue_first_step_poll(
 /// Only invoked by `Fixture::start`, never as an ordinary test.
 #[test]
 #[ignore = "child-process fixture, launched by the other integration tests"]
+#[expect(
+    clippy::print_stderr,
+    reason = "child startup diagnostics are captured by the parent"
+)]
 fn brp_fixture_process() {
     let Ok(port) = std::env::var(FIXTURE_PORT) else {
         return;
     };
+    eprintln!(
+        "fixture pid={} port={port}: entered child",
+        std::process::id()
+    );
+    let port: u16 = port.parse().expect("fixture port");
+    // Diagnostic only: a successful preflight does not guarantee the later
+    // asynchronous bind. Release it before installing the real HTTP plugin.
+    match TcpListener::bind((Ipv4Addr::LOCALHOST, port)) {
+        Ok(listener) => {
+            drop(listener);
+            eprintln!("fixture: port preflight succeeded (not HTTP readiness)");
+        }
+        Err(error) => eprintln!(
+            "fixture: port preflight failed: kind={:?} os={:?}: {error}",
+            error.kind(),
+            error.raw_os_error(),
+        ),
+    }
+    eprintln!("fixture: initializing app and task pools");
     let mut app = App::new();
     app.add_plugins((TaskPoolPlugin::default(), InputPlugin))
         .register_type::<TestPosition>()
@@ -376,6 +439,7 @@ fn brp_fixture_process() {
     let mut secondary = Window::default();
     secondary.resolution.set_scale_factor(1.5);
     app.world_mut().spawn(secondary);
+    eprintln!("fixture: base app initialized; installing remote plugins");
     let mut remote = RemotePlugin::default();
     if std::env::var_os(FIXTURE_TITAN).is_some() {
         app.add_plugins((TimePlugin, FrameCountPlugin, TitanRemotePlugin))
@@ -393,29 +457,32 @@ fn brp_fixture_process() {
         remote,
         RemoteHttpPlugin::default()
             .with_address(Ipv4Addr::LOCALHOST)
-            .with_port(port.parse().expect("fixture port")),
+            .with_port(port),
     ));
+    eprintln!("fixture: finishing plugins");
     app.finish();
     app.cleanup();
+    eprintln!("fixture: entering update loop (HTTP startup runs in the first update)");
+    let mut updates = 0_u64;
+    let mut next_progress = Instant::now();
     loop {
-        if app
+        if let Some(gate) = app
             .world()
             .get_resource::<InputFrameGate>()
-            .is_some_and(|gate| gate.0)
+            .and_then(|gate| gate.0.as_ref())
         {
-            // Exactly one real update per HTTP request lets input barriers start
-            // at MAX and poll across zero, without relying on wall-clock timing.
-            let deadline = Instant::now() + WAIT;
-            while app.world().resource::<BrpReceiver>().is_empty() {
-                assert!(
-                    Instant::now() < deadline,
-                    "input test never queued its next request"
-                );
-                bevy_tasks::tick_global_task_pools_on_main_thread();
-                thread::sleep(Duration::from_millis(1));
-            }
+            // Exactly one BRP message per update puts input barriers at MAX
+            // and polls across zero, without relying on HTTP delivery timing.
+            gate.stage_next_request();
         }
         app.update();
+        updates += 1;
+        if Instant::now() >= next_progress {
+            // Distinguish an app stuck during initialization from one that keeps
+            // updating after the detached HTTP startup task was scheduled.
+            eprintln!("fixture: completed {updates} updates");
+            next_progress = Instant::now() + Duration::from_secs(5);
+        }
         let hide_finish = app
             .world()
             .get_resource::<WrapProbe>()
@@ -443,44 +510,163 @@ fn brp_fixture_process() {
 struct Fixture {
     child: Child,
     client: Client,
+    output: tempfile::NamedTempFile,
+    startup_failures: Vec<String>,
 }
 
 impl Fixture {
     fn start(titan: bool) -> Self {
-        // Use the OS-assigned ephemeral port rather than the default BRP port.
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let client = Client::new(&format!("http://127.0.0.1:{port}")).unwrap();
-        let mut command = Command::new(std::env::current_exe().unwrap());
-        command
-            .args(["--ignored", "--exact", "brp_fixture_process", "--nocapture"])
-            .env(FIXTURE_PORT, port.to_string())
-            .env_remove(FIXTURE_TITAN)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit());
-        if titan {
-            command.env(FIXTURE_TITAN, "1");
-        }
-        // RemoteHttpPlugin owns binding; release the reservation immediately
-        // before launching the child, keeping the unavoidable race small.
-        drop(listener);
-        let child = command.spawn().unwrap();
-        let mut fixture = Self { child, client };
-        let deadline = Instant::now() + WAIT;
-        loop {
-            if let Some(status) = fixture.child.try_wait().unwrap() {
-                panic!("headless BRP fixture exited before readiness: {status}");
+        Self::try_start(titan, |_, _, _| STARTUP_ATTEMPT_WAIT)
+            .unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    // The hook lets regression tests steal the released port or crash a child.
+    // Healthy test attempts retain the normal budget, even under CPU load.
+    #[expect(
+        clippy::print_stderr,
+        reason = "report failed and recovered fixture startup attempts"
+    )]
+    fn try_start(
+        titan: bool,
+        mut configure: impl FnMut(usize, u16, &mut Command) -> Duration,
+    ) -> Result<Self, String> {
+        // Hold the lock across all attempts, but not operations in ready apps.
+        let _startup = FIXTURE_STARTUP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let deadline = Instant::now() + STARTUP_WAIT;
+        let mut failures = Vec::new();
+        for attempt in 1..=STARTUP_ATTEMPTS {
+            if Instant::now() >= deadline {
+                break;
             }
-            match fixture.client.call("rpc.discover", None) {
-                Ok(_) => return fixture,
-                Err(error) => assert!(
-                    Instant::now() < deadline,
-                    "headless BRP fixture at port {port} did not become ready: {error}"
-                ),
+            let started = Instant::now();
+            // Reserve a fresh OS-selected port for each child. The real HTTP
+            // plugin cannot adopt this listener or report a port selected by 0.
+            let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let client = Client::new(&format!("http://127.0.0.1:{port}")).unwrap();
+            let output = tempfile::NamedTempFile::new().unwrap();
+            let writer = output.reopen().unwrap();
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args(["--ignored", "--exact", "brp_fixture_process", "--nocapture"])
+                .env(FIXTURE_PORT, port.to_string())
+                .env_remove(FIXTURE_TITAN)
+                .stdin(Stdio::null())
+                // Cloned handles share their write position. Separate opens for
+                // stdout/stderr could overwrite each other's diagnostics.
+                .stderr(Stdio::from(writer.try_clone().unwrap()))
+                .stdout(Stdio::from(writer));
+            if titan {
+                command.env(FIXTURE_TITAN, "1");
             }
-            thread::sleep(Duration::from_millis(20));
+            // Keep the reservation until just before the child is launched.
+            drop(listener);
+            let attempt_wait = configure(attempt, port, &mut command);
+            let child = command.spawn().unwrap();
+            let mut fixture = Self {
+                child,
+                client,
+                output,
+                startup_failures: Vec::new(),
+            };
+            let attempt_deadline = deadline.min(started + attempt_wait);
+            let mut last_error = "readiness deadline expired before the first probe".to_owned();
+            loop {
+                if let Some(status) = fixture.child.try_wait().unwrap() {
+                    failures.push(fixture.startup_diagnostic(
+                        attempt,
+                        port,
+                        started,
+                        &format!("exited before readiness: {status}"),
+                    ));
+                    return Err(format!(
+                        "headless BRP fixture exited before readiness (not retried):\n{}",
+                        failures.join("\n"),
+                    ));
+                }
+                // Do not replace the last useful transport error with a new
+                // call's generic 'timed out before request' after expiry.
+                if Instant::now() >= attempt_deadline {
+                    break;
+                }
+                match fixture.client.call_with_deadline(
+                    "rpc.discover",
+                    None,
+                    attempt_deadline.min(Instant::now() + STARTUP_PROBE_WAIT),
+                ) {
+                    Ok(_) => {
+                        if !failures.is_empty() {
+                            eprintln!(
+                                "headless BRP fixture recovered on attempt {attempt}/{STARTUP_ATTEMPTS}: pid={} port={port} test={}",
+                                fixture.child.id(), thread::current().name().unwrap_or("unnamed"),
+                            );
+                        }
+                        fixture.startup_failures = failures;
+                        return Ok(fixture);
+                    }
+                    Err(error) => last_error = error,
+                }
+                thread::sleep(
+                    Duration::from_millis(20)
+                        .min(attempt_deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+            // A failed detached bind can leave the app alive forever. Reap it
+            // before inspecting its output and reserving another port; longer
+            // polling of that same child cannot recover its HTTP listener.
+            let cleanup = fixture.stop();
+            let failure = fixture.startup_diagnostic(
+                attempt,
+                port,
+                started,
+                &format!("{last_error}; cleanup: {cleanup:?}"),
+            );
+            failures.push(failure.clone());
+            if cleanup.is_err() {
+                return Err(format!(
+                    "headless BRP fixture cleanup failed (not retried):\n{}",
+                    failures.join("\n"),
+                ));
+            }
+            eprintln!("headless BRP fixture startup attempt failed:\n{failure}");
         }
+        Err(format!(
+            "headless BRP fixture did not become ready after {} attempts (overall budget {STARTUP_WAIT:?}):\n{}",
+            failures.len(),
+            failures.join("\n"),
+        ))
+    }
+
+    fn stop(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        if let Some(status) = self.child.try_wait()? {
+            return Ok(status);
+        }
+        if let Err(error) = self.child.kill() {
+            // The child may have exited between try_wait and kill.
+            if let Some(status) = self.child.try_wait()? {
+                return Ok(status);
+            }
+            return Err(error);
+        }
+        self.child.wait()
+    }
+
+    fn startup_diagnostic(
+        &self,
+        attempt: usize,
+        port: u16,
+        started: Instant,
+        error: &str,
+    ) -> String {
+        format!(
+            "attempt {attempt}/{STARTUP_ATTEMPTS}: pid={} port={port} test={} elapsed={:?}: {error}\nchild stdout/stderr tail:\n{}",
+            self.child.id(),
+            thread::current().name().unwrap_or("unnamed"),
+            started.elapsed(),
+            read_log_tail(&self.output),
+        )
     }
 
     fn tool(&self, name: &str, args: Value) -> Value {
@@ -502,9 +688,129 @@ impl Fixture {
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = self.stop();
+        if thread::panicking() {
+            // Capture does not hide runtime child failures when a parent test
+            // panics. Diagnostic I/O must not cause another panic during Drop.
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "headless BRP fixture pid={} stdout/stderr tail:\n{}",
+                self.child.id(),
+                read_log_tail(&self.output),
+            );
+        }
     }
+}
+
+/// Reads a bounded suffix without moving the child's stdout/stderr write offset.
+fn read_log_tail(output: &tempfile::NamedTempFile) -> String {
+    let read = || -> std::io::Result<String> {
+        let mut file = output.reopen()?;
+        let start = file.metadata()?.len().saturating_sub(LOG_TAIL_BYTES);
+        file.seek(SeekFrom::Start(start))?;
+        let mut bytes = Vec::new();
+        file.take(LOG_TAIL_BYTES).read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    };
+    read().unwrap_or_else(|error| format!("could not read child output: {error}"))
+}
+
+#[test]
+fn fixture_startup_retries_a_stolen_port_with_a_fresh_child() {
+    let mut occupied = None;
+    let mut ports = Vec::new();
+    let fixture = Fixture::try_start(false, |attempt, port, _| {
+        ports.push(port);
+        if attempt == 1 {
+            // Win the real reservation-release race. Keep this listener bound
+            // through recovery, so the detached HTTP task cannot ever recover.
+            occupied = Some(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap());
+            Duration::from_secs(1)
+        } else {
+            STARTUP_ATTEMPT_WAIT
+        }
+    })
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert!((2..=STARTUP_ATTEMPTS).contains(&ports.len()));
+    assert_eq!(fixture.startup_failures.len(), ports.len() - 1);
+    assert!(ports[1..].iter().all(|port| *port != ports[0]));
+    assert!(fixture.startup_failures[0].contains(&format!("port={}", ports[0])));
+    assert!(fixture.startup_failures[0].contains("child stdout/stderr tail:"));
+    assert_eq!(
+        fixture.query(json!({"components": ["TestPosition"]})).len(),
+        2
+    );
+}
+
+#[test]
+fn fixture_startup_exhaustion_reports_every_attempt() {
+    let mut occupied = Vec::new();
+    let mut ports = Vec::new();
+    let result = Fixture::try_start(false, |_, port, _| {
+        ports.push(port);
+        occupied.push(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).unwrap());
+        Duration::from_secs(1)
+    });
+    let Err(error) = result else {
+        panic!("occupied ports must not become ready");
+    };
+    assert_eq!(ports.len(), STARTUP_ATTEMPTS);
+    for (index, port) in ports.iter().enumerate() {
+        assert!(
+            error.contains(&format!("attempt {}/{STARTUP_ATTEMPTS}:", index + 1)),
+            "{error}"
+        );
+        assert!(error.contains(&format!("port={port}")), "{error}");
+    }
+    assert_eq!(
+        error.matches("child stdout/stderr tail:").count(),
+        STARTUP_ATTEMPTS
+    );
+    assert!(error.contains("overall budget 60s"), "{error}");
+}
+
+#[test]
+fn fixture_startup_crash_is_not_retried_and_preserves_child_output() {
+    let mut attempts = 0;
+    let result = Fixture::try_start(false, |_, _, command| {
+        attempts += 1;
+        command.env(FIXTURE_PORT, "invalid-port");
+        STARTUP_ATTEMPT_WAIT
+    });
+    let Err(error) = result else {
+        panic!("invalid port must crash the child");
+    };
+    assert_eq!(attempts, 1);
+    assert!(
+        error.contains("exited before readiness (not retried)"),
+        "{error}"
+    );
+    assert!(error.contains("entered child"), "{error}");
+    assert!(error.contains("fixture port"), "{error}");
+    assert!(error.contains("panicked"), "{error}");
+}
+
+#[test]
+fn fixture_output_tail_is_bounded_and_does_not_move_the_writers() {
+    let output = tempfile::NamedTempFile::new().unwrap();
+    let mut stdout = output.reopen().unwrap();
+    let mut stderr = stdout.try_clone().unwrap();
+    writeln!(stdout, "stdout marker").unwrap();
+    writeln!(stderr, "stderr marker").unwrap();
+    let tail = read_log_tail(&output);
+    assert!(tail.contains("stdout marker"));
+    assert!(tail.contains("stderr marker"));
+
+    stdout
+        .write_all(&vec![b'x'; LOG_TAIL_BYTES as usize * 2])
+        .unwrap();
+    stderr.write_all(b"final stderr").unwrap();
+    let tail = read_log_tail(&output);
+    assert_eq!(tail.len(), LOG_TAIL_BYTES as usize);
+    assert!(tail.ends_with("final stderr"));
+    // Reading independently must not seek the shared stdout/stderr offset.
+    stdout.write_all(b"final stdout").unwrap();
+    assert!(read_log_tail(&output).ends_with("final stderrfinal stdout"));
 }
 
 fn eventually(mut predicate: impl FnMut() -> bool) {
@@ -1271,6 +1577,63 @@ fn titan_input_barriers_work_while_real_virtual_time_is_paused() {
     let after = fixture.time_trace();
     assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
     assert_eq!(after["unpaused_updates"], frozen["unpaused_updates"]);
+}
+
+#[test]
+fn input_frame_gate_isolates_arming_and_each_queued_request() {
+    let mut app = App::new();
+    app.add_plugins((
+        TimePlugin,
+        FrameCountPlugin,
+        TitanRemotePlugin,
+        RemotePlugin::default().with_method_main("test.arm_input_wrap", arm_input_wrap),
+    ))
+    .init_resource::<InputFrameGate>();
+    app.finish();
+    app.cleanup();
+    app.update(); // Initialize the real BRP mailbox.
+    app.world_mut().resource_mut::<Time<Virtual>>().pause();
+
+    let queue = |method: &str, params: Option<Value>| {
+        let (sender, response) = async_channel::bounded(1);
+        app.world()
+            .resource::<bevy_remote::BrpSender>()
+            .try_send(BrpMessage {
+                method: method.to_owned(),
+                params,
+                sender,
+            })
+            .unwrap();
+        response
+    };
+    // Prequeue a burst so even the arming update must not drain the follow-ups.
+    // No child startup, HTTP scheduling, or sleeps are needed to expose the bug.
+    let armed = queue("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 1})));
+    let first = queue("titan.status", None);
+    let second = queue("titan.status", None);
+    app.update();
+    assert_eq!(armed.try_recv().unwrap().unwrap()["frame"], u32::MAX - 1);
+    assert!(first.is_empty());
+    assert!(second.is_empty());
+
+    app.world()
+        .resource::<InputFrameGate>()
+        .0
+        .as_ref()
+        .unwrap()
+        .stage_next_request();
+    app.update();
+    assert_eq!(paused_frame(&first.try_recv().unwrap().unwrap()), u32::MAX);
+    assert!(second.is_empty());
+
+    app.world()
+        .resource::<InputFrameGate>()
+        .0
+        .as_ref()
+        .unwrap()
+        .stage_next_request();
+    app.update();
+    assert_eq!(paused_frame(&second.try_recv().unwrap().unwrap()), 0);
 }
 
 #[test]
