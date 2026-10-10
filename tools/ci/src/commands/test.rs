@@ -6,6 +6,10 @@ use xshell::cmd;
 #[derive(FromArgs, Default)]
 #[argh(subcommand, name = "test")]
 pub struct TestCommand {
+    /// compile tests and benchmarks without running them
+    #[argh(switch)]
+    pub no_run: bool,
+
     /// skip compiling and running benchmarks
     #[argh(switch)]
     pub skip_benches: bool,
@@ -14,6 +18,7 @@ pub struct TestCommand {
 impl Prepare for TestCommand {
     fn prepare<'a>(&self, sh: &'a xshell::Shell, args: Args) -> Vec<PreparedCommand<'a>> {
         let no_fail_fast = args.keep_going();
+        let no_run = self.no_run.then_some("--no-run");
         let jobs = args.build_jobs();
         let test_threads = args.test_threads();
 
@@ -26,7 +31,7 @@ impl Prepare for TestCommand {
         let mut commands = vec![PreparedCommand::new::<Self>(
             cmd!(
                 sh,
-                "cargo test --workspace --lib --bins --tests --features bevy_ecs/track_location {no_fail_fast...} {jobs_ref...} -- {test_threads_ref...}"
+                "cargo test --workspace --lib --bins --tests --features bevy_ecs/track_location {no_run...} {no_fail_fast...} {jobs_ref...} -- {test_threads_ref...}"
             ),
             "Please fix failing tests in output above.",
         )];
@@ -37,7 +42,7 @@ impl Prepare for TestCommand {
                     sh,
                     // `--benches` runs each benchmark once in order to verify that they behave
                     // correctly and do not panic.
-                    "cargo test --workspace --benches {no_fail_fast...} {jobs...}"
+                    "cargo test --workspace --benches {no_run...} {no_fail_fast...} {jobs...}"
                 ),
                 "Please fix failing tests in output above.",
             ));
@@ -84,6 +89,27 @@ mod tests {
             default_commands[0].command.to_string()
         );
         assert_eq!(sh.var("RUST_BACKTRACE").unwrap(), "1");
+    }
+
+    #[test]
+    fn no_run_warms_the_same_test_and_bench_targets() {
+        let ci = CI::from_args(&["ci"], &[]).unwrap();
+        let sh = xshell::Shell::new().unwrap();
+        let command = TestCommand::from_args(&["ci", "test"], &["--no-run"]).unwrap();
+        let commands = command.prepare(&sh, (&ci).into());
+
+        assert_eq!(commands.len(), 2);
+        assert_eq!(
+            commands[0].command.to_string(),
+            "cargo test --workspace --lib --bins --tests --features bevy_ecs/track_location --no-run --"
+        );
+        assert_eq!(
+            commands[1].command.to_string(),
+            "cargo test --workspace --benches --no-run"
+        );
+        let command =
+            TestCommand::from_args(&["ci", "test"], &["--no-run", "--skip-benches"]).unwrap();
+        assert_eq!(command.prepare(&sh, (&ci).into()).len(), 1);
     }
 
     #[test]

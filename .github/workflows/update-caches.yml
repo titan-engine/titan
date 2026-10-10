@@ -54,13 +54,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # Keep one entry per OS/toolchain/target restore prefix. On 2026-10-09,
-      # the latest entries totaled ~5.3 GB (11 populated prefixes including apt,
-      # out of 13 produced). The two native nightly caches were absent due to
-      # build failures. Budget ~1.3 GB for them: ~6.6 GB estimated steady state,
-      # leaving ~3.4 GB below GitHub's 10 GB limit for replacements and #47's
-      # larger test caches. Remeasure the complete set after #47: the <7 GB target
-      # is not yet measured, and pruning bounds generations, not cache sizes.
+      # Save-before-prune temporarily keeps two generations of one prefix.
+      # Serialize replacements so several large test caches cannot overlap.
+      max-parallel: 1
+      # Keep one generation per OS/toolchain/target restore prefix. Native test
+      # executables need more space than the old Bevy-only cache. Match MSRV's
+      # check-only consumer and Miri's registry-only needs to preserve headroom;
+      # keep native stable dev builds for the example/codegen consumers.
+      # Compressed-size measurements and replacement headroom are in PR #57.
       matrix:
         include:
           # ci.yml / build (ubuntu-latest), ci, check-compiles, check-doc, ...;
@@ -69,26 +70,33 @@ jobs:
           - os: ubuntu-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v3
           # ci.yml / build (macos-latest); example-run.yml / run-examples-macos-metal
           - os: macos-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v3
           # ci.yml / build (windows-latest); example-run.yml / run-examples-on-windows-dx12
           - os: windows-latest
             toolchain: stable
             target: ""
+            cache-suffix: -workspace-tests-v3
           # validation-jobs.yml / check-unused-dependencies
           - os: ubuntu-latest
             toolchain: nightly
             target: ""
-          # ci.yml / msrv restores this exact toolchain, not stable.
+          # ci.yml / msrv runs cargo check, not a native codegen build.
           - os: ubuntu-latest
             toolchain: ${{ needs.env.outputs.MSRV }}
             target: ""
-          # ci.yml / miri
+            cache-suffix: -check-v1
+            command: cargo check
+          # Miri interprets bevy_ecs; native Bevy codegen artifacts are unused.
           - os: macos-latest
             toolchain: nightly
             target: ""
+            cache-suffix: -miri-registry-v1
+            command: cargo fetch
           # ci.yml / build-wasm-atomics
           - os: ubuntu-latest
             toolchain: nightly
@@ -168,7 +176,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          # The suffix invalidates the old recipe even on a same-day rerun;
+          # consumer restore prefixes and cache paths remain compatible.
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
           # Manual runs restore caches but still build to validate the selected revision.
           lookup-only: ${{ github.event_name != 'workflow_dispatch' }}
 
@@ -185,25 +195,48 @@ jobs:
           x264: true
           fontconfig: true
 
-      # Build Bevy for the dev profile, used by check, doc, ...
+      # Keep native dev artifacts for example builds and other codegen consumers.
       - name: Build dev cache
-        if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        if: matrix.target == '' && matrix.command == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile dev --package bevy
 
-      # Build Bevy for the test profile, used by test
+      # Match ci.yml / build and tools/ci/src/commands/test.rs, without running
+      # tests. Warm the CI runner too, so a leaf change does not rebuild it.
+      - name: Build workspace test cache
+        if: matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        # cargo run also injects package environment variables. ring's build
+        # script watches these, so a direct cargo test warm is not equivalent.
+        run: cargo run -p ci -- test --no-run --skip-benches
+
+      # Since #46, only Linux compiles and runs the benchmark smoke tests.
+      - name: Build workspace bench cache
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: cargo run -p ci -- test --no-run
+
+      # Preserve the non-stable native cache recipe for its other consumers.
       - name: Build test cache
-        if: matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        if: matrix.toolchain != 'stable' && matrix.target == '' && matrix.command == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: cargo build --profile test --package bevy
 
-      - name: Build cross-target cache
+      - name: Build specialized cache
         if: matrix.command != '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
         run: ${{ matrix.command }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || env.RUSTFLAGS }}
 
+      # Cargo uses source mtimes for freshness. A fresh consumer checkout is
+      # newer than the build, so retain mtimes together with content hashes.
+      - name: Record cached source timestamps
+        if: matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: node .github/scripts/cache-source-mtimes.cjs save
+
       - name: Save cache
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Keep all test executables with moderately denser compression.
+        # Non-native caches retain the default level; paths/version are unchanged.
+        env:
+          ZSTD_CLEVEL: ${{ matrix.toolchain == 'stable' && matrix.target == '' && '10' || '3' }}
         with:
           path: |
             ~/.cargo/bin/
@@ -211,7 +244,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
 
       # Also prune on an exact hit, so a rerun can finish interrupted cleanup.
       # Keep producer/consumer paths in sync. Mixed cache versions are left
@@ -221,7 +254,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           CACHE_PREFIX: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-
-          CACHE_KEY: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}
+          CACHE_KEY: ${{ runner.os }}-${{ matrix.toolchain }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ steps.get-date.outputs.date }}${{ matrix.cache-suffix }}
         with:
           script: |
             const { prune } = require('./.github/scripts/prune-actions-caches.cjs');
