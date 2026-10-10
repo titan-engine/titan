@@ -3,8 +3,11 @@
 # Use all Titan workspace members, not just changed ones: they consume each other.
 set -euo pipefail
 mode=${1:?usage: titan-scoped-ci.sh lints|doc|test}
+# Native Windows jq writes CRLF even when invoked from Git Bash. Normalize the
+# text boundary before read builds package arguments; JSON itself accepts CRLF.
 crates=$(cargo metadata --no-deps --format-version 1 \
-  | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' | sort)
+  | jq -r '.packages[] | select(.name | startswith("titan_")) | .name' \
+  | tr -d '\r' | sort)
 if [[ -z "$crates" ]]; then
   echo '::error::No titan_* workspace crates found' >&2
   exit 1

@@ -30,19 +30,21 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
       run: |
+        set -euo pipefail
         # Start with full coverage. Script errors or malformed outputs must never
         # turn into a successful empty output and skip consumers.
         selection=$'upstream=true\ntitan=true\ndocs=true'
         ecs=true
         pattern=$'^upstream=(true|false)\ntitan=(true|false)\ndocs=(true|false)$'
         if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == merge_group ]]; then
-          if detected=$(bash .github/scripts/ci-paths-changed.sh "$BASE_SHA" "$HEAD_SHA") &&
+          # Normalize line-oriented results, not the NUL-delimited Git paths.
+          if detected=$(bash .github/scripts/ci-paths-changed.sh "$BASE_SHA" "$HEAD_SHA" | tr -d '\r') &&
             [[ "$detected" =~ $pattern ]]; then
             selection=$detected
           fi
           # Any .github/ or unknown-path change must run everything, including Miri.
           if [[ "$selection" == upstream=false* ]]; then
-            if detected=$(bash .github/scripts/miri-paths-changed.sh "$BASE_SHA" "$HEAD_SHA") &&
+            if detected=$(bash .github/scripts/miri-paths-changed.sh "$BASE_SHA" "$HEAD_SHA" | tr -d '\r') &&
               [[ "$detected" == true || "$detected" == false ]]; then
               ecs=$detected
             fi

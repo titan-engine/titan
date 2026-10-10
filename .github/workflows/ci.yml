@@ -546,8 +546,8 @@ jobs:
       - name: get MSRV
         id: msrv
         run: |
-          msrv=`cargo metadata --no-deps --format-version 1 | jq --raw-output '.packages[] | select(.name=="bevy") | .rust_version'`
-          echo "msrv=$msrv" >> $GITHUB_OUTPUT
+          msrv=$(cargo metadata --no-deps --format-version 1 | jq --raw-output '.packages[] | select(.name=="bevy") | .rust_version' | tr -d '\r')
+          echo "msrv=$msrv" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/install-rust
         with:
           channel: ${{ steps.msrv.outputs.msrv }}

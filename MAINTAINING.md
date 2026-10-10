@@ -125,7 +125,10 @@ needed; their own tests and Bevy-wide platform builds are not run on this fast
 path. Titan-only merge groups retain scoped Windows/macOS default-feature tests
 under the existing `build (windows-latest)` and `build (macos-latest)` names.
 Those two checks stay skipped for Titan-only PRs, as before; upstream-affecting
-PRs run them in full.
+PRs run them in full. Normalize carriage returns at line-oriented tool-output
+boundaries (native Windows `jq -r` emits CRLF under Git Bash) before assembling
+package arguments or comparing classifier outputs. Do not normalize Git's
+NUL-delimited paths: carriage returns can be part of a real filename.
 
 Pushes to `main` and `release-*`, the daily scheduled runs, and manual dispatches
 of these four workflows always run full coverage. Miri's daily coverage comes
@@ -136,8 +139,13 @@ branch). A re-run of a PR run keeps its original classification; it is not a
 force-full override. Upstream-affecting PRs now run the same full job selection
 as merge groups, including platforms previously deferred until the queue.
 Screenshot comparisons still only run outside PRs, after their producer succeeds.
-The independent security/dependency/cache workflows keep their existing policy;
-consolidating their jobs is a separate follow-up, not part of this fast path.
+The independent security/dependency workflows keep their existing policy.
+The existing cache-maintenance test matrix also checks scoped Cargo argument
+construction with native jq and forced LF/CRLF output on Linux, macOS and
+Windows, without adding jobs or compiling Rust. Its path list includes the
+scoped script and regression test so parser-only changes exercise Windows in
+PR CI even when the production scoped Windows job is skipped. Consolidating
+these jobs is a separate follow-up, not part of this fast path.
 
 Validate changes without compiling Rust:
 
@@ -153,7 +161,8 @@ The tests cover Titan, upstream, mixed, docs, shared CI/build configuration,
 unknown paths, deletions, renames, unusual filenames, diverged PR bases,
 multiple merge-group entries and fail-safe behavior. They also execute the
 composite action's actual selection shell block for diff/non-diff events,
-script failures and malformed outputs, and verify scoped Cargo command flags.
+script failures, malformed outputs and CRLF results, and verify scoped Cargo
+command flags with both LF and CRLF metadata/jq output.
 Run real full CI when changing this shared infrastructure. To demonstrate the
 fast path before it lands, open a temporary PR against a branch containing the
 implementation in an Actions-enabled fork, with only a Titan-path change in

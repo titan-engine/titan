@@ -15,7 +15,7 @@ printf 'original\n' > crates/bevy_ecs/src/lib.rs
 printf 'original\n' > crates/titan_test/src/lib.rs
 git add .
 git commit -qm base
-base=$(git rev-parse HEAD)
+base=$(git rev-parse HEAD | tr -d '\r')
 full=$'upstream=true\ntitan=true\ndocs=true'
 titan=$'upstream=false\ntitan=true\ndocs=false'
 docs=$'upstream=false\ntitan=false\ndocs=true'
@@ -42,7 +42,7 @@ for path in \
   Cargo.toml Cargo.lock .cargo/config.toml rust-toolchain.toml rustfmt.toml \
   deny.toml .github/workflows/ci.yml .github/actions/a/action.yml \
   .github/scripts/a.sh .github/README.md unknown.rs assets/shader.wgsl \
-  crates/titan_lookalike.rs crates/not_titan/src/lib.rs; do
+  crates/titan_lookalike.rs crates/not_titan/src/lib.rs $'README.m\rd'; do
   git reset --hard -q "$base"
   mkdir -p "$(dirname "$path")"
   printf 'changed\n' > "$path"
@@ -100,7 +100,7 @@ assert_selection "$full"
 git checkout -qb base-branch "$base"
 printf 'base change\n' > crates/bevy_ecs/src/lib.rs
 git commit -qam base-change
-new_base=$(git rev-parse HEAD)
+new_base=$(git rev-parse HEAD | tr -d '\r')
 git checkout -qb titan-branch "$base"
 printf 'titan change\n' > crates/titan_test/src/lib.rs
 git commit -qam titan-change
@@ -148,11 +148,20 @@ assert_action merge_group "$titan"$'\necs=false'
 for event in push schedule workflow_dispatch unknown-event; do
   assert_action "$event" "$full"$'\necs=true'
 done
-printf 'exit 1\n' > .github/scripts/ci-paths-changed.sh
+# CRLF is accepted at the action's exact-string comparison boundary, but never
+# propagated into GITHUB_OUTPUT. A failing producer must still fail safe even
+# if it printed a syntactically valid scoped result before exiting.
+printf "printf 'upstream=false\\\\r\\\\ntitan=true\\\\r\\\\ndocs=false\\\\r\\\\n'\n" > .github/scripts/ci-paths-changed.sh
+printf "printf 'false\\\\r\\\\n'\n" > .github/scripts/miri-paths-changed.sh
+assert_action pull_request "$titan"$'\necs=false'
+assert_action merge_group "$titan"$'\necs=false'
+printf "printf 'upstream=true\\\\r\\\\ntitan=true\\\\r\\\\ndocs=true\\\\r\\\\n'\n" > .github/scripts/ci-paths-changed.sh
+assert_action pull_request "$full"$'\necs=true'
+printf "printf 'upstream=false\\\\r\\\\ntitan=true\\\\r\\\\ndocs=false\\\\r\\\\n'\nexit 1\n" > .github/scripts/ci-paths-changed.sh
 assert_action pull_request "$full"$'\necs=true'
 printf "printf 'upstream=false\\\\ntitan=false\\\\ndocs=invalid\\\\n'\n" > .github/scripts/ci-paths-changed.sh
 assert_action merge_group "$full"$'\necs=true'
 cp "$script_dir/ci-paths-changed.sh" .github/scripts/
-printf 'exit 1\n' > .github/scripts/miri-paths-changed.sh
+printf "printf 'false\\\\r\\\\n'\nexit 1\n" > .github/scripts/miri-paths-changed.sh
 assert_action pull_request "$titan"$'\necs=true'
 echo 'CI classifier and action fail-safe tests passed'
