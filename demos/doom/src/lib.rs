@@ -1,10 +1,17 @@
-//! Headless, fixed-tick first-person exploration of an authored grid level.
+//! Headless, fixed-tick first-person gameplay in an authored grid level.
 //!
 //! Insert a [`Level`] before adding [`GameplayPlugin`]. A renderer can supply
-//! held [`GameplayActions::movement`] and accumulate [`GameplayActions::look_delta`].
+//! held [`GameplayActions::movement`], accumulate [`GameplayActions::look_delta`],
+//! and use the same fire, interaction, and restart actions as headless scenarios.
 //! Run Bevy's `FixedUpdate` at [`FIXED_HZ`] (using `Time<Fixed>::from_hz`), or
 //! invoke `world.run_schedule(FixedUpdate)` directly in a headless test.
-//! No window, renderer, combat, or entity identity is part of this simulation.
+//! No window, renderer, or runtime entity identity is required by this simulation.
+
+mod combat;
+pub use combat::{
+    CombatState, EnemyState, GamePhase, GameplayEvent, GameplayObject, GameplayOutcome,
+    FIRE_COOLDOWN, MAX_AMMO, MAX_HEALTH, SHOT_DAMAGE,
+};
 
 use std::collections::HashSet;
 
@@ -24,12 +31,24 @@ const MAX_OBJECTS: usize = 1024;
 const PITCH_LIMIT: f32 = PI / 2.0 - 0.01;
 
 /// A supported non-geometric object authored separately from the grid.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Reflect, PartialEq, Eq)]
 pub enum ObjectKind {
     /// The unique initial player pose.
     Spawn,
     /// A passive landmark; it has no collision or gameplay interaction.
     Marker,
+    /// A simple chasing billboard opponent.
+    Enemy,
+    /// A single-use health pack.
+    Health,
+    /// A single-use ammo pack.
+    Ammo,
+    /// The reusable red door key.
+    RedKey,
+    /// A locked, full-cell door; position must be a cell center.
+    RedDoor,
+    /// A walk-over exit trigger.
+    Exit,
 }
 
 /// An authored placement with an identity independent of ECS entity allocation.
@@ -173,6 +192,7 @@ impl Level {
         if level.collides(spawn.position) {
             return Err(LevelError("spawn lacks player-radius clearance".into()));
         }
+        combat::validate_objects(&level)?;
         Ok(level)
     }
 
@@ -273,7 +293,7 @@ pub struct PlayerState {
     pub yaw: f32,
     /// Vertical aim in radians; positive looks up, clamped away from ±π/2.
     pub pitch: f32,
-    /// Number of completed simulation ticks since plugin installation.
+    /// Completed playing ticks since installation or restart; freezes on death/win.
     pub tick: u64,
 }
 
@@ -285,6 +305,12 @@ pub struct GameplayActions {
     pub movement: Vec2,
     /// Accumulated `(yaw, pitch)` radians, consumed once at the next fixed tick.
     pub look_delta: Vec2,
+    /// Held trigger; fires whenever the weapon's cooldown expires.
+    pub fire: bool,
+    /// Pending door interaction, consumed once by the next fixed tick.
+    pub interact: bool,
+    /// Pending clean restart, consumed once by the next fixed tick.
+    pub restart: bool,
 }
 
 /// A deterministic snapshot without renderer or ECS entity identities.
@@ -294,6 +320,8 @@ pub struct GameplayObservation {
     pub player: PlayerState,
     /// Authored object IDs sorted lexicographically, independent of entity order.
     pub object_ids: Vec<String>,
+    /// Gameplay stats, stable object states, and latest tick's structured outcomes.
+    pub combat: CombatState,
 }
 
 impl GameplayObservation {
@@ -309,15 +337,17 @@ impl GameplayObservation {
         Self {
             player: world.resource::<PlayerState>().clone(),
             object_ids,
+            combat: world.resource::<CombatState>().clone(),
         }
     }
 }
 
 /// Install the headless simulation; a validated [`Level`] must already be inserted.
 ///
-/// Initializes [`PlayerState`] from the unique spawn and installs the gameplay
-/// system in `FixedUpdate`. Does not install window, render, or time plugins.
-/// Replacing the level after installation does not reset the player.
+/// Initializes [`PlayerState`] and [`CombatState`] from the authored level and
+/// installs gameplay in `FixedUpdate`. Does not install window, render, or time
+/// plugins. Use [`GameplayActions::restart`] for a clean reset; replacing the
+/// level alone does not reset gameplay.
 pub struct GameplayPlugin;
 
 impl Plugin for GameplayPlugin {
@@ -335,7 +365,16 @@ impl Plugin for GameplayPlugin {
             pitch: 0.0,
             tick: 0,
         };
-        app.insert_resource(player)
+        let combat = CombatState::new(app.world().resource::<Level>());
+        app.insert_resource(combat)
+            .register_type::<CombatState>()
+            .register_type::<GameplayObject>()
+            .register_type::<ObjectKind>()
+            .register_type::<EnemyState>()
+            .register_type::<GamePhase>()
+            .register_type::<GameplayEvent>()
+            .register_type::<GameplayOutcome>()
+            .insert_resource(player)
             .init_resource::<GameplayActions>()
             .register_type::<PlayerState>()
             .register_type::<GameplayActions>()
@@ -351,7 +390,18 @@ fn fixed_gameplay(
     level: Res<Level>,
     mut actions: ResMut<GameplayActions>,
     mut player: ResMut<PlayerState>,
+    mut combat: ResMut<CombatState>,
 ) {
+    combat.events.clear();
+    if core::mem::take(&mut actions.restart) {
+        combat::restart(&level, &mut player, &mut actions, &mut combat);
+        return;
+    }
+    let interact = core::mem::take(&mut actions.interact);
+    if combat.phase != GamePhase::Playing {
+        actions.look_delta = Vec2::ZERO;
+        return;
+    }
     let look = core::mem::take(&mut actions.look_delta);
     // Ignore invalid input components, and wrap before addition so even finite
     // extreme input cannot overflow or poison the simulation state.
@@ -372,8 +422,11 @@ fn fixed_gameplay(
     let right = Vec2::new(cos, -sin);
     let forward = Vec2::new(-sin, -cos);
     let displacement = (right * movement.x + forward * movement.y) * (MOVE_SPEED / FIXED_HZ as f32);
-    level.move_player(&mut player.position, displacement);
+    combat
+        .solid_level(&level)
+        .move_player(&mut player.position, displacement);
     player.tick += 1;
+    combat::tick(&level, &player, actions.fire, interact, &mut combat);
 }
 
 #[cfg(test)]
@@ -401,6 +454,7 @@ mod tests {
         *app.world_mut().resource_mut::<GameplayActions>() = GameplayActions {
             movement,
             look_delta,
+            ..default()
         };
         for _ in 0..ticks {
             app.world_mut().run_schedule(FixedUpdate);
@@ -418,7 +472,7 @@ mod tests {
     fn bundled_level_and_outside_are_solid() {
         let level = Level::demo();
         assert_eq!((level.width(), level.height()), (17, 13));
-        assert_eq!(level.objects().len(), 2);
+        assert_eq!(level.objects().len(), 10);
         assert_eq!(level.objects()[0].id, "player-spawn");
         assert!(!level.is_wall(8, 5));
         assert!(level.is_wall(8, 4));
@@ -500,7 +554,7 @@ mod tests {
             SPAWN.replace("(2.5, 2.5)", "(NaN, 2.5)"),
             SPAWN.replace("(2.5, 2.5)", "(inf, 2.5)"),
             SPAWN.replace("yaw: 0.0", "yaw: inf"),
-            SPAWN.replace("Spawn", "Door"),
+            SPAWN.replace("Spawn", "Unknown"),
             SPAWN.replace("yaw: 0.0", "yaw: 0.0, mystery: 1"),
             vec![SPAWN; MAX_OBJECTS + 1].join(","),
         ] {
@@ -605,7 +659,7 @@ mod tests {
     }
 
     fn corridor_route(extra_entities: usize) -> Vec<GameplayObservation> {
-        let mut app = app(Level::demo());
+        let mut app = app(Level::parse(include_str!("../tests/foundation.ron")).unwrap());
         for _ in 0..extra_entities {
             app.world_mut().spawn_empty();
         }
