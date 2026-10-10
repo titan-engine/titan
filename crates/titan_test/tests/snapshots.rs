@@ -25,9 +25,15 @@ struct StableKey {
     number: u32,
 }
 
-#[derive(Component, Resource, Reflect)]
-#[reflect(Component, Resource)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 struct Noise {
+    value: f64,
+}
+
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+struct ResourceNoise {
     value: f64,
 }
 
@@ -95,7 +101,8 @@ fn golden_subprocess_worker() {
     let mut sim = Sim::new(|app| {
         app.register_type::<Health>()
             .register_type::<StableKey>()
-            .register_type::<Noise>();
+            .register_type::<Noise>()
+            .register_type::<ResourceNoise>();
         if option("SHIFT", "0") == "1" {
             app.world_mut()
                 .spawn((Name::new("unrelated"), Noise { value: noise }));
@@ -122,7 +129,8 @@ fn golden_subprocess_worker() {
                 StableKey { number: 7 },
             ));
         }
-        app.world_mut().insert_resource(Noise { value: noise });
+        app.world_mut()
+            .insert_resource(ResourceNoise { value: noise });
     });
     sim.run_ticks(120);
     let mut capture = SnapshotConfig {
@@ -131,11 +139,11 @@ fn golden_subprocess_worker() {
             StableKey::type_path().into(),
             Noise::type_path().into(),
         ]),
-        resources: TypeFilter::only([Noise::type_path().into()]),
+        resources: TypeFilter::only([ResourceNoise::type_path().into()]),
         ..Default::default()
     };
     capture.components.deny::<Noise>();
-    capture.resources.deny::<Noise>();
+    capture.resources.deny::<ResourceNoise>();
     let matching = match option("MATCH", "name").as_str() {
         "name" => EntityMatching::ByName,
         "key" => EntityMatching::ByComponent(StableKey::type_path().into()),
