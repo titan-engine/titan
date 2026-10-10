@@ -153,6 +153,11 @@ impl WorldSnapshot {
     /// keys, also in resources. Lists retain order. Custom serde blobs and older
     /// snapshots without typed reference markers cannot be normalized.
     ///
+    /// Normalized sets and reference-keyed maps sort first by their contained
+    /// entity references in traversal order, then by the full canonical value.
+    /// Elements with identical references that differ only in tolerated floats
+    /// may still pair by full value; this is not tolerance-aware set matching.
+    ///
     /// ```
     /// use bevy_ecs::prelude::*;
     /// use titan_snapshot::{DiffConfig, EntityMatching, SnapshotConfig, WorldSnapshot};
@@ -341,15 +346,50 @@ fn normalize_value(value: &mut Value, keys: &BTreeMap<EntityId, Value>) {
         object.sort_keys();
         if object.len() == 1 {
             if let Some(Value::Array(elements)) = object.get_mut("$titan_entity_set") {
-                elements.sort_by_cached_key(Value::to_string);
+                elements.sort_by_cached_key(collection_sort_key);
             } else if let Some(Value::Array(entries)) = object.get_mut("$titan_entity_map") {
-                entries.sort_by_cached_key(Value::to_string);
+                entries.sort_by_cached_key(collection_sort_key);
             }
         }
     } else if let Value::Array(array) = value {
         for value in array {
             normalize_value(value, keys);
         }
+    }
+}
+
+// normalize_value has already canonicalized objects and nested collections.
+// Reference identity must precede numeric data, so tolerated float changes do
+// not reorder elements with distinct references. The full value breaks ties
+// deterministically without dropping equal-reference entries.
+fn collection_sort_key(value: &Value) -> (Vec<String>, String) {
+    let mut references = Vec::new();
+    collect_entity_references(value, &mut references);
+    (references, value.to_string())
+}
+
+fn collect_entity_references(value: &Value, references: &mut Vec<String>) {
+    match value {
+        Value::Object(object) => {
+            if object.len() == 1
+                && let Some(reference) = object
+                    .get("$titan_entity_key")
+                    .or_else(|| object.get("$titan_entity"))
+            {
+                // A matched key is atomic: do not descend into its fields.
+                references.push(reference.to_string());
+                return;
+            }
+            for value in object.values() {
+                collect_entity_references(value, references);
+            }
+        }
+        Value::Array(array) => {
+            for value in array {
+                collect_entity_references(value, references);
+            }
+        }
+        _ => {}
     }
 }
 

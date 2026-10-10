@@ -206,8 +206,15 @@ numbers and ID-like strings are never treated as references.
 
 Reflected sets containing references use `{"$titan_entity_set":[...]}` and maps
 with reference-containing keys use `{"$titan_entity_map":[[key,value],...]}`.
-These are re-sorted by normalized identity; lists/arrays are **not** re-sorted.
-Ordinary maps and reference-free sets keep their original capture representation.
+After normalization, these sort first by the canonical JSON of their contained
+`$titan_entity_key` and raw `$titan_entity` references, in traversal order (object
+keys canonically sorted, array elements in order). The full canonical element or
+entry value is only a tie-breaker. This keeps tolerated float changes from
+reordering elements with distinct reference sequences; lists/arrays are **not**
+re-sorted. Elements with identical references that differ only in tolerated floats
+may still pair by full value and report a difference: this is not tolerance-aware
+set matching. Ordinary maps and reference-free sets keep their original capture
+representation.
 Custom serializers must not emit these reserved `$titan_entity*` object shapes as
 ordinary data.
 
@@ -234,5 +241,6 @@ and sets, serde round-trips, entity generation reuse, nested diffs, filters,
 opaque values, float tolerance, large integers, and common Bevy types/hierarchies.
 Cross-run coverage includes reordered spawns, scalar/struct keys, canonical JSON
 key order, missing/opaque/duplicate keys, lifecycle and renames, typed references,
-entity-keyed maps/sets, list order, exact reference identity under float tolerance,
-and matched-diff text/JSON round-trips.
+entity-keyed maps/sets, reference-first collection ordering under float tolerance,
+list order, exact reference identity under float tolerance, and matched-diff
+text/JSON round-trips.
