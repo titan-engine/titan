@@ -535,8 +535,14 @@ mod tests {
             .into_option()
             .unwrap()
             .to_string();
-        let before = WorldSnapshot::capture(&before, &SnapshotConfig::default());
-        let snapshot = WorldSnapshot::capture(&after, &SnapshotConfig::default());
+        let config = SnapshotConfig {
+            components: titan_snapshot::TypeFilter::only(
+                [core::any::type_name::<Counter>().into()],
+            ),
+            ..Default::default()
+        };
+        let before = WorldSnapshot::capture(&before, &config);
+        let snapshot = WorldSnapshot::capture(&after, &config);
         let matched = before.diff_matched(
             &snapshot,
             &DiffConfig::default().with_entity_matching(EntityMatching::ByName),
