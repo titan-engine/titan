@@ -8,20 +8,19 @@ mkdir -p "$fixture/bin"
 export COMMAND_LOG="$fixture/commands"
 export REAL_JQ
 REAL_JQ=$(command -v jq)
-# Keep control bytes out of exported variables: native Windows processes can
-# translate those bytes when passing the environment back to Git Bash.
 export TOOL_ENDING=LF
 export PATH="$fixture/bin:$PATH"
 cat > "$fixture/bin/cargo" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $1 == metadata ]]; then
-  metadata='{"packages":[{"name":"titan_test"},{"name":"bevy_ecs"},{"name":"titan_doom"}]}'
-  if [[ "$TOOL_ENDING" == CRLF ]]; then
-    printf '%s\r\n' "$metadata"
-  else
-    printf '%s\n' "$metadata"
-  fi
+  # Node is native on Windows, like cargo/jq; MSYS shell producers can translate
+  # CRLF in their pipes, defeating a fixture that only uses Bash printf.
+  node -e '
+    const metadata = {packages: [{name: "titan_test"}, {name: "bevy_ecs"}, {name: "titan_doom"}]};
+    process.stdout.write(JSON.stringify(metadata) + (process.env.TOOL_ENDING === "CRLF" ? "\r\n" : "\n"));
+  '
+
 else
   for arg in "$@"; do
     if [[ "$arg" == *$'\r'* ]]; then
@@ -57,13 +56,15 @@ printf 'Scoped Titan CI arguments passed with installed jq: %s\n' "$REAL_JQ"
 cat > "$fixture/bin/jq" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-"$REAL_JQ" "$@" | tr -d '\r' | while IFS= read -r name; do
-  if [[ "$TOOL_ENDING" == CRLF ]]; then
-    printf '%s\r\n' "$name"
-  else
-    printf '%s\n' "$name"
-  fi
-done
+"$REAL_JQ" "$@" | node -e '
+  let text = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", chunk => { text += chunk; });
+  process.stdin.on("end", () => {
+    const eol = process.env.TOOL_ENDING === "CRLF" ? "\r\n" : "\n";
+    process.stdout.write(text.replace(/\r/g, "").replace(/\n/g, eol));
+  });
+'
 SH
 chmod +x "$fixture/bin/jq"
 for ending in LF CRLF; do
