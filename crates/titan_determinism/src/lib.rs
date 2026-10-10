@@ -383,6 +383,11 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
                     break;
                 }
                 playback.advance(&mut candidate);
+                if let Some(seed) = shuffle_seed {
+                    // Reject in-tick unsupported schedules before returning any
+                    // result or allowing Sim's next policy pass to reset them.
+                    shuffle::validate(candidate.world(), seed);
+                }
                 let snapshot = WorldSnapshot::capture(candidate.world(), &self.snapshot_config);
                 let diff = reference.diff(&snapshot, &self.diff_config);
                 if !diff.is_empty() {

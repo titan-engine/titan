@@ -174,8 +174,10 @@ This variant requires the standard Bevy `Main` driver used by `Sim::new`; custom
 app update drivers or replacing `Main` itself are not supported. Like `Sim`'s
 executor policy, it cannot configure schedules created and immediately run
 *within* a system. A newly discovered schedule that has already initialized
-causes a clear panic **before** the harness changes its executor or settings:
-Bevy's public APIs cannot preserve the live executor's pending deferred-buffer
+causes a clear panic **before** the harness changes its executor or settings.
+Read-only validation also runs immediately after each candidate tick, before any
+report is returned or `Sim` can reset a newly seen label's executor on the next
+tick. Bevy's public APIs cannot preserve the live executor's pending deferred-buffer
 bookkeeping when reconfiguring it. Make new/replacement schedules available at an
 update boundary **before their first run**, not just before a later run. The same
 restriction applies to schedules preinitialized by the factory. Sub-app schedules

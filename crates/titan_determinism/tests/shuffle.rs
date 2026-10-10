@@ -353,6 +353,65 @@ fn already_run_replacements_are_rejected_instead_of_reporting_false_divergence()
 }
 
 #[test]
+fn immediately_run_new_labels_are_rejected_before_any_report_or_next_policy_pass() {
+    for copy_seed in [false, true] {
+        for ticks in [1, 2] {
+            for diverge in [false, true] {
+                let mut calls = 0;
+                let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    DeterminismCheck::new(|| {
+                        calls += 1;
+                        let initial = if diverge { calls } else { 0 };
+                        Sim::new(|app| {
+                            app.register_type::<Decision>()
+                                .insert_resource(Decision(initial))
+                                .add_systems(Update, || {})
+                                .add_systems(
+                                    First,
+                                    move |world: &mut World, mut inserted: Local<bool>| {
+                                        if *inserted {
+                                            return;
+                                        }
+                                        *inserted = true;
+                                        let settings = world
+                                            .resource::<Schedules>()
+                                            .get(Update)
+                                            .unwrap()
+                                            .get_build_settings();
+                                        let mut schedule = Schedule::new(Late);
+                                        schedule.set_executor(
+                                            bevy_ecs::schedule::SingleThreadedExecutor::new(),
+                                        );
+                                        schedule.set_apply_final_deferred(false);
+                                        schedule.add_systems(
+                                            (ApplyDeferred, enqueue_increment).chain(),
+                                        );
+                                        if copy_seed {
+                                            schedule.set_build_settings(settings);
+                                        }
+                                        world.resource_mut::<Schedules>().insert(schedule);
+                                        world.run_schedule(Late);
+                                    },
+                                );
+                        })
+                    })
+                    .ticks(ticks)
+                    .variant(Variant::ShuffleAmbiguous { seed: 42 })
+                    .run()
+                }))
+                .expect_err("a newly run label must fail before a deterministic/diverged report");
+                let message = failure.downcast_ref::<String>().unwrap();
+                assert!(
+                    message.contains("cannot configure already-initialized schedule Late"),
+                    "{message}"
+                );
+                assert_eq!(calls, 2); // reference and candidate, each at tick 1
+            }
+        }
+    }
+}
+
+#[test]
 fn empty_scenarios_do_not_diverge_from_diagnostic_state() {
     DeterminismCheck::new(|| Sim::new(|_| {}))
         .ticks(3)

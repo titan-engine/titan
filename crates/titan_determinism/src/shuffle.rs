@@ -34,8 +34,11 @@ pub(crate) fn install(world: &mut World, seed: u64) {
         .add_systems((move |world: &mut World| configure(world, seed)).before(Main::run_main));
 }
 
-pub(crate) fn configure(world: &mut World, seed: u64) {
-    let Some(mut schedules) = world.get_resource_mut::<Schedules>() else {
+/// Validate without changing the world, including immediately after each tick.
+/// Sim may reset an unseen label's executor before the next maintenance pass,
+/// hiding the evidence that an unowned schedule already ran this tick.
+pub(crate) fn validate(world: &World, seed: u64) {
+    let Some(schedules) = world.get_resource::<Schedules>() else {
         return;
     };
     // No public API exposes an executor's pending deferred-buffer mask. An
@@ -51,6 +54,13 @@ pub(crate) fn configure(world: &mut World, seed: u64) {
              override a live schedule's shuffle settings"
         );
     }
+}
+
+pub(crate) fn configure(world: &mut World, seed: u64) {
+    validate(world, seed);
+    let Some(mut schedules) = world.get_resource_mut::<Schedules>() else {
+        return;
+    };
     for (_, schedule) in schedules.iter_mut() {
         if is_configured(schedule, seed) {
             continue;
