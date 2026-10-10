@@ -105,42 +105,35 @@ jobs:
         # See tools/ci/src/main.rs for the commands this runs
         run: cargo run -p ci -- lints
 
-  miri:
-    if: ${{ github.event_name != 'pull_request' }}
-    runs-on: macos-latest
-    timeout-minutes: 60
+  miri-changes:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ecs: ${{ steps.filter.outputs.ecs }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # key won't match, will rely on restore-keys
-          key: ${{ runner.os }}-nightly--${{ hashFiles('**/Cargo.toml') }}-
-          # See .github/workflows/update-caches.yml for how keys are generated
-          restore-keys: |
-            ${{ runner.os }}-nightly--${{ hashFiles('**/Cargo.toml') }}-
-            ${{ runner.os }}-nightly--
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-      - uses: ./.github/actions/install-rust
-        with:
-          channel: nightly
-          components: miri
-      - name: CI job
-        # To run the tests one item at a time for troubleshooting, use
-        # cargo --quiet test --lib -- --list | sed 's/: test$//' | MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-disable-weak-memory-emulation" xargs -n1 cargo miri test -p bevy_ecs --lib -- --exact
-        run: cargo miri test -p bevy_ecs --features bevy_utils/debug
+      - name: Test Miri path filter
+        run: bash .github/scripts/test-miri-paths-changed.sh
+      - name: Detect changes affecting Miri
+        id: filter
         env:
-          # -Zrandomize-layout makes sure we dont rely on the layout of anything that might change
-          RUSTFLAGS: -Zrandomize-layout
-          # https://github.com/rust-lang/miri#miri--z-flags-and-environment-variables
-          # -Zmiri-disable-isolation is needed because our executor uses `fastrand` which accesses system time.
-          MIRIFLAGS: -Zmiri-disable-isolation
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          changed=$(bash .github/scripts/miri-paths-changed.sh "$BASE_SHA" "$HEAD_SHA")
+          echo "ecs=$changed" >> "$GITHUB_OUTPUT"
+
+  miri:
+    needs: miri-changes
+    # Release pushes still run in full. always() lets them bypass the skipped filter.
+    # A failed filter conservatively runs Miri rather than losing coverage.
+    # Keep Miri non-required; relevant PRs run it despite the general fast-path policy.
+    if: ${{ always() && !cancelled() && (github.event_name == 'push' || needs.miri-changes.result == 'failure' || needs.miri-changes.outputs.ecs == 'true') }}
+    uses: ./.github/workflows/miri.yml
 
   # Run expensive checks independently to leave room in the 60-minute queue timeout.
   check-compiles:
