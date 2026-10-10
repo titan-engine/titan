@@ -1,12 +1,14 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
+mod actions;
 mod generator;
 mod report;
 mod shrink;
 
-pub use generator::Generator;
-pub use report::{Failure, FuzzConfig, FuzzReport};
+pub use actions::{ActionConfig, ActionFuzz, ActionScript, ActionTick};
+pub use generator::{ActionRng, Generator};
+pub use report::{Failure, FuzzConfig, FuzzReport, FuzzScript};
 
 use bevy_ecs::world::World;
 use bevy_transform::components::Transform;
@@ -223,6 +225,29 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
     }
 
     fn execute(&self, script: &InputScript, ticks: u64) -> Option<Violation> {
+        let mut events = script.events.iter().peekable();
+        self.execute_with(ticks, |sim, tick| {
+            while let Some(event) = events.next_if(|event| event.tick == tick) {
+                match event.action {
+                    InputAction::Press(button) => sim.press(button),
+                    InputAction::Release(button) => sim.release(button),
+                    InputAction::Tap(_)
+                    | InputAction::ConnectGamepad { .. }
+                    | InputAction::SetAxis { .. }
+                    | InputAction::SetButtonValue { .. }
+                    | InputAction::MouseMotion { .. } => {
+                        unreachable!("fuzzer generates only press/release events")
+                    }
+                }
+            }
+        })
+    }
+
+    fn execute_with(
+        &self,
+        ticks: u64,
+        mut before_tick: impl FnMut(&mut Sim, u64),
+    ) -> Option<Violation> {
         let mut current_tick = 0;
         let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
             let mut sim = (self.factory)();
@@ -231,22 +256,9 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
                 0,
                 "fuzz factory must return a fresh, unticked Sim"
             );
-            let mut events = script.events.iter().peekable();
             for tick in 0..ticks {
                 current_tick = tick;
-                while let Some(event) = events.next_if(|event| event.tick == tick) {
-                    match event.action {
-                        InputAction::Press(button) => sim.press(button),
-                        InputAction::Release(button) => sim.release(button),
-                        InputAction::Tap(_)
-                        | InputAction::ConnectGamepad { .. }
-                        | InputAction::SetAxis { .. }
-                        | InputAction::SetButtonValue { .. }
-                        | InputAction::MouseMotion { .. } => {
-                            unreachable!("fuzzer generates only press/release events")
-                        }
-                    }
-                }
+                before_tick(&mut sim, tick);
                 sim.tick();
                 for invariant in &self.invariants {
                     if let Err(message) = (invariant.check)(sim.world()) {

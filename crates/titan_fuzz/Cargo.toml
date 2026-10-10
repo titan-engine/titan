@@ -18,9 +18,11 @@ bevy_transform = { path = "../bevy_transform", version = "0.20.0", default-featu
   "bevy-support",
 ] }
 serde = { version = "1", features = ["derive"] }
+ron = "0.12"
 titan_test = { path = "../titan_test", version = "0.1.0" }
 
 [dev-dependencies]
+titan_doom = { path = "../../demos/doom", default-features = false }
 bevy_math = { path = "../bevy_math", version = "0.20.0", default-features = false, features = [
   "std",
 ] }
@@ -32,7 +34,6 @@ bevy_input = { path = "../bevy_input", version = "0.20.0", default-features = fa
   "keyboard",
   "mouse",
 ] }
-ron = "0.12"
 
 [lints]
 workspace = true
