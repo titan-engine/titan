@@ -51,6 +51,17 @@ jobs:
     env:
       TITAN_PACKAGES: ${{ needs.changes.result == 'success' && needs.changes.outputs.titan_packages || '*' }}
     steps:
+      - name: Report selection status
+        env:
+          CLASSIFICATION_RESULT: ${{ needs.changes.result }}
+          RAW_SELECTION: ${{ needs.changes.outputs.titan_packages }}
+        run: |
+          echo "## Titan coverage: $TITAN_PACKAGES" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$CLASSIFICATION_RESULT" != success || -z "$RAW_SELECTION" ]]; then
+            echo 'Reason: classification failed or returned no packages; full Titan fallback.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Selection/fallback reason: see the changes job Titan test selection summary.' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: No applicable Titan changes
         if: ${{ env.TITAN_PACKAGES == 'none' }}
         run: echo '## Titan tests — no applicable changes' >> "$GITHUB_STEP_SUMMARY"

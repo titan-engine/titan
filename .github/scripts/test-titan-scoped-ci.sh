@@ -6,6 +6,9 @@ fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/bin"
 export COMMAND_LOG="$fixture/commands"
+# Production recipes write summaries; fixtures must not pollute the caller's
+# Actions summary with synthetic package lists or fallback cases.
+export GITHUB_STEP_SUMMARY="$fixture/summary"
 export REAL_JQ
 REAL_JQ=$(command -v jq)
 export TOOL_ENDING=LF
@@ -40,7 +43,12 @@ packages='-p titan_doom -p titan_test'
 assert_commands() {
   local mode=$1 expected=$2 selection=${3:-'*'}
   : > "$COMMAND_LOG"
+  : > "$GITHUB_STEP_SUMMARY"
   bash "$script_dir/titan-scoped-ci.sh" "$mode" "$selection"
+  if [[ -n $expected && ! -s $GITHUB_STEP_SUMMARY ]]; then
+    echo 'Missing recipe summary' >&2
+    exit 1
+  fi
   if [[ $(< "$COMMAND_LOG") != "$expected" ]]; then
     printf 'Unexpected %s commands:\n%s\n' "$mode" "$(< "$COMMAND_LOG")" >&2
     exit 1
