@@ -3,8 +3,9 @@
 //! Register types in [`AppTypeRegistry`](bevy_ecs::reflect::AppTypeRegistry) with `#[reflect(Component)]` or
 //! `#[reflect(Resource)]` to capture their values. Unregistered or unserializable
 //! types are recorded as [`SnapshotValue::Opaque`], never silently discarded.
-//! Captures are observations, not restorable worlds. Entity IDs match only within
-//! the same run. See the crate's README for filters, limitations, and an example.
+//! Captures are observations, not restorable worlds. [`WorldSnapshot::diff`] matches
+//! IDs within one run; [`WorldSnapshot::diff_matched`] matches names or user keys
+//! across runs. See the crate's README for filters, limitations, and examples.
 //!
 //! ```
 //! use bevy_ecs::{prelude::*, reflect::AppTypeRegistry};
@@ -26,9 +27,11 @@ extern crate alloc;
 
 mod capture;
 mod diff;
+mod matching;
 
 pub use capture::{SnapshotConfig, TypeFilter};
 pub use diff::*;
+pub use matching::*;
 
 use alloc::{collections::BTreeMap, string::String};
 use bevy_ecs::entity::Entity;
@@ -40,7 +43,7 @@ use serde_json::Value;
 ///
 /// JSON represents this as `"12v1"` so IDs also work as map keys. Ordering is
 /// numeric (index, then generation), rather than lexicographic string ordering.
-/// Keeping identity separate from captured data lets future matchers use user keys.
+/// [`WorldSnapshot::diff_matched`] can instead pair logical entities by user keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct EntityId {
@@ -92,6 +95,8 @@ pub enum SnapshotValue {
     /// A JSON-serializable reflected value.
     Reflected {
         /// Serialized fields, without a redundant type-path wrapper.
+        /// Typed entity references use the reserved object `{"$titan_entity":"12v1"}`.
+        /// Custom serializers must not use this reserved shape for ordinary data.
         value: Value,
     },
     /// Presence is known, but the contents cannot be observed.

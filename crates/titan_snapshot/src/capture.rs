@@ -8,6 +8,8 @@ use alloc::{
 };
 use bevy_ecs::{
     component::{ComponentId, ComponentInfo},
+    entity::Entity,
+    hierarchy::ChildOf,
     name::Name,
     reflect::{AppTypeRegistry, ReflectComponent},
     resource::IS_RESOURCE,
@@ -230,7 +232,7 @@ fn capture_value(
 }
 
 /// Sort JSON maps explicitly rather than relying on `serde_json` feature selection.
-fn canonicalize(value: &mut Value) {
+pub(crate) fn canonicalize(value: &mut Value) {
     match value {
         Value::Object(map) => {
             for value in map.values_mut() {
@@ -252,6 +254,16 @@ fn canonicalize(value: &mut Value) {
 // rather than JSON null, so NaN and infinities do not become indistinguishable.
 struct StableSerializer;
 
+fn contains_entity_reference(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            object.contains_key("$titan_entity") || object.values().any(contains_entity_reference)
+        }
+        Value::Array(array) => array.iter().any(contains_entity_reference),
+        _ => false,
+    }
+}
+
 impl ReflectSerializerProcessor for StableSerializer {
     fn try_serialize<S>(
         &self,
@@ -262,6 +274,18 @@ impl ReflectSerializerProcessor for StableSerializer {
     where
         S: Serializer,
     {
+        // Intercept typed entities, not arbitrary numbers or strings that happen
+        // to equal an ID. Custom serde blobs bypass reflected field traversal.
+        if let Some(entity) = value.try_downcast_ref::<Entity>() {
+            return serde_json::json!({"$titan_entity": EntityId::from(*entity).to_string()})
+                .serialize(serializer)
+                .map(Ok);
+        }
+        // ChildOf's ReflectSerialize serializes the whole tuple as a packed ID,
+        // bypassing traversal of its typed Entity field. Handle it explicitly.
+        if let Some(parent) = value.try_downcast_ref::<ChildOf>() {
+            return self.try_serialize(&parent.parent(), registry, serializer);
+        }
         let float = value
             .try_downcast_ref::<f64>()
             .copied()
@@ -289,12 +313,47 @@ impl ReflectSerializerProcessor for StableSerializer {
                 elements.push((format!("{json}"), json));
             }
             elements.sort_by(|a, b| a.0.cmp(&b.0));
-            return elements
-                .into_iter()
-                .map(|(_, json)| json)
-                .collect::<Vec<_>>()
-                .serialize(serializer)
-                .map(Ok);
+            let elements: Vec<_> = elements.into_iter().map(|(_, json)| json).collect();
+            // Retain set semantics for re-sorting after cross-run normalization.
+            if elements.iter().any(contains_entity_reference) {
+                return serde_json::json!({"$titan_entity_set": elements})
+                    .serialize(serializer)
+                    .map(Ok);
+            }
+            return elements.serialize(serializer).map(Ok);
+        }
+        if let ReflectRef::Map(map) = value.reflect_ref() {
+            let mut entries = Vec::with_capacity(map.len());
+            for (key, value) in map.iter() {
+                let key = serde_json::to_value(TypedReflectSerializer::with_processor(
+                    key, registry, self,
+                ))
+                .map_err(serde::ser::Error::custom)?;
+                entries.push((key, value));
+            }
+            // JSON object keys cannot be objects. Only maps with typed reference
+            // keys need an entry-list representation; ordinary maps stay unchanged.
+            if entries
+                .iter()
+                .any(|(key, _)| contains_entity_reference(key))
+            {
+                let mut pairs = Vec::with_capacity(entries.len());
+                for (key, value) in entries {
+                    let value = serde_json::to_value(TypedReflectSerializer::with_processor(
+                        value, registry, self,
+                    ))
+                    .map_err(serde::ser::Error::custom)?;
+                    let mut pair = serde_json::json!([key, value]);
+                    canonicalize(&mut pair);
+                    pairs.push(pair);
+                }
+                // Full entries break ties when reflection-ignored fields make
+                // distinct Rust keys serialize identically. Never drop either entry.
+                pairs.sort_by_cached_key(Value::to_string);
+                return serde_json::json!({"$titan_entity_map": pairs})
+                    .serialize(serializer)
+                    .map(Ok);
+            }
         }
         Ok(Err(serializer))
     }
