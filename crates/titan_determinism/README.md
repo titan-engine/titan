@@ -99,12 +99,71 @@ own RNG. It does not seed global or third-party randomness automatically.
   inclusive floating-point tolerance. The default is zero; integer pairs always
   compare exactly. Negative or non-finite tolerances are normalized to zero.
 
-Entity comparison uses the **full index and generation**. Separate runs must
-have identical allocation histories for IDs to identify corresponding entities;
-there is no cross-run matching by name or gameplay identity. Different
-allocation can produce additions/removals instead of the intended field diff.
 Snapshots canonicalize reflected maps and sets, so mere iteration order is not a
 difference; order-dependent *gameplay consequences* must reach observable state.
+
+### Entity identity across runs
+
+Entity matching defaults to **`EntityMatching::ById`**, using the full index and
+generation. This is deliberately stricter: it also detects spawn-order and
+allocation-history nondeterminism, which some games care about. Different
+allocation can produce additions/removals or compare unrelated entities.
+
+If different spawn orders are legitimate (especially with `MultiThreaded`), opt
+into unique, stable names or game-owned keys:
+
+```rust
+# use titan_determinism::{DeterminismCheck, EntityMatching, Variant};
+# use titan_test::Sim;
+# use bevy_ecs::prelude::*;
+# fn scenario() -> Sim {
+#     let mut sim = Sim::new(|app| { app.world_mut().spawn(Name::new("Player")); });
+#     let mut infrastructure: Vec<_> = sim.world().iter_entities()
+#         .filter(|e| !e.contains_id(bevy_ecs::resource::IS_RESOURCE) && !e.contains::<Name>())
+#         .map(|e| e.id()).collect();
+#     infrastructure.sort();
+#     for (index, id) in infrastructure.into_iter().enumerate() {
+#         sim.world_mut().entity_mut(id).insert(Name::new(format!("Infrastructure {index}")));
+#     }
+#     sim
+# }
+let report = DeterminismCheck::new(scenario)
+    .ticks(120)
+    .variant(Variant::MultiThreaded)
+    .entity_matching(EntityMatching::ByName)
+    .run();
+report.assert_deterministic();
+```
+
+- **`ByName`** pairs exact, case-sensitive `Name` metadata. Every captured entity
+  must have a unique name; name metadata remains available even if the component
+  is filtered. A rename is removal/addition.
+- **`ByComponent(type_path)`** pairs the entire serialized value of a unique,
+  stable key component, including struct keys. Use the full reflected type path,
+  register the type with `#[reflect(Component)]`, and include it in the snapshot
+  filters. Key comparison is exact regardless of float tolerance; do not use
+  mutable gameplay fields or world-local entity IDs as keys.
+- Missing, filtered, opaque, and duplicate keys cause an explicit divergence.
+  There is **no ID fallback**: unkeyed entities are reported as removed/added
+  with diagnostics, not silently ignored. If a key is duplicated on either
+  side, all occurrences on both sides are unmatched. This includes empty and
+  infrastructure entities (for example `Sim`'s synthetic input entity and
+  plugin-owned entities): component filters do not exclude entities themselves.
+  Give these explicit stable keys in your scenario too; naming just gameplay
+  entities is not sufficient. Do not invent gameplay keys from allocation order.
+- Typed entity references captured by `titan_snapshot` (including `ChildOf` and
+  resource fields) are compared through matched keys when possible. References
+  to unmatched targets stay raw IDs; custom serde blobs cannot generally be
+  normalized. Lists retain order. See `titan_snapshot`'s README for limits.
+
+The builder forwards this option to `DiffConfig::with_entity_matching` and
+`WorldSnapshot::diff_matched`. `.diff_config(...)` and `.entity_matching(...)`
+can be called in either order; setting tolerance does not reset identity.
+There is **no hash-per-tick shortcut**: every completed tick is structurally
+compared. Key modes additionally build identity maps and normalize snapshot
+copies at every tick, costing extra CPU and temporary memory proportional to
+captured state. The ID default keeps its existing comparison path and builds
+key metadata only on divergence. Reference-history memory remains unchanged.
 
 A passing check means the captured state agreed under these settings, not that
 all internal state or every possible execution is deterministic. This checks
@@ -231,8 +290,8 @@ buffer. There is no on-disk history or hash-only compression.
 
 ## Read a report
 
-`DeterminismReport::Deterministic { runs, ticks }` means all requested snapshots
-agreed. `DeterminismReport::Diverged(divergence)` holds the mismatch, replay
+`DeterminismReport::Deterministic { runs, ticks, entity_matching }` means all
+requested snapshots agreed under the recorded matcher. `DeterminismReport::Diverged(divergence)` holds the mismatch, replay
 parameters, and best-effort hints. `println!("{report}")` prints a readable report;
 `report.assert_deterministic()` panics with that report on failure.
 
@@ -241,8 +300,9 @@ A shortened example (IDs and type paths depend on your app):
 ```text
 Nondeterminism detected: run 2 diverged from run 1 at tick 1 (of 4)
   seed: Some(42), reference seed: Some(42), variant: Repeat, runs: 2
+  entity matcher: ById
 
-~ 12v0 "Enemy 0"
+~ Id(12v0) 12v0 -> 12v0 "Enemy 0"
     ~ hashmap_order::Enemy
         moves: 1 -> 0
 ```
@@ -252,8 +312,11 @@ Nondeterminism detected: run 2 diverged from run 1 at tick 1 (of 4)
   tick 0 is injected before the update compared as report tick 1. Report tick
   147 therefore follows update/script index 146.
 - `~`, `+`, and `-` mean changed, added, and removed. Values run from the
-  reference to the candidate. `12v0` is an entity index/generation, not a
-  cross-run matcher. Resources appear as `resource <type>` without an entity.
+  reference to the candidate. Entity headers show the matching key (`Id(...)`,
+  `Name("Player")`, or `Component(...)`) and the reference-to-candidate ID
+  transition. `12v0` is a world-local index/generation. Unmatched entities show
+  their diagnostics instead of an invented key. Resources appear as
+  `resource <type>` without an entity.
 - Nested field paths identify the serialized shape; JSON paths start at `$`,
   such as `$.moves` or `$.translation[0]`. Additions/removals and opaque changes
   may be reported at the whole-value level rather than inventing field data.
@@ -288,7 +351,13 @@ Reports implement `Serialize` and `Deserialize`, so tooling can use
 `serde_json::to_string_pretty(&report)` and load a `DeterminismReport` again.
 Divergence parameters include both construction-time seeds (if present), tick
 and run budgets, variant, the full optional script, snapshot filters/clock policy,
-and normalized float tolerance. `SnapshotSettings` and `FilterSettings` are
+normalized float tolerance, and `entity_matching`. Divergences retain the
+structural `diff`, plus `matches` (each unambiguous key and both IDs, including
+unchanged pairs) and `diagnostics` (every unmatched entity and reason). Structural
+entity IDs refer to the reference for pairs/removals and the candidate for
+additions; consult the side-aware metadata when IDs overlap across runs.
+Last-change location hints use candidate IDs, because their metadata comes from
+that run's world. `SnapshotSettings` and `FilterSettings` are
 serializable copies of snapshot configuration, not a promise that the original
 `SnapshotConfig`/`TypeFilter` types implement serde. Convert `SnapshotSettings`
 back with `SnapshotConfig::from(settings)` when rebuilding a check.
@@ -296,7 +365,10 @@ back with `SnapshotConfig::from(settings)` when rebuilding a check.
 The JSON is **not a standalone scenario or saved world**. Reproduction still
 requires the same scenario factory, game code/build, initial world, timestep,
 and relevant external state. A seed is only effective if gameplay uses it.
-Successful reports contain just run/tick counts, not a replay payload.
+Successful reports contain run/tick counts and the matcher, not a replay
+payload. Older report JSON without matcher/identity metadata still deserializes,
+defaulting to ID matching. Rust consumers constructing or exhaustively matching
+`Deterministic` must include `entity_matching` (or use `..` in patterns).
 
 The [`hashmap_order`](examples/hashmap_order.rs) example deliberately chooses
 which enemy moves by taking the first `HashMap` entry. To reliably expose this

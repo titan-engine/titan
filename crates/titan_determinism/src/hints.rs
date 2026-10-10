@@ -7,7 +7,7 @@ use bevy_ecs::{
     component::ComponentId, reflect::AppTypeRegistry, schedule::Schedules, world::World,
 };
 use serde::{Deserialize, Serialize};
-use titan_snapshot::WorldDiff;
+use titan_snapshot::{MatchedWorldDiff, WorldDiff};
 
 /// An unordered pair of systems that may affect a diverging type.
 ///
@@ -56,10 +56,38 @@ pub(crate) fn collect(world: &World, diff: &WorldDiff) -> Hints {
     collect_with_seed(world, diff, None)
 }
 
-pub(crate) fn collect_with_seed(
+// Structural diffs identify pairs by the reference ID, but location metadata
+// lives in the candidate world. Never inspect a removed entity's coincident ID.
+pub(crate) fn collect_matched(
+    world: &World,
+    matched: &MatchedWorldDiff,
+    shuffle_seed: Option<u64>,
+) -> Hints {
+    collect_inner(
+        world,
+        &matched.diff,
+        shuffle_seed,
+        #[cfg(feature = "track_location")]
+        &matched.matches,
+    )
+}
+
+#[cfg(test)]
+fn collect_with_seed(world: &World, diff: &WorldDiff, shuffle_seed: Option<u64>) -> Hints {
+    collect_inner(
+        world,
+        diff,
+        shuffle_seed,
+        #[cfg(feature = "track_location")]
+        &[],
+    )
+}
+
+fn collect_inner(
     world: &World,
     diff: &WorldDiff,
     shuffle_seed: Option<u64>,
+    #[cfg(feature = "track_location")] matches: &[titan_snapshot::EntityMatch],
 ) -> Hints {
     let diverging: BTreeSet<&str> = diff
         .entities
@@ -138,7 +166,7 @@ pub(crate) fn collect_with_seed(
     hints.ambiguities.dedup();
     #[cfg(feature = "track_location")]
     {
-        hints.change_locations = change_locations(world, diff, &keys);
+        hints.change_locations = change_locations(world, diff, &keys, matches);
     }
     hints
 }
@@ -182,26 +210,43 @@ fn change_locations(
     world: &World,
     diff: &WorldDiff,
     keys: &BTreeMap<ComponentId, String>,
+    matches: &[titan_snapshot::EntityMatch],
 ) -> Vec<ChangeLocationHint> {
     use bevy_ecs::entity::{Entity, EntityGeneration, EntityIndex};
+    use titan_snapshot::ChangeKind;
 
     let ids: BTreeMap<&str, ComponentId> =
         keys.iter().map(|(id, key)| (key.as_str(), *id)).collect();
+    let candidate_ids: BTreeMap<_, _> = matches
+        .iter()
+        .filter_map(|m| Some((m.before?, m.after?)))
+        .collect();
     let mut hints = Vec::new();
     for entity in &diff.entities {
-        let Some(index) = EntityIndex::from_raw_u32(entity.entity.index) else {
+        if entity.kind == ChangeKind::Removed {
+            continue;
+        }
+        let candidate_id = if entity.kind == ChangeKind::Changed {
+            candidate_ids
+                .get(&entity.entity)
+                .copied()
+                .unwrap_or(entity.entity)
+        } else {
+            entity.entity
+        };
+        let Some(index) = EntityIndex::from_raw_u32(candidate_id.index) else {
             continue;
         };
         let id = Entity::from_index_and_generation(
             index,
-            EntityGeneration::from_bits(entity.entity.generation),
+            EntityGeneration::from_bits(candidate_id.generation),
         );
         for component in &entity.components {
             if let Some(component_id) = ids.get(component.name.as_str())
                 && let Some(location) = last_changed_location(world, id, *component_id)
             {
                 hints.push(ChangeLocationHint {
-                    entity: Some(entity.entity.to_string()),
+                    entity: Some(candidate_id.to_string()),
                     component: component.name.clone(),
                     location,
                 });
@@ -468,6 +513,60 @@ mod tests {
         assert!(collect_with_seed(&world, &diff, Some(42))
             .ambiguities
             .is_empty());
+    }
+
+    #[cfg(feature = "track_location")]
+    #[test]
+    fn entity_matching_location_removal_cannot_borrow_an_added_entity_at_the_same_id() {
+        use bevy_ecs::change_detection::DetectChanges;
+        use titan_snapshot::{DiffConfig, EntityMatching, SnapshotConfig, WorldSnapshot};
+
+        let mut before = World::new();
+        let removed = before.spawn((Name::new("Old"), Counter(0))).id();
+        let mut after = World::new();
+        let added = after.spawn((Name::new("New"), Counter(0))).id();
+        assert_eq!(removed, added, "separate worlds reuse the same raw ID");
+        after.entity_mut(added).get_mut::<Counter>().unwrap().0 += 1;
+        let location = after
+            .entity(added)
+            .get_ref::<Counter>()
+            .unwrap()
+            .changed_by()
+            .into_option()
+            .unwrap()
+            .to_string();
+        let config = SnapshotConfig {
+            components: titan_snapshot::TypeFilter::only(
+                [core::any::type_name::<Counter>().into()],
+            ),
+            ..Default::default()
+        };
+        let before = WorldSnapshot::capture(&before, &config);
+        let snapshot = WorldSnapshot::capture(&after, &config);
+        let matched = before.diff_matched(
+            &snapshot,
+            &DiffConfig::default().with_entity_matching(EntityMatching::ByName),
+        );
+        assert_eq!(matched.diff.entities.len(), 2);
+        for kind in [ChangeKind::Removed, ChangeKind::Added] {
+            // Inspect each side independently: combined hints would deduplicate
+            // a spurious removed-entity hint against the legitimate added one.
+            let mut side = matched.clone();
+            side.diff.entities.retain(|entity| entity.kind == kind);
+            let hints = collect_matched(&after, &side, None);
+            if kind == ChangeKind::Removed {
+                assert!(hints.change_locations.is_empty());
+            } else {
+                assert_eq!(
+                    hints.change_locations,
+                    vec![ChangeLocationHint {
+                        entity: Some(added.to_string()),
+                        component: core::any::type_name::<Counter>().into(),
+                        location: location.clone(),
+                    }]
+                );
+            }
+        }
     }
 
     #[cfg(feature = "track_location")]
