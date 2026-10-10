@@ -1,0 +1,41 @@
+[package]
+name = "titan_diagnostics"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Structured, local error and panic reports for Titan and Bevy"
+repository = "https://github.com/titan-engine/titan"
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "titan", "diagnostics", "gamedev"]
+categories = ["game-development", "development-tools::debugging"]
+
+[dependencies]
+bevy_app = { path = "../bevy_app", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_diagnostic = { path = "../bevy_diagnostic", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", default-features = false, features = [
+  "std",
+  "trace",
+  "debug",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "registry",
+  "std",
+] }
+
+[dev-dependencies]
+# Exercise detached executor workers in isolated and shared all-features tests,
+# without forcing a thread pool on production headless users.
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", default-features = false, features = [
+  "multi_threaded",
+] }
+
+[lints]
+workspace = true
