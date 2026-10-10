@@ -4,6 +4,13 @@
 extern crate alloc;
 
 mod script;
+#[cfg(feature = "snapshots")]
+mod snapshot;
+
+#[cfg(feature = "snapshots")]
+pub use snapshot::SnapshotAssertConfig;
+#[cfg(feature = "snapshots")]
+pub use titan_snapshot;
 
 pub use script::{GamepadSlot, InputAction, InputButton, InputScript, ScriptEvent, SCRIPT_VERSION};
 

@@ -9,6 +9,10 @@ license = "MIT OR Apache-2.0"
 keywords = ["bevy", "titan", "testing", "gamedev"]
 categories = ["game-development", "development-tools::testing"]
 
+[features]
+# Golden files and reflection-backed capture are opt-in.
+snapshots = ["dep:titan_snapshot", "dep:serde_json"]
+
 [dependencies]
 bevy_app = { path = "../bevy_app", version = "0.20.0", default-features = false, features = [
   "std",
@@ -43,8 +47,17 @@ bevy_transform = { path = "../bevy_transform", version = "0.20.0", default-featu
   "std",
   "bevy-support",
 ] }
+titan_snapshot = { path = "../titan_snapshot", version = "0.1.0", optional = true }
+serde_json = { version = "1", optional = true }
 ron = "0.12"
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
+
+[[test]]
+name = "snapshots"
+required-features = ["snapshots"]
 
 [lints]
 workspace = true

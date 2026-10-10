@@ -252,6 +252,106 @@ at the same tick execute in file order. To replay from the beginning, create a
 fresh `Sim`. Keep the timestep identical when comparing recordings: script time
 is measured in simulation ticks, not wall-clock seconds.
 
+## Golden-file world snapshots
+
+Enable the optional `snapshots` feature in your dev-dependency:
+
+```toml
+[dev-dependencies]
+titan_test = { path = "../titan_test", features = ["snapshots"] }
+bevy_reflect = { path = "../bevy_reflect" }
+```
+
+No snapshot/JSON dependency is added by this feature when it is disabled.
+Golden files are ordinary, pretty JSON from `titan_snapshot`, not restorable
+worlds. Put them alongside your integration tests, for example
+`tests/snapshots/player_after_120_ticks.json`. Paths are explicit rather than
+inferred from the caller's source file; use `CARGO_MANIFEST_DIR` so assertions
+don't depend on where you launch Cargo.
+
+This complete pattern belongs in an integration test (replace the setup with
+your gameplay plugin):
+
+```rust,no_run
+# #[cfg(feature = "snapshots")]
+# {
+use bevy_ecs::prelude::*;
+use bevy_reflect::{Reflect, TypePath};
+use titan_test::{
+    Sim, SnapshotAssertConfig,
+    titan_snapshot::{DiffConfig, EntityMatching, SnapshotConfig, TypeFilter},
+};
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct Health {
+    value: f32,
+}
+
+let mut sim = Sim::new(|app| {
+    app.register_type::<Health>();
+    app.world_mut().spawn((Name::new("Player"), Health { value: 100.0 }));
+});
+sim.run_ticks(120);
+
+let config = SnapshotAssertConfig::new(SnapshotConfig {
+    components: TypeFilter::only([Health::type_path().into()]),
+    resources: TypeFilter::only([]), // Leave out unrelated resources.
+    ..Default::default()
+})
+.with_diff(DiffConfig { float_tolerance: 0.0001 })
+.with_entity_matching(EntityMatching::ByName)
+.with_entity_filter(|entity| entity.components.contains_key(Health::type_path()));
+
+sim.assert_snapshot(
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/snapshots/player_after_120_ticks.json"),
+    &config,
+);
+# }
+```
+
+1. Run your test normally. A **missing golden fails**, with the test/thread
+   name, completed tick number, path, and instructions. Nothing is written.
+2. Explicitly generate it:
+   `TITAN_UPDATE_SNAPSHOTS=1 cargo test -p your_game player_after_120_ticks`.
+   Only the exact value `1` enables updates. This creates parent directories
+   and writes or overwrites each golden reached by the selected test.
+3. Review the JSON and commit it with the test. Unset the variable, rerun the
+   test, and keep it **unset in CI**. Update mode writes instead of comparing;
+   a passing update run is not regression verification.
+4. On a gameplay regression, the assertion reports a readable matched
+   `WorldDiff`, including component/field names and old/new values, for example
+   `value: 100.0 -> 90.0`. Diff output is capped at 80 lines / 8 KiB with a
+   truncation notice. Invalid JSON and I/O errors fail, never auto-regenerate.
+
+Choose entity identity deliberately. `SnapshotAssertConfig::default()` uses
+exact ID matching, which is fragile for saved files from earlier runs: even one
+earlier spawn can shift IDs. Prefer `ByName` with unique, stable names, or
+`ByComponent(StableId::type_path().into())` with a registered, captured,
+game-owned stable key (the whole serialized component, including struct keys).
+Missing, opaque, and duplicate keys fail explicitly; there is no ID fallback.
+Typed entity references to selected, uniquely keyed entities compare by key.
+
+**Type filters do not filter entities.** Captures retain even empty entities,
+including the harness's input entity. Use `with_entity_filter` to select only
+gameplay entities, as above; unrelated earlier spawns then do not break name/key
+comparisons. Resources are selected separately with `SnapshotConfig::resources`.
+The entity predicate runs after component filtering, so select using a retained
+component or name metadata. Golden files are not re-filtered when loaded: after
+changing capture or entity selection, intentionally regenerate them. References
+to excluded/unkeyed entities remain raw IDs and may differ across runs.
+
+Register observable types using `#[reflect(Component)]` or
+`#[reflect(Resource)]` and `app.register_type::<T>()`. Opaque values only expose
+presence and an opacity reason: internal changes and reflection-ignored fields
+cannot fail an assertion. Float tolerance is absolute and inclusive; integers
+and entity keys compare exactly. See
+[`titan_snapshot`'s README](../titan_snapshot/README.md) for full filtering,
+identity, entity-reference, serialization, and determinism limitations.
+[`tests/snapshots.rs`](tests/snapshots.rs) tests the workflow without mutating the
+parallel test runner's environment.
+
 ## Determinism: what you must control
 
 `with_seed(42)` inserts `SimSeed(42)` as a **resource**, available to game systems
