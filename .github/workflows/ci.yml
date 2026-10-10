@@ -135,7 +135,8 @@ jobs:
     if: ${{ always() && !cancelled() && (github.event_name == 'push' || needs.miri-changes.result == 'failure' || needs.miri-changes.outputs.ecs == 'true') }}
     uses: ./.github/workflows/miri.yml
 
-  # Run expensive checks independently to leave room in the 60-minute queue timeout.
+  # Keep compile, no_std, wasm and MSRV checks independent of ci so merge groups
+  # can start them alongside lints. They still report skipped checks on PRs.
   check-compiles:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -264,7 +265,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -295,7 +295,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -500,7 +499,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: ci
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
