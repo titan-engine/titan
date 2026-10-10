@@ -19,7 +19,7 @@ pub(super) struct Capture {
 }
 
 #[derive(Resource, Default)]
-pub(super) struct Captured(pub HashMap<InternedScheduleLabel, Conditions>);
+pub(super) struct Captured(pub HashMap<InternedScheduleLabel, Vec<Conditions>>);
 
 #[derive(Default)]
 pub(super) struct Conditions {
@@ -92,10 +92,15 @@ impl ScheduleBuildPass for Capture {
                 })
                 .collect(),
         };
-        world
-            .get_resource_or_init::<Captured>()
-            .0
-            .insert(self.label, conditions);
+        let mut captured = world.get_resource_or_init::<Captured>();
+        let candidates = captured.0.entry(self.label).or_default();
+        // A detached, still-live schedule may rebuild under the same label.
+        // Replace only this pass's candidate and keep other live instances.
+        candidates.retain(|candidate| {
+            candidate.lifetime.upgrade().is_some()
+                && !candidate.lifetime.ptr_eq(&conditions.lifetime)
+        });
+        candidates.push(conditions);
         Ok(())
     }
 }

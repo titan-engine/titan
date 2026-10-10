@@ -12,8 +12,10 @@ use bevy_remote::{RemoteMethodSystemId, RemoteMethods, RemotePlugin};
 
 /// Registers read-only schedule inspection methods alongside [`RemotePlugin`].
 ///
-/// Registration and condition-capture installation happen at plugin finish, so
-/// plugin order does not matter. For schedules added or replaced after finish,
+/// Method registration happens at plugin finish and is independent of the
+/// order relative to [`RemotePlugin`]. Condition capture is installed for
+/// schedules present when this plugin's finish hook runs. If a later plugin's
+/// finish hook creates/replaces schedules, or schedules are added afterward,
 /// call [`schedules::observe_schedule`] before their first build.
 #[derive(Default)]
 pub struct InspectPlugin;

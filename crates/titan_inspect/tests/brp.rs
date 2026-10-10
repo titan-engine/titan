@@ -426,6 +426,68 @@ fn zero_sized_systems_cannot_witness_replacement_identity() {
 }
 
 #[test]
+fn detached_rebuild_does_not_displace_active_capture() {
+    let mut app = app();
+    let mut detached = app
+        .world_mut()
+        .resource_mut::<Schedules>()
+        .remove(Demo)
+        .unwrap();
+    let mut active = Schedule::new(Demo);
+    active.add_systems(a.run_if(set_condition));
+    observe_schedule(&mut active);
+    active.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(active);
+    detached.add_systems(c.run_if(condition));
+    detached.initialize(app.world_mut()).unwrap();
+    let response = inspect(&mut app, "titan.systems");
+    assert!(contains(
+        &system(&response, "::a")["run_conditions"],
+        "::set_condition"
+    ));
+    assert!(!contains(
+        &system(&response, "::a")["run_conditions"],
+        "::condition"
+    ));
+}
+
+#[test]
+fn long_ordering_chain_is_paged_before_expanding_system_details() {
+    use bevy_ecs::system::IntoSystem;
+    #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+    struct Chain(u16);
+    let mut app = app();
+    let mut schedule = Schedule::new(Demo);
+    for i in 0..1000 {
+        schedule.add_systems(
+            IntoSystem::into_system(c)
+                .with_name(format!("system_{i:04}"))
+                .in_set(Chain(i)),
+        );
+        if i < 999 {
+            schedule.configure_sets(Chain(i).before(Chain(i + 1)));
+        }
+    }
+    observe_schedule(&mut schedule);
+    schedule.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(schedule);
+    let response = call(
+        &mut app,
+        "titan.systems",
+        Some(json!({"schedule":"Demo","limit":1})),
+    )
+    .unwrap();
+    assert_eq!(response["systems"]["total"], 1000);
+    assert_eq!(response["systems"]["items"].as_array().unwrap().len(), 1);
+    let first = &response["systems"]["items"][0];
+    assert_eq!(first["name"], "system_0000");
+    assert_eq!(first["before"]["total"], 999);
+    assert_eq!(first["before"]["items"], json!(["system_0001"]));
+    assert_eq!(first["before"]["truncated"], true);
+    assert_eq!(first["after"]["total"], 0);
+}
+
+#[test]
 fn ambiguity_pairs_are_sorted_by_system_names() {
     #[derive(Resource)]
     struct A;

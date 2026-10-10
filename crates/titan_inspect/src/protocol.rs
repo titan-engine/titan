@@ -49,10 +49,14 @@ pub(crate) struct Page<T> {
 pub(crate) fn page<T>(mut items: Vec<T>, limit: usize) -> Page<T> {
     let total = items.len();
     items.truncate(limit);
+    page_with_total(items, total)
+}
+
+pub(crate) fn page_with_total<T>(items: Vec<T>, total: usize) -> Page<T> {
     Page {
+        truncated: total > items.len(),
         items,
         total,
-        truncated: total > limit,
     }
 }
 

@@ -126,6 +126,62 @@ fn reachable(graph: &DiGraph<NodeId>, start: NodeId, direction: Direction) -> BT
     visited
 }
 
+// Two phases prevent membership edges from falsely ordering siblings: source
+// nodes ascend membership to find applicable declarations, while target nodes
+// descend membership to find affected systems. Only a target system switches
+// back to source phase to continue a transitive path. The graph stays O(V + E),
+// rather than materializing the potentially quadratic transitive closure.
+type OrderingNode = (NodeId, bool);
+
+#[derive(Default)]
+struct OrderingGraph {
+    before: BTreeMap<OrderingNode, Vec<OrderingNode>>,
+    after: BTreeMap<OrderingNode, Vec<OrderingNode>>,
+}
+
+impl OrderingGraph {
+    fn new(graph: &ScheduleGraph, keys: impl Iterator<Item = SystemKey>) -> Self {
+        let mut result = Self::default();
+        let mut edge = |a, b| {
+            result.before.entry(a).or_default().push(b);
+            result.after.entry(b).or_default().push(a);
+        };
+        for (parent, child) in graph.hierarchy().graph().all_edges() {
+            edge((child, true), (parent, true));
+            edge((parent, false), (child, false));
+        }
+        for (a, b) in graph.dependency().graph().all_edges() {
+            edge((a, true), (b, false));
+            edge((a, false), (b, false));
+        }
+        for key in keys {
+            edge((NodeId::System(key), false), (NodeId::System(key), true));
+        }
+        result
+    }
+
+    fn related(&self, key: SystemKey, before: bool) -> BTreeSet<SystemKey> {
+        let edges = if before { &self.before } else { &self.after };
+        let mut visited = BTreeSet::new();
+        let mut pending = vec![(NodeId::System(key), before)];
+        let mut systems = BTreeSet::new();
+        while let Some(node) = pending.pop() {
+            for &neighbor in edges.get(&node).into_iter().flatten() {
+                if visited.insert(neighbor) {
+                    if neighbor.1 != before
+                        && let NodeId::System(other) = neighbor.0
+                        && other != key
+                    {
+                        systems.insert(other);
+                    }
+                    pending.push(neighbor);
+                }
+            }
+        }
+        systems
+    }
+}
+
 pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpResult {
     let params: ScheduleParams = params(input)?;
     check_limit(params.limit)?;
@@ -135,46 +191,33 @@ pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpRes
         return Ok(json!({"schedule": params.schedule, "status": state, "systems": null}));
     }
     let graph = schedule.graph();
-    let systems: Vec<_> = schedule
+    let mut systems: Vec<_> = schedule
         .systems_with_access()
         .expect("checked initialization")
         .collect();
     let captured = world
         .get_resource::<Captured>()
         .and_then(|c| c.0.get(&schedule.label()))
-        .filter(|capture| {
-            capture.lifetime.upgrade().is_some()
+        .and_then(|candidates| {
+            candidates.iter().find(|capture| {
+                capture.lifetime.upgrade().is_some()
                 // At least one actual allocation must witness schedule identity.
                 && systems.iter().any(|(_, system)| identity(system.system()).is_some())
                 && systems.iter().all(|(key, system)| {
                     capture.identities.get(key) == Some(&identity(system.system()))
                 })
+            })
         });
     let system_names: BTreeMap<_, _> = systems
         .iter()
         .map(|(key, system)| (*key, system.system().name().to_string()))
         .collect();
-    // Expand declarations through set membership first, then take reachability
-    // on the system-only graph. This catches paths that enter a set and continue
-    // from one of its member systems (including paths through empty sets).
-    let mut declared = DiGraph::<NodeId>::default();
-    for (key, _) in &systems {
-        let source = NodeId::System(*key);
-        let ancestors = reachable(graph.hierarchy().graph(), source, Direction::Incoming);
-        for start in core::iter::once(source).chain(ancestors) {
-            for target in reachable(graph.dependency().graph(), start, Direction::Outgoing) {
-                for end in core::iter::once(target).chain(reachable(
-                    graph.hierarchy().graph(),
-                    target,
-                    Direction::Outgoing,
-                )) {
-                    if end.is_system() && source != end {
-                        declared.add_edge(source, end);
-                    }
-                }
-            }
-        }
-    }
+    let declared = OrderingGraph::new(graph, systems.iter().map(|(key, _)| *key));
+    let total = systems.len();
+    // Keys are private tie-breakers for repeated names, assigned by declaration
+    // instance order. Compute expensive nested details only for the outer page.
+    systems.sort_by(|(a, _), (b, _)| (&system_names[a], a).cmp(&(&system_names[b], b)));
+    systems.truncate(params.limit);
     let mut items = Vec::new();
     for (key, system) in &systems {
         let node = NodeId::System(*key);
@@ -192,12 +235,11 @@ pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpRes
             }
             names(conditions, params.limit)
         });
-        let ordered = |direction| {
+        let ordered = |before| {
             names(
-                reachable(&declared, node, direction)
+                declared
+                    .related(*key, before)
                     .into_iter()
-                    .filter_map(|node| node.as_system())
-                    .filter(|other| other != key)
                     .filter_map(|key| system_names.get(&key).cloned())
                     .collect(),
                 params.limit,
@@ -208,15 +250,12 @@ pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpRes
             "exclusive": system.access().is_exclusive(),
             "sets": names(set_names, params.limit),
             "run_conditions": conditions,
-            "before": ordered(Direction::Outgoing),
-            "after": ordered(Direction::Incoming),
+            "before": ordered(true),
+            "after": ordered(false),
         }));
     }
-    // Keep duplicate system names; the full record breaks ties deterministically.
-    items.sort_by_key(Value::to_string);
-    items.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
     Ok(json!({"schedule": params.schedule, "status": state,
-        "ordering": "declared_transitive", "systems": page(items, params.limit)}))
+        "ordering": "declared_transitive", "systems": crate::protocol::page_with_total(items, total)}))
 }
 
 pub(crate) fn ambiguities(In(input): In<Option<Value>>, world: &mut World) -> BrpResult {

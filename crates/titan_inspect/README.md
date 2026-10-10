@@ -26,7 +26,9 @@ no authentication by default: bind to loopback or secure the transport yourself.
 All methods accept an optional `limit` (default **64**, integer **1..=256**).
 Unknown fields and invalid values return JSON-RPC `INVALID_PARAMS` (`-32602`).
 Lists use `{ "items": [...], "total": N, "truncated": bool }`. The same limit
-applies independently to the outer list and each nested list, so a system with
+applies independently to the outer list and each nested list. System details are
+computed only for the selected outer page, using a compact declaration graph
+rather than materializing its transitive closure. Thus a system with
 many sets, conditions, edges, or conflicts cannot silently overflow the limit.
 `total` counts the full list before truncation. No pagination is provided.
 
@@ -108,7 +110,10 @@ processing; their names remain visible in `titan.schedules`.
 
 Bevy moves conditions into private executable storage on build. `InspectPlugin`
 installs a **non-mutating build pass** at plugin finish to retain their names.
-For schedules added/replaced later, call
+Only schedules present when this plugin's finish hook runs are automatically
+observed. A later plugin's finish hook may create or replace schedules; plugin
+order independence applies to BRP registration, not condition-capture timing.
+For schedules added/replaced later (including in later finish hooks), call
 `titan_inspect::schedules::observe_schedule(&mut schedule)` before their first
 build, **after all build passes that modify conditions**. Calling it again moves
 capture to the end of the pass list. Condition-modifying passes installed after
@@ -122,7 +127,7 @@ again on every rebuild and does not change scheduling semantics.
 
 Lists are sorted lexically by names (ambiguity pairs are canonicalized); nested
 name lists are deduplicated. Duplicate system names remain separate records,
-with their full descriptions breaking sorting ties. Names are descriptive, not
+with private declaration-instance order breaking sorting ties. Names are descriptive, not
 unique instance identifiers: edges cannot distinguish two instances with the
 same name. No internal node IDs are sent. Stability depends on stable Debug and
 system names supplied by the app; labels containing pointers or changing values
