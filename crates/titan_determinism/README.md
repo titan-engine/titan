@@ -49,7 +49,11 @@ fn scenario() -> Sim {
     .with_seed(42)
 }
 
-for variant in [Variant::Repeat, Variant::MultiThreaded] {
+for variant in [
+    Variant::Repeat,
+    Variant::MultiThreaded,
+    Variant::ShuffleAmbiguous { seed: 123 },
+] {
     let report = DeterminismCheck::new(scenario)
         .ticks(120)
         .runs(3)
@@ -108,7 +112,7 @@ repeatability **within one process and build**, not across platforms, CPU
 architectures, compiler versions, or builds. Rendering/GPU state, external
 services, and hidden state are outside its observation boundary.
 
-## Repeat and multithreaded variants
+## Execution variants
 
 `Variant::Repeat` is the default: every run keeps the factory's executor policy
 and setup. It can catch unordered-collection gameplay, uncontrolled RNG,
@@ -120,11 +124,64 @@ captured state during the chosen ticks.
 single-threaded schedules. This crate enables Bevy ECS's `multi_threaded` feature,
 so the multithreaded executor is available, not a feature-disabled fallback.
 Actual parallel execution still depends on task-pool workers and compatible
-system accesses. Both variants are supported; neither shuffles ambiguous
-systems or exhaustively explores possible schedules. A pass is not proof of
-race freedom. Order gameplay systems explicitly when their behavior depends on
-order, and configure schedules created and immediately run inside a system
-according to `titan_test`'s executor-policy limitations.
+system accesses. It does not guarantee exploration of different ambiguous orders.
+
+`Variant::ShuffleAmbiguous { seed }` leaves run 1 unchanged and chooses a
+reproducible topological system order for subsequent runs, using a
+**single-threaded executor** so conflicting unordered systems run in that order.
+This can expose hidden dependencies without thread timing races. For example:
+
+```rust
+# use titan_determinism::{DeterminismCheck, Variant};
+# use titan_test::Sim;
+# fn scenario() -> Sim { Sim::new(|_| {}) }
+let report = DeterminismCheck::new(scenario)
+    .ticks(120)
+    .variant(Variant::ShuffleAmbiguous { seed: 42 })
+    .run();
+println!("{report}");
+```
+
+The implementation uses Bevy's existing public
+`ScheduleBuildSettings::shuffle_seed` hook, enabling `bevy_ecs/debug`. It shuffles
+topological tie-breaking, not independent pairwise edges, so it cannot introduce
+cycles or reverse explicit dependency paths (including weak-chain ordering of
+conflicting systems). **All unordered systems may move**, not only pairs Bevy
+reports as ambiguous; accepted/ignored ambiguity pairs remain excluded from
+hints, not from shuffling. Automatic deferred sync points can limit the orders
+Bevy explores. No upstream code is changed.
+
+The same seed is applied to every candidate and schedule. For the same factory
+and build it gives the same choices, independent of `SimSeed`. To explore other
+orders, run checks with **different shuffle seeds**, not just more runs. Changing
+system registration or the dependency graph can change the choices. The
+reference retains the factory's executor; shuffled candidates use single-threaded
+execution even if the factory selected a multithreaded executor.
+
+All existing main-world schedules are configured before the first candidate
+update, including `FixedUpdate` and startup schedules. A maintenance system in
+Bevy's `Main` driver, ordered before `Main::run_main`, configures new or replaced
+schedules at subsequent update boundaries without resetting existing executors.
+Normal lazy initialization is preserved: startup-dependent `Local::from_world`
+values initialize at their normal execution time, and dormant schedules do not
+initialize. Unchanged schedules are not rebuilt on every tick, preserving pending
+deferred buffers. A private empty set requests one rebuild when settings change,
+because changing build settings alone does not mark an existing graph dirty.
+
+This variant requires the standard Bevy `Main` driver used by `Sim::new`; custom
+app update drivers or replacing `Main` itself are not supported. Like `Sim`'s
+executor policy, it cannot configure schedules created and immediately run
+*within* a system. Configure those schedules explicitly. Sub-app schedules are
+not accessible through `Sim` and are not shuffled. Systems added to an already
+configured schedule inherit its shuffle setting on their normal rebuild; if game
+code overrides the setting, the next update boundary restores it. A factory that
+makes ambiguities build errors still fails; use warning/ignore severity to explore
+its ambiguities.
+
+None of these variants exhaustively explores possible schedules. A pass is not
+proof of race freedom. Order gameplay systems explicitly when behavior depends
+on order, and configure immediately-run schedules according to the limitations
+above.
 
 ## Input, bounds, and memory
 
@@ -188,9 +245,15 @@ Nondeterminism detected: run 2 diverged from run 1 at tick 1 (of 4)
   run 2 wins the tie; later candidates need not execute tick 5 or beyond.
 
 Hints are debugging leads, **not proof of causation**. Ambiguity hints read
-existing schedule graph access conflicts for diverging types without modifying
-schedules or execution order. Ordered systems, unavailable schedules, or types
-without usable conflict data may yield no hints. With the optional
+existing schedule graph access conflicts for diverging types. For
+`ShuffleAmbiguous`, `AmbiguityHint::order` records the chosen topological
+`[before, after]` names from the executable schedule after the diverging tick.
+The readable report prints `shuffled order: before -> after`; the variant in the
+replay parameters records the shuffle seed. These are configured orders, not
+proof that either system ran (run conditions may skip them) or caused the bug.
+Pairs unrelated to captured diverging types are omitted. Explicitly ordered
+systems, unavailable schedules, or types without usable conflict data may yield
+no hints. Hint collection itself never modifies schedules or execution order. With the optional
 `track_location` feature, last-change hints include the recorded mutation site
 when available; the last site is not necessarily the source of the bug:
 

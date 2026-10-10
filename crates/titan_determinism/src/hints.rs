@@ -21,6 +21,10 @@ pub struct AmbiguityHint {
     pub systems: [String; 2],
     /// Full snapshot type keys shared by the conflict and the diff.
     pub types: Vec<String>,
+    /// Chosen `[before, after]` for `ShuffleAmbiguous`, otherwise `None`.
+    /// This is a debugging lead, not proof that the pair caused the divergence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<[String; 2]>,
 }
 
 /// The last recorded mutation site of a diverging component or resource.
@@ -47,7 +51,16 @@ pub struct Hints {
     pub change_locations: Vec<ChangeLocationHint>,
 }
 
+#[cfg(test)]
 pub(crate) fn collect(world: &World, diff: &WorldDiff) -> Hints {
+    collect_with_seed(world, diff, None)
+}
+
+pub(crate) fn collect_with_seed(
+    world: &World,
+    diff: &WorldDiff,
+    shuffle_seed: Option<u64>,
+) -> Hints {
     let diverging: BTreeSet<&str> = diff
         .entities
         .iter()
@@ -66,9 +79,14 @@ pub(crate) fn collect(world: &World, diff: &WorldDiff) -> Hints {
             let Ok(systems) = schedule.systems() else {
                 continue;
             };
+            // Schedule::systems() follows executable topological order. Read
+            // it AFTER the tick so an in-tick rebuild cannot leave stale hints.
             let names: HashMap<_, _> = systems
-                .map(|(id, system)| (id, system.name().to_string()))
+                .enumerate()
+                .map(|(index, (id, system))| (id, (index, system.name().to_string())))
                 .collect();
+            let shuffled = shuffle_seed.is_some()
+                && schedule.get_build_settings().shuffle_seed == shuffle_seed;
             for (first, second, conflicts) in schedule.graph().conflicting_systems().iter() {
                 let mut types: Vec<String> = if conflicts.is_empty() {
                     // An exclusive system or unrestricted entity access can touch
@@ -90,19 +108,32 @@ pub(crate) fn collect(world: &World, diff: &WorldDiff) -> Hints {
                 };
                 types.sort();
                 types.dedup();
-                let mut systems = [first.clone(), second.clone()];
+                let order = shuffled.then(|| {
+                    if first.0 < second.0 {
+                        [first.1.clone(), second.1.clone()]
+                    } else {
+                        [second.1.clone(), first.1.clone()]
+                    }
+                });
+                let mut systems = [first.1.clone(), second.1.clone()];
                 systems.sort();
                 hints.ambiguities.push(AmbiguityHint {
                     schedule: format!("{label:?}"),
                     systems,
                     types,
+                    order,
                 });
             }
         }
     }
     // Schedule storage uses hash iteration; report order must not inherit it.
     hints.ambiguities.sort_by(|a, b| {
-        (&a.schedule, &a.systems, &a.types).cmp(&(&b.schedule, &b.systems, &b.types))
+        (&a.schedule, &a.systems, &a.types, &a.order).cmp(&(
+            &b.schedule,
+            &b.systems,
+            &b.types,
+            &b.order,
+        ))
     });
     hints.ambiguities.dedup();
     #[cfg(feature = "track_location")]
@@ -345,6 +376,77 @@ mod tests {
         assert_eq!(hints, serde_json::from_str::<Hints>(&json).unwrap());
         #[cfg(not(feature = "track_location"))]
         assert!(hints.change_locations.is_empty());
+    }
+
+    #[test]
+    fn shuffled_hints_filter_types_and_accept_older_json() {
+        let mut world = World::new();
+        let entity = world.spawn(Counter(0)).id();
+        world.insert_resource(Total(0));
+        world.init_resource::<Schedules>();
+        let mut schedule = Schedule::new(TestSchedule);
+        schedule.add_systems((first, second, resource_first, resource_second));
+        world.resource_mut::<Schedules>().insert(schedule);
+        crate::shuffle::configure(&mut world, 42);
+        world.run_schedule(TestSchedule);
+        let hints = collect_with_seed(
+            &world,
+            &component_diff(entity, ChangeKind::Changed),
+            Some(42),
+        );
+        assert_eq!(hints.ambiguities.len(), 1);
+        assert!(hints
+            .ambiguities
+            .iter()
+            .all(|hint| hint.types == [core::any::type_name::<Counter>()]));
+        let order = hints.ambiguities[0].order.as_ref().unwrap();
+        let expected: Vec<_> = world
+            .resource::<Schedules>()
+            .get(TestSchedule)
+            .unwrap()
+            .systems()
+            .unwrap()
+            .map(|(_, system)| system.name().to_string())
+            .filter(|name| name.ends_with("::first") || name.ends_with("::second"))
+            .collect();
+        assert_eq!(order.as_slice(), expected);
+        let old: AmbiguityHint =
+            serde_json::from_str(r#"{"schedule":"Update","systems":["a","b"],"types":[]}"#)
+                .unwrap();
+        assert_eq!(old.order, None);
+    }
+
+    #[test]
+    fn shuffled_hints_follow_in_tick_rebuilds_instead_of_old_orders() {
+        #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+        enum Sets {
+            A,
+            B,
+        }
+        let mut world = World::new();
+        let entity = world.spawn(Counter(0)).id();
+        world.init_resource::<Schedules>();
+        let mut schedule = Schedule::new(TestSchedule);
+        schedule.add_systems((first.in_set(Sets::A), second.in_set(Sets::B)));
+        world.resource_mut::<Schedules>().insert(schedule);
+        crate::shuffle::configure(&mut world, 42);
+        world.run_schedule(TestSchedule);
+        let diff = component_diff(entity, ChangeKind::Changed);
+        assert_eq!(
+            collect_with_seed(&world, &diff, Some(42)).ambiguities.len(),
+            1
+        );
+        // Game code changes dependencies and runs this schedule again during
+        // an update. Its old ambiguous order must not survive in diagnostics.
+        world
+            .resource_mut::<Schedules>()
+            .get_mut(TestSchedule)
+            .unwrap()
+            .configure_sets(Sets::A.before(Sets::B));
+        world.run_schedule(TestSchedule);
+        assert!(collect_with_seed(&world, &diff, Some(42))
+            .ambiguities
+            .is_empty());
     }
 
     #[cfg(feature = "track_location")]

@@ -4,6 +4,7 @@
 extern crate alloc;
 
 mod hints;
+mod shuffle;
 
 pub use hints::{AmbiguityHint, ChangeLocationHint, Hints};
 pub use titan_snapshot::{DiffConfig, SnapshotConfig};
@@ -24,6 +25,13 @@ pub enum Variant {
     /// Replace subsequent runs' schedule executors with multithreaded executors.
     /// The reference retains the factory's executor (normally single-threaded).
     MultiThreaded,
+    /// Seed subsequent runs' topological system order with a single-threaded
+    /// executor. The reference remains unchanged. The same seed is reused in
+    /// every candidate and schedule; it is independent of gameplay `SimSeed`.
+    ShuffleAmbiguous {
+        /// Seed for reproducible, cycle-safe choices of system ordering.
+        seed: u64,
+    },
 }
 
 /// A serializable copy of a snapshot type filter.
@@ -200,6 +208,9 @@ impl fmt::Display for Divergence {
                 hint.systems[0],
                 hint.systems[1]
             )?;
+            if let Some(order) = &hint.order {
+                writeln!(f, "    shuffled order: {} -> {}", order[0], order[1])?;
+            }
         }
         for hint in &self.hints.change_locations {
             writeln!(
@@ -292,7 +303,8 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
     /// # Panics
     /// Panics before execution if ticks are missing/zero, runs are fewer than two,
     /// or the script version is unsupported. Panics if the factory returns an
-    /// already-ticked `Sim`. Game/factory panics propagate unchanged.
+    /// already-ticked `Sim`, or if `ShuffleAmbiguous` cannot find the standard
+    /// Bevy `Main` driver. Game/factory panics propagate unchanged.
     pub fn run(mut self) -> DeterminismReport {
         let ticks = self
             .ticks
@@ -351,6 +363,14 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             if self.variant == Variant::MultiThreaded {
                 candidate = candidate.with_executor_kind(ExecutorKind::MultiThreaded);
             }
+            let shuffle_seed = match self.variant {
+                Variant::ShuffleAmbiguous { seed } => {
+                    shuffle::install(candidate.world_mut(), seed);
+                    candidate = candidate.with_executor_kind(ExecutorKind::SingleThreaded);
+                    Some(seed)
+                }
+                _ => None,
+            };
             let mut playback = Playback::new(sorted_script.as_ref());
             for reference in &snapshots {
                 if earliest
@@ -366,7 +386,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
                     earliest = Some(Divergence {
                         run,
                         tick: candidate.current_tick(),
-                        hints: hints::collect(candidate.world(), &diff),
+                        hints: hints::collect_with_seed(candidate.world(), &diff, shuffle_seed),
                         diff,
                         parameters: ScenarioParameters {
                             seed,
