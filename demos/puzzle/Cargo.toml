@@ -1,0 +1,49 @@
+[package]
+name = "titan_puzzle"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "A deterministic push-puzzle foundation with shared gameplay actions and events"
+repository = "https://github.com/titan-engine/titan"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[features]
+default = ["render"]
+render = [
+  "bevy/async_executor",
+  "bevy/multi_threaded",
+  "bevy/bevy_asset",
+  "bevy/bevy_log",
+  "bevy/bevy_window",
+  "bevy/bevy_winit",
+  "bevy/bevy_render",
+  "bevy/bevy_camera",
+  "bevy/bevy_color",
+  "bevy/bevy_image",
+  "bevy/bevy_mesh",
+  "bevy/bevy_shader",
+  "bevy/bevy_core_pipeline",
+  "bevy/bevy_sprite",
+  "bevy/bevy_sprite_render",
+  "bevy/bevy_text",
+  "bevy/bevy_ui",
+  "bevy/bevy_ui_render",
+  "bevy/default_font",
+  "bevy/png",
+  "bevy/x11",
+]
+
+[dependencies]
+bevy = { path = "../..", version = "0.20.0", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+titan_test = { path = "../../crates/titan_test" }
+
+[[bin]]
+name = "titan_puzzle"
+path = "src/main.rs"
+required-features = ["render"]
+
+[lints]
+workspace = true

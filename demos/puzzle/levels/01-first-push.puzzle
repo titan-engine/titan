@@ -1,0 +1,13 @@
+puzzle 1
+id first-push
+title First Push
+grid
+#####
+#...#
+#...#
+#####
+objects
+player hero 1 1
+block crate 2 1
+target goal 3 1
+end
