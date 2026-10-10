@@ -120,16 +120,14 @@ struct Link {
     dependency: Summary,
 }
 
-struct Inventory<'w> {
-    world: &'w World,
-    server: Option<&'w AssetServer>,
+// Type names and ID formatting do not require visiting asset storage or the server.
+// Keep this separate so bounded failure-history queries never build a live inventory.
+struct TypeMetadata {
     types: HashMap<TypeId, ReflectHandle>,
-    stored: HashSet<UntypedAssetId>,
-    ids: HashSet<UntypedAssetId>,
 }
 
-impl<'w> Inventory<'w> {
-    fn new(world: &'w World) -> Self {
+impl TypeMetadata {
+    fn new(world: &World) -> Self {
         let mut types = HashMap::new();
         if let Some(registry) = world.get_resource::<AppTypeRegistry>() {
             for registration in registry.read().iter() {
@@ -138,22 +136,7 @@ impl<'w> Inventory<'w> {
                 }
             }
         }
-        let stored: HashSet<_> = types
-            .values()
-            .flat_map(|handle| handle.ids(world))
-            .collect();
-        let server = world.get_resource::<AssetServer>();
-        let mut ids = stored.clone();
-        if let Some(server) = server {
-            ids.extend(server.asset_ids());
-        }
-        Self {
-            world,
-            server,
-            types,
-            stored,
-            ids,
-        }
+        Self { types }
     }
 
     fn asset_type(&self, id: UntypedAssetId) -> Option<String> {
@@ -171,6 +154,45 @@ impl<'w> Inventory<'w> {
             UntypedAssetId::Index { index, .. } => format!("{name}:index:{}", index.to_bits()),
             UntypedAssetId::Uuid { uuid, .. } => format!("{name}:uuid:{uuid}"),
         }
+    }
+}
+
+struct Inventory<'w> {
+    world: &'w World,
+    server: Option<&'w AssetServer>,
+    metadata: TypeMetadata,
+    stored: HashSet<UntypedAssetId>,
+    ids: HashSet<UntypedAssetId>,
+}
+
+impl<'w> Inventory<'w> {
+    fn new(world: &'w World) -> Self {
+        let metadata = TypeMetadata::new(world);
+        let stored: HashSet<_> = metadata
+            .types
+            .values()
+            .flat_map(|handle| handle.ids(world))
+            .collect();
+        let server = world.get_resource::<AssetServer>();
+        let mut ids = stored.clone();
+        if let Some(server) = server {
+            ids.extend(server.asset_ids());
+        }
+        Self {
+            world,
+            server,
+            metadata,
+            stored,
+            ids,
+        }
+    }
+
+    fn asset_type(&self, id: UntypedAssetId) -> Option<String> {
+        self.metadata.asset_type(id)
+    }
+
+    fn id(&self, id: UntypedAssetId) -> String {
+        self.metadata.id(id)
     }
 
     fn summary(&self, id: UntypedAssetId) -> Summary {
@@ -196,6 +218,7 @@ impl<'w> Inventory<'w> {
 
     fn dependencies(&self, id: UntypedAssetId) -> Option<Vec<UntypedAssetId>> {
         let mut ids = self
+            .metadata
             .types
             .get(&id.type_id())?
             .dependencies(self.world, id)?;
@@ -353,11 +376,11 @@ struct FailureResponse {
 pub(crate) fn failures(In(input): In<Option<Value>>, world: &mut World) -> BrpResult {
     let params: FailureParams = params(input)?;
     check_limit(params.limit)?;
-    let inventory = Inventory::new(world);
+    let metadata = TypeMetadata::new(world);
     let history = world.resource::<FailureHistory>();
     let matching = history.entries.iter().rev().filter(|failure| {
         matches(
-            &inventory.asset_type(failure.id),
+            &metadata.asset_type(failure.id),
             &failure.path,
             &params.asset_type,
             &params.path_prefix,
@@ -369,9 +392,9 @@ pub(crate) fn failures(In(input): In<Option<Value>>, world: &mut World) -> BrpRe
         .map(|failure| FailureRecord {
             sequence: failure.sequence,
             summary: Summary {
-                id: inventory.id(failure.id),
+                id: metadata.id(failure.id),
                 path: failure.path.clone(),
-                asset_type: inventory.asset_type(failure.id),
+                asset_type: metadata.asset_type(failure.id),
                 state: Some(State::Failed),
                 error: Some(failure.error.clone()),
             },

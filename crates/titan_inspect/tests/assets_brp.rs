@@ -364,6 +364,48 @@ fn assets_brp_pathless_async_failure_preserves_null_path_and_prefix_semantics() 
 }
 
 #[test]
+fn assets_brp_failure_history_is_independent_of_live_asset_storage() {
+    let mut app = demo_app();
+    settle(&mut app);
+    let before = call(&mut app, "titan.asset_failures", None).unwrap();
+    let handles: Vec<_> = (0..10_000)
+        .map(|_| {
+            app.world_mut()
+                .resource_mut::<Assets<DemoAsset>>()
+                .add(DemoAsset { children: vec![] })
+        })
+        .collect();
+    assert_eq!(
+        before,
+        call(&mut app, "titan.asset_failures", None).unwrap()
+    );
+    // A history query needs only type metadata and captured records, not current
+    // storage or server state. Dispatch directly: asset systems require those resources.
+    let method = *app
+        .world()
+        .resource::<RemoteMethods>()
+        .get("titan.asset_failures")
+        .unwrap();
+    let RemoteMethodSystemId::Instant(method) = method else {
+        panic!("instant handler")
+    };
+    let storage = app
+        .world_mut()
+        .remove_resource::<Assets<DemoAsset>>()
+        .unwrap();
+    let server = app.world_mut().remove_resource::<AssetServer>().unwrap();
+    let result = app
+        .world_mut()
+        .run_system_with(method, None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(before, result);
+    app.world_mut().insert_resource(storage);
+    app.world_mut().insert_resource(server);
+    drop(handles);
+}
+
+#[test]
 fn assets_brp_loading_is_visible_without_polling_or_loading() {
     let mut app = demo_app();
     // Read directly before updating the app so even fast IO cannot change the state.

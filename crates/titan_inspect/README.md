@@ -197,7 +197,9 @@ because every record is a failure. `total` counts matching **retained** records.
 `history_truncated` explicitly reports retention loss, distinct from response
 page truncation. These are historical errors, not claims about current state.
 Failures of pathless `AssetServer::add_async` assets retain `path: null` and
-never match `path_prefix`, including an empty prefix.
+never match `path_prefix`, including an empty prefix. History queries read only
+registered type metadata and the bounded ring, never enumerating live asset
+storage or server IDs; their cost is independent of the live asset count.
 
 Both asset methods are read-only: they never load, reload, or retain assets.
 A BRP handler does not advance tasks, alter asset storage, or drain messages.
