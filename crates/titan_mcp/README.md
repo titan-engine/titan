@@ -201,11 +201,19 @@ returned due to output caps). With `since`, `has_more: true` means continue with
 entries too. Without `since`, older omitted matches are intentionally skipped;
 use an explicit cursor to page through history. Keep filters unchanged while
 paging, or go back to an earlier cursor when changing them. A future cursor is
-rejected. `reader_error` reports a pipe I/O failure without discarding captured
-output. Attach-only mode explains that logs require `--game-cmd`.
+rejected. `reader_error` reports a pipe I/O failure or a reader-cleanup timeout
+without discarding captured output; it is cleared at the next successful spawn.
+Attach-only mode explains that logs require `--game-cmd`.
 
-Exit/crash cleanup drains the final output before returning process state. Logs
-and exit status survive a crash or intentional stop, and failed readiness errors
+Exit/crash cleanup normally drains the final output before returning process
+state. Both readers share a cleanup deadline based on the stop timeout, clamped
+to 1–2 seconds. If an escaped descendant still holds an inherited pipe open,
+unfinished readers are detached and `reader_error` explains that capture continues
+in the background. A new launch invalidates old readers' generation atomically
+with taking its launch cursor: late output or I/O errors from those readers cannot
+enter the new run's logs. A blocked detached reader may remain until its pipe
+closes, but it never blocks MCP lifecycle calls. Already captured logs and exit
+status survive a crash or intentional stop, and failed readiness errors
 include a bounded recent log tail, so startup panics and missing assets are
 visible even when BRP never starts. Builds still use their separate diagnostic
 capture; they do not enter the game log ring.
@@ -228,7 +236,9 @@ start suspended into a Job Object; stop makes a bounded best-effort
 `taskkill /T` request, then terminates the job (console apps may not support
 graceful shutdown). Builds get the same tree isolation. Commands must not
 intentionally detach/escape their group or hand inherited pipes to unrelated
-processes. Normal stdio EOF, protocol I/O errors, and dropping the process
+processes: those escaped processes cannot be stopped by the manager. Such an
+inherited game pipe does not prevent MCP from returning process state or stopping
+its owned tree; bounded reader cleanup reports the incomplete drain. Normal stdio EOF, protocol I/O errors, and dropping the process
 manager stop its game. Ctrl-C and Unix SIGTERM/SIGHUP request cooperative
 shutdown, interrupt idle stdin, blocked stdout, and readiness/build polling,
 then clean up the owned tree. The binary uses bounded 8 KiB stdio chunks and
@@ -391,7 +401,10 @@ on the timing-sensitive frame-count fixtures tracked in #73. Dedicated log tests
 launch the headless example, poll new output, filter colored Bevy-format lines,
 check cursors across restarts, crash after readiness, expose startup panic/timeout
 diagnostics, drain chatty dual pipes and partial final lines, report retention
-loss, and verify that child output cannot corrupt MCP stdio.
+loss, and verify that child output cannot corrupt MCP stdio. Unix detached-helper
+tests use `setsid` with inherited pipes to verify bounded status/stop cleanup and
+log isolation across launches; a controlled reader test also rejects late lines
+and I/O errors from an earlier generation.
 
 To reproduce the visual agent workflow:
 

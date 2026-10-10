@@ -346,11 +346,30 @@ impl ProcessManager {
         })
     }
 
-    // The owned tree has been terminated before joining, closing inherited pipes.
+    // Normally tree termination closes inherited pipes. Escaped descendants may
+    // keep them open: use one shared deadline, then detach rather than hang MCP.
     fn finish_readers(&mut self) -> Result<(), String> {
+        let budget = self
+            .config()?
+            .stop_timeout
+            .clamp(Duration::from_secs(1), Duration::from_secs(2));
+        let deadline = Instant::now() + budget;
+        while self.readers.iter().any(|reader| !reader.is_finished()) && Instant::now() < deadline {
+            thread::sleep(POLL.min(deadline.saturating_duration_since(Instant::now())));
+        }
         let mut panicked = false;
+        let mut detached = false;
         for reader in self.readers.drain(..) {
-            panicked |= reader.join().is_err();
+            if reader.is_finished() {
+                panicked |= reader.join().is_err();
+            } else {
+                // Dropping a JoinHandle detaches it. Its generation can still
+                // publish this run's logs, but start_run invalidates it on launch.
+                detached = true;
+            }
+        }
+        if detached {
+            self.logs.note_detached_readers();
         }
         if panicked {
             Err("Game log reader panicked".to_owned())
@@ -447,7 +466,7 @@ impl ProcessManager {
                 .stderr(Stdio::piped()),
         )
         .map_err(|e| format!("Launching configured game: {e}"))?;
-        self.log_cursor = Some(self.logs.cursor());
+        self.log_cursor = Some(self.logs.start_run());
         self.readers.push(self.logs.capture(
             take_stdout(&mut child).expect("game stdout was piped"),
             "stdout",

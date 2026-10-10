@@ -114,6 +114,63 @@ fn timeout_fixture() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+#[ignore = "detached child holding inherited game pipes"]
+fn detached_holder_fixture() {
+    rustix::process::setsid().unwrap();
+    fs::write("holder_ready", "yes").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut emitted = false;
+    while !fs::exists("release_holder").unwrap() && Instant::now() < deadline {
+        if !emitted && fs::exists("late_output").unwrap() {
+            let _ = writeln!(std::io::stdout().lock(), "detached old stdout");
+            let _ = writeln!(std::io::stderr().lock(), "detached old stderr");
+            fs::write("late_done", "yes").unwrap();
+            emitted = true;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    std::process::exit(0);
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "game with an intentionally escaped descendant"]
+#[expect(
+    clippy::zombie_processes,
+    reason = "Deliberately orphan a setsid descendant to test bounded pipe cleanup"
+)]
+fn detached_game_fixture() {
+    if !fs::exists("holder_ready").unwrap() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--ignored",
+                "--exact",
+                "detached_holder_fixture",
+                "--nocapture",
+            ])
+            .spawn()
+            .unwrap();
+        fs::write("holder_pid", child.id().to_string()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !fs::exists("holder_ready").unwrap() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+    emit_logs();
+    thread::spawn(|| loop {
+        if fs::exists("exit_game").unwrap() {
+            fs::write("exiting", "yes").unwrap();
+            std::process::exit(0);
+        }
+        thread::sleep(Duration::from_millis(5));
+    });
+    let port = fs::read_to_string("port").unwrap().parse().unwrap();
+    server::run(port);
+}
+
 struct Fixture {
     directory: tempfile::TempDir,
     client: Client,
@@ -168,6 +225,83 @@ impl Fixture {
             );
             thread::sleep(Duration::from_millis(5));
         }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn detached_descendant_cannot_hang_status_stop_or_contaminate_next_launch() {
+    // Test both natural exit (status cleanup) and intentional stop. Each fixture
+    // leaves a new-session helper holding BOTH stdout and stderr until released.
+    for natural_exit in [true, false] {
+        let fixture = Fixture::new("detached_game_fixture");
+        struct ReleaseHolder(std::path::PathBuf);
+        impl Drop for ReleaseHolder {
+            fn drop(&mut self) {
+                let _ = fs::write(&self.0, "yes");
+            }
+        }
+        let _release = ReleaseHolder(fixture.directory.path().join("release_holder"));
+        let mut manager = ProcessManager::new(fixture.config.clone()).unwrap();
+        manager.launch(&fixture.client).unwrap();
+        if natural_exit {
+            fs::write(fixture.directory.path().join("exit_game"), "yes").unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !fixture.directory.path().join("exiting").exists() {
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let client = Client::new(fixture.client.url()).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let started = Instant::now();
+            if natural_exit {
+                while manager.status().unwrap().owned {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            }
+            let stopped =
+                tools::call_managed(&client, &mut manager, "stop_game", json!({})).unwrap();
+            let status =
+                tools::call_managed(&client, &mut manager, "game_status", json!({})).unwrap();
+            let elapsed = started.elapsed();
+            let _ = sender.send((manager, stopped, status, elapsed));
+        });
+        let (mut manager, stopped, status, elapsed) = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("status/stop blocked on a detached pipe holder");
+        worker.join().unwrap();
+        // One shared one-second reader budget, not a separate wait for each pipe.
+        assert!(elapsed < Duration::from_secs(3), "cleanup took {elapsed:?}");
+        assert_eq!(stopped["state"], "exited");
+        assert_eq!(status["process"]["state"], "exited");
+        let logs = fixture.logs(&mut manager, json!({}));
+        assert!(logs["reader_error"]
+            .as_str()
+            .unwrap()
+            .contains("detached descendant"));
+        assert!(logs.to_string().contains("startup stdout"));
+        fs::remove_file(fixture.directory.path().join("exit_game")).ok();
+        let launched = fixture.call(&mut manager, "launch_game", json!({}));
+        let cursor = launched["log_cursor"].as_u64().unwrap();
+        fixture.wait_for_logs(
+            &mut manager,
+            json!({"since":cursor}),
+            &["startup stdout", "missing asset"],
+        );
+        // Wake the old readers only AFTER the new generation starts.
+        fs::write(fixture.directory.path().join("late_output"), "yes").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !fixture.directory.path().join("late_done").exists() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+        fs::write(fixture.directory.path().join("release_holder"), "yes").unwrap();
+        manager.stop().unwrap();
+        let logs = fixture.logs(&mut manager, json!({"since":cursor}));
+        assert_eq!(logs["reader_error"], Value::Null);
+        assert!(!logs["lines"].to_string().contains("detached old"));
     }
 }
 

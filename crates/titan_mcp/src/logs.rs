@@ -83,7 +83,7 @@ pub struct LogPage {
     pub omitted_lines: usize,
     /// Whether another page of matching entries can be read with this cursor.
     pub has_more: bool,
-    /// Last reader I/O failure, if any; output captured so far remains readable.
+    /// Last reader I/O failure or bounded-cleanup note for this run, if any.
     pub reader_error: Option<String>,
 }
 
@@ -93,6 +93,7 @@ struct Buffer {
     bytes: usize,
     cursor: u64,
     dropped: u64,
+    generation: u64,
     reader_error: Option<String>,
 }
 
@@ -101,13 +102,39 @@ struct Buffer {
 pub(crate) struct GameLogs(Arc<Mutex<Buffer>>);
 
 impl GameLogs {
-    pub(crate) fn cursor(&self) -> u64 {
-        self.0.lock().unwrap().cursor
+    // Invalidate detached readers atomically with taking the next launch cursor.
+    pub(crate) fn start_run(&self) -> u64 {
+        let mut buffer = self.0.lock().unwrap();
+        buffer.generation += 1;
+        buffer.reader_error = None;
+        buffer.cursor
     }
 
-    fn push(&self, stream: &'static str, bytes: &[u8], truncated_bytes: u64) {
+    pub(crate) fn note_detached_readers(&self) {
+        self.0.lock().unwrap().reader_error = Some(
+            "Game output is still held open, possibly by a detached descendant; capture continues in the background until a new launch starts".to_owned(),
+        );
+    }
+
+    fn reader_error(&self, generation: u64, message: String) {
+        let mut buffer = self.0.lock().unwrap();
+        if buffer.generation == generation {
+            buffer.reader_error = Some(message);
+        }
+    }
+
+    fn push(
+        &self,
+        generation: u64,
+        stream: &'static str,
+        bytes: &[u8],
+        truncated_bytes: u64,
+    ) -> bool {
         let text = strip_ansi(&String::from_utf8_lossy(bytes));
         let mut buffer = self.0.lock().unwrap();
+        if buffer.generation != generation {
+            return false;
+        }
         buffer.cursor += 1;
         let cursor = buffer.cursor;
         buffer.bytes += text.len();
@@ -123,6 +150,7 @@ impl GameLogs {
             buffer.bytes -= line.text.len();
             buffer.dropped += 1;
         }
+        true
     }
 
     pub(crate) fn read(&self, query: &LogQuery) -> Result<LogPage, String> {
@@ -190,6 +218,7 @@ impl GameLogs {
         stream: &'static str,
     ) -> thread::JoinHandle<()> {
         let logs = self.clone();
+        let generation = self.0.lock().unwrap().generation;
         thread::spawn(move || {
             let mut line = Vec::with_capacity(LINE_BYTES);
             let mut discarded = 0_u64;
@@ -200,7 +229,7 @@ impl GameLogs {
                     Ok(count) => count,
                     Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                     Err(error) => {
-                        logs.0.lock().unwrap().reader_error = Some(format!("{stream}: {error}"));
+                        logs.reader_error(generation, format!("{stream}: {error}"));
                         break;
                     }
                 };
@@ -209,7 +238,9 @@ impl GameLogs {
                         if discarded == 0 && line.last() == Some(&b'\r') {
                             line.pop();
                         }
-                        logs.push(stream, &line, discarded);
+                        if !logs.push(generation, stream, &line, discarded) {
+                            return;
+                        }
                         line.clear();
                         discarded = 0;
                     } else if line.len() < LINE_BYTES {
@@ -221,7 +252,7 @@ impl GameLogs {
             }
             // Preserve panic messages / final output even without a trailing newline.
             if !line.is_empty() || discarded > 0 {
-                logs.push(stream, &line, discarded);
+                logs.push(generation, stream, &line, discarded);
             }
         })
     }
@@ -292,7 +323,7 @@ mod tests {
             "INFO game: ready",
             "thread 'main' panicked: ERROR is not a formatted level",
         ] {
-            logs.push("stderr", text.as_bytes(), 0);
+            logs.push(0, "stderr", text.as_bytes(), 0);
         }
         let page = logs.read(&LogQuery::default()).unwrap();
         assert_eq!(page.lines[0].level, Some(LogLevel::Warn));
@@ -315,7 +346,7 @@ mod tests {
     fn eviction_pagination_and_tail_have_explicit_counts() {
         let logs = GameLogs::default();
         for _ in 0..BUFFER_LINES + 10 {
-            logs.push("stdout", b"hello", 0);
+            logs.push(0, "stdout", b"hello", 0);
         }
         let page = logs
             .read(&LogQuery {
@@ -344,10 +375,57 @@ mod tests {
     }
 
     #[test]
+    fn next_launch_rejects_late_lines_and_errors_from_detached_readers() {
+        struct HeldReader(std::sync::mpsc::Receiver<()>);
+        impl Read for HeldReader {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                if self.0.recv().is_err() {
+                    return Ok(0);
+                }
+                let line = b"late old output\n";
+                bytes[..line.len()].copy_from_slice(line);
+                Ok(line.len())
+            }
+        }
+        let logs = GameLogs::default();
+        assert!(logs.push(0, "stderr", b"retained crash", 0));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let reader = logs.capture(HeldReader(receiver), "stdout");
+        logs.note_detached_readers();
+        assert!(logs
+            .read(&LogQuery::default())
+            .unwrap()
+            .reader_error
+            .is_some());
+        let cursor = logs.start_run();
+        assert_eq!(cursor, 1);
+        sender.send(()).unwrap();
+        drop(sender);
+        reader.join().unwrap();
+        // A late I/O error from an old generation must not overwrite new metadata.
+        logs.reader_error(0, "late old reader error".into());
+        assert!(logs.push(1, "stdout", b"new game output", 0));
+        let page = logs
+            .read(&LogQuery {
+                since: Some(cursor),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(page.lines.len(), 1);
+        assert_eq!(page.lines[0].text, "new game output");
+        assert_eq!(page.cursor, 2);
+        assert!(page.reader_error.is_none());
+        assert_eq!(
+            logs.read(&LogQuery::default()).unwrap().lines[0].text,
+            "retained crash"
+        );
+    }
+
+    #[test]
     fn byte_caps_include_json_escaping_and_invalid_utf8() {
         let logs = GameLogs::default();
         for _ in 0..BUFFER_LINES {
-            logs.push("stdout", &vec![0xff; LINE_BYTES], 0);
+            logs.push(0, "stdout", &vec![0xff; LINE_BYTES], 0);
         }
         let page = logs
             .read(&LogQuery {
@@ -361,7 +439,7 @@ mod tests {
         assert!(serde_json::to_vec(&page).unwrap().len() < 24 * 1024);
         let logs = GameLogs::default();
         for _ in 0..100 {
-            logs.push("stderr", &vec![0; LINE_BYTES], 0);
+            logs.push(0, "stderr", &vec![0; LINE_BYTES], 0);
         }
         let page = logs.read(&LogQuery::default()).unwrap();
         assert!(!page.lines.is_empty());
