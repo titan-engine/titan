@@ -120,7 +120,11 @@ cross-crate consumer coverage and automatically includes new Titan packages.
 denied. `titan-tests` adds scoped default-feature tests when the Bevy workspace
 build is skipped, retaining its existing per-crate extra-feature/headless tests.
 The Linux scoped `test` path also runs `cargo test <Titan packages> --benches`
-without extra feature flags, matching the full CI driver's benchmark smoke run.
+with `--features bevy_remote/bevy_render`. The full CI driver's benchmark smoke
+run has no explicit feature flags, but its workspace scope implicitly unifies
+render; this separate scoped invocation must preserve that explicitly to avoid
+HTTP-only dependency warnings. Benchmarks do not add `bevy_ecs/track_location`
+or `--all-features`.
 Windows/macOS still skip benchmark smoke tests, matching `--skip-benches` in the
 full build recipe. `RUNNER_OS` selects this policy in Actions; local invocations
 fall back to `uname -s`.

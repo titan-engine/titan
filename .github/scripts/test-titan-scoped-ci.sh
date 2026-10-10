@@ -45,7 +45,7 @@ assert_commands() {
 assert_modes() {
   assert_commands lints "|fmt --all -- --check"$'\n'"|clippy $packages --all-targets --all-features --features bevy_remote/bevy_render -- -D warnings"
   local test_command="|test $packages --lib --bins --tests --features bevy_ecs/track_location,bevy_remote/bevy_render"
-  RUNNER_OS=Linux assert_commands test "$test_command"$'\n'"|test $packages --benches"
+  RUNNER_OS=Linux assert_commands test "$test_command"$'\n'"|test $packages --benches --features bevy_remote/bevy_render"
   RUNNER_OS=Windows assert_commands test "$test_command"
   RUNNER_OS=macOS assert_commands test "$test_command"
   assert_commands doc "|test $packages --doc --features bevy_remote/bevy_render"$'\n'"-D warnings|doc $packages --all-features --features bevy_remote/bevy_render --no-deps --document-private-items --keep-going"
