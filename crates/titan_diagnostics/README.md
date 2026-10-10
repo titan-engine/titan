@@ -73,7 +73,9 @@ schedule is null, never an unrelated thread's innermost label. Running
 independent worlds concurrently is still **not supported for app ownership**:
 the public fallback API cannot identify which world called it. Panics outside
 that app can also be recorded while it is alive; they have null context when
-there is no system span. No entity, asset, or scene identity is invented: include those details in
+there is no system span. During thread-local teardown, unavailable or borrowed context is also
+reported as null rather than panicking inside the hook. No entity, asset, or
+scene identity is invented: include those details in
 the error message or structured warning fields.
 
 `frame` is the app's `FrameCount` sampled before `Main::run_main`, so startup
@@ -173,8 +175,11 @@ tracing's Debug visitor representation. A panicking or failed field formatter
 is contained by this layer and retained as
 `<diagnostics: field formatter failed>` instead of unwinding into the app.
 Rust still invokes the previously installed panic hook for caught formatter
-panics; this layer does not create extra app panic reports for them. Other
-subscriber layers are responsible for their own formatting failures.
+panics; this layer does not create extra app panic reports for them. Captured
+panic payloads are dropped behind a second catch boundary. If their destructor
+also panics, that secondary payload is intentionally leaked instead of risking
+another unwind or process abort. This applies to both error and field formatting.
+Other subscriber layers are responsible for their own formatting failures.
 
 The `backtrace` field is captured at the reporter, not at error construction.
 If another workspace crate enables `bevy_ecs/backtrace`, Bevy's error Display

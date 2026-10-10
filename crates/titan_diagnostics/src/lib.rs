@@ -150,7 +150,7 @@ fn active_sink() -> Option<Arc<Sink>> {
 }
 
 fn reporting(f: impl FnOnce()) {
-    REPORTING.with(|flag| {
+    let _ = REPORTING.try_with(|flag| {
         if flag.replace(true) {
             return;
         }
@@ -166,15 +166,34 @@ fn reporting(f: impl FnOnce()) {
 }
 
 pub(crate) fn format_field(value: &dyn core::fmt::Debug) -> String {
-    REPORTING.with(|flag| {
-        // The hook still chains to the previous hook, but must not mistake a
-        // diagnostics visitor's formatter failure for a new app panic report.
-        let previous = flag.replace(true);
-        let result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| format!("{value:?}")));
-        flag.set(previous);
-        result.unwrap_or_else(|_| "<diagnostics: field formatter failed>".into())
-    })
+    REPORTING
+        .try_with(|flag| {
+            // The hook still chains to the previous hook, but must not mistake a
+            // diagnostics visitor's formatter failure for a new app panic report.
+            let previous = flag.replace(true);
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| format!("{value:?}")));
+            let value = match result {
+                Ok(value) => value,
+                Err(payload) => {
+                    discard_panic_payload(payload);
+                    "<diagnostics: field formatter failed>".into()
+                }
+            };
+            flag.set(previous);
+            value
+        })
+        .unwrap_or_else(|_| "<diagnostics: field formatter unavailable>".into())
+}
+
+fn discard_panic_payload(payload: Box<dyn core::any::Any + Send>) {
+    // A panic_any payload can itself have a panicking Drop implementation.
+    // Drop it behind another boundary, leaking only a secondary panic payload
+    // if destruction fails: recursively dropping that payload is not safe.
+    if let Err(secondary) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(payload)))
+    {
+        core::mem::forget(secondary);
+    }
 }
 
 fn capture_backtrace() -> Option<String> {
@@ -202,7 +221,8 @@ fn report_error(error: BevyError, context: ErrorContext) {
             );
         });
     }));
-    if result.is_err() {
+    if let Err(payload) = result {
+        reporting(|| discard_panic_payload(payload));
         sink.lock().last_write_error = Some("diagnostic formatting or recording panicked".into());
     }
     // Never hold sink or registry locks across arbitrary user error policy.

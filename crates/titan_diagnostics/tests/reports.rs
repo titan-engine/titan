@@ -241,6 +241,10 @@ fn child_process_entry() {
         use std::io::Write;
         let _ = writeln!(std::io::stderr(), "previous-panic-hook-ran");
     }));
+    if mode == "tls-destructor" {
+        let _state = tls_destructor_case(Path::new(&directory));
+        return;
+    }
     if mode == "second-app" {
         let _app = setup(Path::new(&directory), 8, 4);
         let _other = setup(Path::new(&directory), 8, 4);
@@ -250,16 +254,18 @@ fn child_process_entry() {
         )
         .unwrap();
         let mut app = App::new();
-        app.insert_resource(FallbackErrorHandler(if mode == "broken-display" {
-            |error, _| {
-                assert!(error.is::<BrokenDisplay>());
-                FORWARDED.fetch_add(1, Ordering::SeqCst);
-            }
-        } else if mode == "field-formatter" {
-            bevy_ecs::error::ignore
-        } else {
-            bevy_ecs::error::panic
-        }));
+        app.insert_resource(FallbackErrorHandler(
+            if mode == "broken-display" || mode == "payload-display" {
+                |error, _| {
+                    assert!(error.is::<BrokenDisplay>() || error.is::<PayloadDisplay>());
+                    FORWARDED.fetch_add(1, Ordering::SeqCst);
+                }
+            } else if mode == "field-formatter" {
+                bevy_ecs::error::ignore
+            } else {
+                bevy_ecs::error::panic
+            },
+        ));
         app.add_plugins(DiagnosticsPlugin {
             directory: directory.into(),
             ..Default::default()
@@ -273,6 +279,8 @@ fn child_process_entry() {
             app.add_systems(Update, failing_system);
         } else if mode == "broken-display" {
             app.add_systems(Update, || -> Result { Err(BrokenDisplay.into()) });
+        } else if mode == "payload-display" {
+            app.add_systems(Update, || -> Result { Err(PayloadDisplay.into()) });
         } else if mode == "unrelated-thread" {
             app.add_systems(Update, unrelated_thread_panic);
         } else if mode == "field-formatter" {
@@ -282,7 +290,7 @@ fn child_process_entry() {
         }
         tracing::warn!("before panic");
         app.update();
-        if mode == "broken-display" {
+        if mode == "broken-display" || mode == "payload-display" {
             assert_eq!(FORWARDED.load(Ordering::SeqCst), 1);
             assert!(app
                 .world()
@@ -292,6 +300,33 @@ fn child_process_entry() {
         }
     }
 }
+struct CaughtTlsPanic;
+impl Drop for CaughtTlsPanic {
+    fn drop(&mut self) {
+        assert!(std::panic::catch_unwind(|| panic!("caught TLS destructor panic")).is_err());
+    }
+}
+thread_local! {
+    static OLDER_TLS: CaughtTlsPanic = const { CaughtTlsPanic };
+}
+fn tls_destructor_case(directory: &Path) -> DiagnosticsState {
+    let directory = directory.to_path_buf();
+    std::thread::spawn(move || {
+        // This destructor runs after the tracing context vectors are destroyed.
+        OLDER_TLS.with(|_| {});
+        let mut app = setup(&directory, 8, 4);
+        app.add_systems(Update, || {});
+        app.update();
+        // The ownership resource keeps the sink alive through thread teardown
+        // while App itself remains on its original thread.
+        app.world_mut()
+            .remove_resource::<DiagnosticsState>()
+            .unwrap()
+    })
+    .join()
+    .unwrap()
+}
+
 #[derive(Debug)]
 struct BrokenDisplay;
 impl core::fmt::Display for BrokenDisplay {
@@ -300,6 +335,27 @@ impl core::fmt::Display for BrokenDisplay {
     }
 }
 impl core::error::Error for BrokenDisplay {}
+
+struct DroppingPayload;
+impl Drop for DroppingPayload {
+    fn drop(&mut self) {
+        std::panic::panic_any(DroppingPayload);
+    }
+}
+#[derive(Debug)]
+struct PayloadDisplay;
+impl core::fmt::Display for PayloadDisplay {
+    fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        std::panic::panic_any(DroppingPayload);
+    }
+}
+impl core::error::Error for PayloadDisplay {}
+struct PayloadDebug;
+impl core::fmt::Debug for PayloadDebug {
+    fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        std::panic::panic_any(DroppingPayload);
+    }
+}
 
 struct BrokenDebug;
 impl core::fmt::Debug for BrokenDebug {
@@ -317,7 +373,7 @@ fn broken_field_formatters() -> Result {
     let span =
         tracing::info_span!(target: "bevy_ecs::diagnostics_test", "system", name = ?BrokenDebug);
     let _entered = span.enter();
-    tracing::warn!(bad_debug = ?BrokenDebug, bad_error = ?ErrorDebug, "broken fields");
+    tracing::warn!(bad_debug = ?BrokenDebug, bad_error = ?ErrorDebug, bad_drop = ?PayloadDebug, "broken fields");
     Err(BevyError::error("structured fields survived"))
 }
 
@@ -343,6 +399,8 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
         "broken-display",
         "unrelated-thread",
         "field-formatter",
+        "payload-display",
+        "tls-destructor",
     ] {
         let directory = tempfile::tempdir().unwrap();
         let output = Command::new(std::env::current_exe().unwrap())
@@ -352,7 +410,7 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
             .env("RUST_BACKTRACE", "1")
             .output()
             .unwrap();
-        if mode == "broken-display" {
+        if mode == "broken-display" || mode == "payload-display" {
             assert!(
                 output.status.success(),
                 "original error policy was changed: {output:?}"
@@ -381,6 +439,20 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
                 log.fields["bad_error"],
                 "<diagnostics: field formatter failed>"
             );
+            assert_eq!(
+                log.fields["bad_drop"],
+                "<diagnostics: field formatter failed>"
+            );
+            continue;
+        }
+        if mode == "tls-destructor" {
+            assert!(output.status.success(), "TLS teardown aborted: {output:?}");
+            assert!(String::from_utf8_lossy(&output.stderr).contains("previous-panic-hook-ran"));
+            let saved = reports(directory.path());
+            assert_eq!(saved.len(), 1);
+            assert!(saved[0].message.contains("caught TLS destructor panic"));
+            assert!(saved[0].context.is_none());
+            assert!(saved[0].schedule.is_none());
             continue;
         }
         if mode == "unrelated-thread" {

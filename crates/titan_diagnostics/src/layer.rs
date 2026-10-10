@@ -73,7 +73,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for DiagnosticsLayer {
             return;
         };
         if info.kind == "schedule" {
-            SCHEDULES.with(|schedules| {
+            let _ = SCHEDULES.try_with(|schedules| {
                 schedules
                     .borrow_mut()
                     .push((id.into_u64(), info.name.clone()));
@@ -84,7 +84,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for DiagnosticsLayer {
                 info.name.clone(),
             ));
         } else {
-            SYSTEMS.with(|systems| {
+            let _ = SYSTEMS.try_with(|systems| {
                 systems.borrow_mut().push((
                     id.into_u64(),
                     FailureContext {
@@ -108,7 +108,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for DiagnosticsLayer {
             return;
         };
         if info.kind == "schedule" {
-            SCHEDULES.with(|schedules| {
+            let _ = SCHEDULES.try_with(|schedules| {
                 let mut schedules = schedules.borrow_mut();
                 if let Some(index) = schedules
                     .iter()
@@ -126,7 +126,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for DiagnosticsLayer {
                 }
             }
         } else {
-            SYSTEMS.with(|systems| {
+            let _ = SYSTEMS.try_with(|systems| {
                 let mut systems = systems.borrow_mut();
                 if let Some(index) = systems
                     .iter()
@@ -159,9 +159,25 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for DiagnosticsLayer {
 }
 
 pub(crate) fn current_schedule() -> Option<String> {
-    SCHEDULES.with(|schedules| schedules.borrow().last().map(|(_, name)| name.clone()))
+    SCHEDULES
+        .try_with(|schedules| {
+            schedules
+                .try_borrow()
+                .ok()
+                .and_then(|schedules| schedules.last().map(|(_, name)| name.clone()))
+        })
+        .ok()
+        .flatten()
 }
 
 pub(crate) fn panic_context() -> Option<FailureContext> {
-    SYSTEMS.with(|systems| systems.borrow().last().map(|(_, context)| context.clone()))
+    SYSTEMS
+        .try_with(|systems| {
+            systems
+                .try_borrow()
+                .ok()
+                .and_then(|systems| systems.last().map(|(_, context)| context.clone()))
+        })
+        .ok()
+        .flatten()
 }
