@@ -142,7 +142,7 @@ fn generated_scripts_use_only_selected_buttons_and_stay_in_bounds() {
     let buttons = [InputButton::from(KeyCode::Space), MouseButton::Left.into()];
     for case in 0..12 {
         let script = generator.generate(&buttons, 32, 42, case);
-        assert_eq!(script.version, 1);
+        assert_eq!(script.version, titan_test::SCRIPT_VERSION);
         assert!(!script.events.is_empty());
         assert!(script
             .events
@@ -152,7 +152,13 @@ fn generated_scripts_use_only_selected_buttons_and_stay_in_bounds() {
             assert!(event.tick < 32);
             let button = match event.action {
                 InputAction::Press(button) | InputAction::Release(button) => button,
-                InputAction::Tap(_) => panic!("generator should produce press/release events"),
+                InputAction::Tap(_)
+                | InputAction::ConnectGamepad { .. }
+                | InputAction::SetAxis { .. }
+                | InputAction::SetButtonValue { .. }
+                | InputAction::MouseMotion { .. } => {
+                    panic!("generator should produce press/release events")
+                }
             };
             assert!(buttons.contains(&button));
         }
@@ -425,7 +431,7 @@ fn report_serializes_and_assert_ok_saves_replay_before_panicking() {
     assert!(displayed.contains("player health"));
     assert!(displayed.contains("health exceeds maximum"));
     assert!(displayed.contains("run_script"));
-    assert!(displayed.contains("version: 1"));
+    assert!(displayed.contains(&format!("version: {}", titan_test::SCRIPT_VERSION)));
     assert!(std::panic::catch_unwind(|| report.assert_ok()).is_err());
     let saved = std::fs::read_to_string(&failure.path).unwrap();
     assert_eq!(InputScript::from_ron(&saved).unwrap(), failure.script);

@@ -238,7 +238,11 @@ impl<'a, F: Fn() -> Sim> Fuzz<'a, F> {
                     match event.action {
                         InputAction::Press(button) => sim.press(button),
                         InputAction::Release(button) => sim.release(button),
-                        InputAction::Tap(_) => {
+                        InputAction::Tap(_)
+                        | InputAction::ConnectGamepad { .. }
+                        | InputAction::SetAxis { .. }
+                        | InputAction::SetButtonValue { .. }
+                        | InputAction::MouseMotion { .. } => {
                             unreachable!("fuzzer generates only press/release events")
                         }
                     }

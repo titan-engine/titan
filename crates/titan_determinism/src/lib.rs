@@ -13,7 +13,7 @@ use alloc::collections::BTreeSet;
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use titan_snapshot::{TypeFilter, WorldDiff, WorldSnapshot};
-use titan_test::{ExecutorKind, Sim, SimSeed, SCRIPT_VERSION};
+use titan_test::{ExecutorKind, Sim, SimSeed};
 
 /// Configuration applied to runs after the reference run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -303,7 +303,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             "DeterminismCheck requires at least two runs"
         );
         if let Some(script) = &self.script {
-            assert_eq!(script.version, SCRIPT_VERSION, "unsupported script version");
+            script.validate();
         }
         if !self.diff_config.float_tolerance.is_finite() || self.diff_config.float_tolerance < 0.0 {
             self.diff_config.float_tolerance = 0.0;
@@ -433,7 +433,7 @@ impl<'a> Playback<'a> {
 mod tests {
     use super::*;
     use bevy_input::keyboard::KeyCode;
-    use titan_test::{InputAction, ScriptEvent};
+    use titan_test::{InputAction, ScriptEvent, SCRIPT_VERSION};
 
     #[test]
     fn playback_consumes_each_event_once_and_passes_only_current_tick_events() {
@@ -457,6 +457,73 @@ mod tests {
         assert!(playback.frame.events.is_empty());
         assert_eq!(sim.current_tick(), 101);
         assert_eq!(script.events.len(), 100);
+    }
+
+    #[test]
+    fn both_supported_script_versions_replay_through_determinism() {
+        use bevy_app::Update;
+        use bevy_ecs::prelude::*;
+        use bevy_input::{
+            gamepad::{Gamepad, GamepadAxis, GamepadButton},
+            mouse::AccumulatedMouseMotion,
+            ButtonInput,
+        };
+
+        for (source, gamepad_input) in [
+            (
+                "(version:1,events:[(tick:0,action:Press(Key(Space)))])",
+                false,
+            ),
+            (
+                "(version:2,events:[
+                (tick:0,action:Press(Gamepad(slot:0,button:South))),
+                (tick:0,action:SetAxis(slot:0,axis:LeftStickX,value:0.75)),
+                (tick:0,action:MouseMotion(x:12.0,y:-3.0))])",
+                true,
+            ),
+        ] {
+            let script = InputScript::from_ron(source).unwrap();
+            let report = DeterminismCheck::new(|| {
+                Sim::new(|app| {
+                    app.add_systems(
+                        Update,
+                        move |keys: Res<ButtonInput<KeyCode>>,
+                              pads: Query<&Gamepad>,
+                              motion: Res<AccumulatedMouseMotion>| {
+                            if gamepad_input {
+                                let pad = pads.single().unwrap();
+                                assert!(pad.pressed(GamepadButton::South));
+                                assert_eq!(pad.get(GamepadAxis::LeftStickX), Some(0.75));
+                                assert_eq!((motion.delta.x, motion.delta.y), (12.0, -3.0));
+                            } else {
+                                assert!(keys.pressed(KeyCode::Space));
+                                assert!(pads.is_empty());
+                            }
+                        },
+                    );
+                })
+            })
+            .ticks(1)
+            .script(script)
+            .run();
+            report.assert_deterministic();
+        }
+    }
+
+    #[test]
+    fn version_one_gamepad_actions_are_rejected_before_constructing_a_world() {
+        let script = InputScript::from_ron(
+            "(version:1,events:[(tick:0,action:Press(Gamepad(slot:0,button:South)))])",
+        )
+        .unwrap();
+        let panic = std::panic::catch_unwind(|| {
+            DeterminismCheck::new(|| panic!("factory must not run"))
+                .ticks(1)
+                .script(script)
+                .run();
+        });
+        let message = panic.unwrap_err().downcast::<&str>().unwrap();
+        assert!(message.contains("require script version 2"));
     }
 
     #[test]

@@ -107,6 +107,10 @@ fn hold_duration(script: &InputScript, index: usize) -> Option<u64> {
             InputAction::Press(other) | InputAction::Release(other) | InputAction::Tap(other) => {
                 other == button
             }
+            InputAction::ConnectGamepad { .. }
+            | InputAction::SetAxis { .. }
+            | InputAction::SetButtonValue { .. }
+            | InputAction::MouseMotion { .. } => false,
         })?;
     if press.action == InputAction::Press(button) {
         Some(event.tick.saturating_sub(press.tick))

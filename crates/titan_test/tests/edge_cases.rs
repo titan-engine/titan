@@ -98,7 +98,7 @@ fn endpoint_tap_releases_when_resuming_with_an_ordinary_tick() {
 #[test]
 fn unsupported_script_version_fails_before_advancing_or_injecting_input() {
     let mut script =
-        InputScript::from_ron("(version:2,events:[(tick:0,action:Press(Key(Space)))])").unwrap();
+        InputScript::from_ron("(version:3,events:[(tick:0,action:Press(Key(Space)))])").unwrap();
     let mut sim = Sim::new(|_| {});
     assert!(catch_unwind(AssertUnwindSafe(|| sim.run_script(&script, 1))).is_err());
     assert_eq!(sim.current_tick(), 0);

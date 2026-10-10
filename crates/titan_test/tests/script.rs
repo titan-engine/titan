@@ -200,6 +200,18 @@ fn equal_tick_events_keep_file_order() {
 }
 
 #[test]
+fn public_validation_accepts_supported_versions_and_rejects_unknown_versions() {
+    let mut script = script();
+    script.validate();
+    script.version = titan_test::SCRIPT_VERSION;
+    script.validate();
+    for version in [0, titan_test::SCRIPT_VERSION + 1, u32::MAX] {
+        script.version = version;
+        assert!(std::panic::catch_unwind(|| script.validate()).is_err());
+    }
+}
+
+#[test]
 fn unknown_fields_and_unsupported_versions_do_not_silently_play() {
     assert!(InputScript::from_ron("(version:1,events:[],typo:0)").is_err());
     assert!(
@@ -208,7 +220,7 @@ fn unknown_fields_and_unsupported_versions_do_not_silently_play() {
     );
     let mut sim = recording_sim();
     let unsupported = InputScript {
-        version: 2,
+        version: 3,
         events: vec![],
     };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
