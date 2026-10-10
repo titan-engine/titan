@@ -51,6 +51,10 @@ jobs:
       - uses: ./.github/actions/install-rust
       - name: Install Linux dependencies
         uses: ./.github/actions/install-linux-deps
+      # Reuse workspace artifacts only when their source contents still match.
+      # Changed files keep fresh mtimes so Cargo rebuilds them and dependents.
+      - name: Restore cached source timestamps
+        run: node .github/scripts/cache-source-mtimes.cjs restore
       - name: Build & run tests
         # See tools/ci/src/main.rs for the commands this runs
         # Benchmark smoke tests only need to run on Linux.

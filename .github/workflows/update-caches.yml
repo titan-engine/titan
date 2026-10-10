@@ -219,6 +219,12 @@ jobs:
         env:
           RUSTFLAGS: ${{ matrix.rustflags || env.RUSTFLAGS }}
 
+      # Cargo uses source mtimes for freshness. A fresh consumer checkout is
+      # newer than the build, so retain mtimes together with content hashes.
+      - name: Record cached source timestamps
+        if: matrix.toolchain == 'stable' && matrix.target == '' && (steps.cache.outputs.cache-hit != 'true' || github.event_name == 'workflow_dispatch')
+        run: node .github/scripts/cache-source-mtimes.cjs save
+
       - name: Save cache
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
