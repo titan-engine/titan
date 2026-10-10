@@ -323,7 +323,8 @@ sim.assert_snapshot(
 4. On a gameplay regression, the assertion reports a readable matched
    `WorldDiff`, including component/field names and old/new values, for example
    `value: 100.0 -> 90.0`. Diff output is capped at 80 lines / 8 KiB with a
-   truncation notice. Invalid JSON and I/O errors fail, never auto-regenerate.
+   truncation notice. In comparison mode, invalid JSON and I/O errors fail,
+   never auto-regenerate. Explicit update mode can replace malformed JSON.
 
 Choose entity identity deliberately. `SnapshotAssertConfig::default()` uses
 exact ID matching, which is fragile for saved files from earlier runs: even one

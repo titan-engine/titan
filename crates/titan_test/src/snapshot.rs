@@ -1,11 +1,7 @@
 //! Opt-in assertions against explicitly managed golden files.
 
-use std::{
-    fmt::{self, Write},
-    fs,
-    io::ErrorKind,
-    path::Path,
-};
+use core::fmt::{self, Write};
+use std::{fs, io::ErrorKind, path::Path};
 use titan_snapshot::{
     DiffConfig, EntityMatchConfig, EntityMatching, EntitySnapshot, SnapshotConfig, WorldSnapshot,
 };
@@ -56,6 +52,7 @@ impl SnapshotAssertConfig {
     }
 
     /// Retain only selected entities in the current capture.
+    /// Accepts a function pointer or a noncapturing closure.
     pub fn with_entity_filter(mut self, filter: fn(&EntitySnapshot) -> bool) -> Self {
         self.entity_filter = Some(filter);
         self
@@ -77,18 +74,12 @@ impl Sim {
     /// # Panics
     /// Panics on missing, unreadable, or invalid golden files, write errors, or
     /// observable differences/matching diagnostics. The message includes the
-    /// current test thread's name, tick, path, and a readable matched WorldDiff,
+    /// current test thread's name, tick, path, and a readable `MatchedWorldDiff`,
     /// limited to 80 lines and 8 KiB of diff text.
     #[track_caller]
     pub fn assert_snapshot(&self, path: impl AsRef<Path>, config: &SnapshotAssertConfig) {
         let update = std::env::var_os("TITAN_UPDATE_SNAPSHOTS").is_some_and(|value| value == "1");
-        self.assert_snapshot_mode(path.as_ref(), config, update);
-    }
-
-    // An explicit mode lets unit tests exercise writes without changing global
-    // process environment (unsafe in Rust 2024 and racy with parallel tests).
-    #[track_caller]
-    fn assert_snapshot_mode(&self, path: &Path, config: &SnapshotAssertConfig, update: bool) {
+        let path = path.as_ref();
         let thread = std::thread::current();
         let test = thread.name().unwrap_or("<unnamed test>");
         let context = format!(

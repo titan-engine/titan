@@ -50,6 +50,9 @@ impl Golden {
             .args(["--exact", "golden_subprocess_worker", "--nocapture"])
             .env("TITAN_GOLDEN_TEST_PATH", &self.0)
             .env("TITAN_UPDATE_SNAPSHOTS", update);
+        if update == "<unset>" {
+            command.env_remove("TITAN_UPDATE_SNAPSHOTS");
+        }
         for (key, value) in options {
             command.env(format!("TITAN_GOLDEN_TEST_{key}"), value);
         }
@@ -109,6 +112,9 @@ fn golden_subprocess_worker() {
         if option("UNKEYED", "0") == "1" {
             app.world_mut().entity_mut(player).remove::<Name>();
         }
+        if option("KEY_MISSING", "0") == "1" {
+            app.world_mut().entity_mut(player).remove::<StableKey>();
+        }
         if option("DUPLICATE", "0") == "1" {
             app.world_mut().spawn((
                 Name::new("Player"),
@@ -150,7 +156,7 @@ fn golden_subprocess_worker() {
 fn golden_matching_passes_and_changed_field_has_readable_context() {
     let golden = Golden::new();
     golden.create();
-    assert!(golden.run("0", &[]).status.success());
+    assert!(golden.run("<unset>", &[]).status.success());
     let output = golden.run("0", &[("VALUE", "90")]);
     assert!(!output.status.success());
     let text = output_text(&output);
@@ -176,7 +182,7 @@ fn golden_matching_passes_and_changed_field_has_readable_context() {
 #[test]
 fn golden_missing_fails_and_only_exact_update_variable_creates_and_overwrites() {
     let golden = Golden::new();
-    for update in ["0", "true", ""] {
+    for update in ["<unset>", "0", "true", ""] {
         let output = golden.run(update, &[]);
         assert!(!output.status.success());
         let text = output_text(&output);
@@ -234,7 +240,12 @@ fn golden_name_and_struct_key_matching_survive_unrelated_earlier_spawns() {
 fn golden_unkeyed_and_duplicate_entities_do_not_silently_pass() {
     let golden = Golden::new();
     golden.create();
-    for options in [vec![("UNKEYED", "1")], vec![("DUPLICATE", "1")]] {
+    for options in [
+        vec![("UNKEYED", "1")],
+        vec![("DUPLICATE", "1")],
+        vec![("KEY_MISSING", "1"), ("MATCH", "key")],
+        vec![("DUPLICATE", "1"), ("MATCH", "key")],
+    ] {
         let output = golden.run("0", &options);
         assert!(!output.status.success());
         let text = output_text(&output);
@@ -251,6 +262,9 @@ fn golden_invalid_json_and_io_errors_are_not_treated_as_missing() {
     let output = golden.run("0", &[]);
     assert!(!output.status.success());
     assert!(output_text(&output).contains("invalid golden JSON"));
+    // Only an explicit update may replace malformed files.
+    golden.create();
+    assert!(golden.run("<unset>", &[]).status.success());
     std::fs::remove_file(&golden.0).unwrap();
     std::fs::create_dir(&golden.0).unwrap();
     let output = golden.run("0", &[]);
