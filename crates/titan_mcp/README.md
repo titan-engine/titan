@@ -171,8 +171,9 @@ Use this `.mcp.json`, replacing every absolute path:
 }
 ```
 
-The demo always binds to IPv4 loopback. `--brp-port` defaults to 15702; match it
-to `--url` and reserve an unused port. Remote builds start paused and disable
+The demo's single gameplay-world listener always binds to IPv4 loopback; it
+does not expose a separate render-world listener. `--brp-port` defaults to 15702;
+match it to `--url` and reserve an unused port. Remote builds start paused and disable
 the human gameplay input adapter so idle/unfocused windows cannot erase agent
 actions. The default build has no BRP listener. Cargo must be on the sidecar's
 PATH (or use an absolute path); Windows binaries have an `.exe` suffix. Respect

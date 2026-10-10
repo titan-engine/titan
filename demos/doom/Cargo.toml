@@ -35,7 +35,7 @@ render = [
   "bevy/x11",
   "titan_remote?/render",
 ]
-remote = ["bevy/bevy_remote", "dep:titan_remote"]
+remote = ["bevy/bevy_remote", "dep:bevy_render", "dep:titan_remote"]
 
 [dependencies]
 bevy = { path = "../..", version = "0.20.0", default-features = false, features = [
@@ -44,12 +44,18 @@ bevy = { path = "../..", version = "0.20.0", default-features = false, features 
 serde = { version = "1", features = ["derive"] }
 ron = "0.12"
 titan_remote = { path = "../../crates/titan_remote", optional = true }
+# BRP already depends on this crate; use RenderApp even when Doom's render feature
+# is off, so an embedding app cannot accidentally expose a second BRP listener.
+bevy_render = { path = "../../crates/bevy_render", version = "0.20.0", optional = true }
 
 [dev-dependencies]
 titan_test = { path = "../../crates/titan_test" }
 tempfile = "3"
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "blocking",
+  "json",
+] }
 
 [[bin]]
 name = "titan_doom"

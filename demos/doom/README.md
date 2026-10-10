@@ -249,7 +249,9 @@ cargo build -p titan_doom --features remote
 cargo build -p titan_mcp
 ```
 
-The listener is always **127.0.0.1**, never a wildcard or network address.
+The single gameplay-world listener is always **127.0.0.1**, never a wildcard or
+network address. The renderer is not exposed over BRP, and no second listener
+is opened at upstream BRP's default render port 15703.
 `--brp-port` accepts 1–65535 and defaults to 15702; choose an unused port and
 match the MCP URL. BRP has no authentication and allows powerful world/file
 operations. Use only with trusted local agents, do not forward/expose the port,
@@ -303,7 +305,7 @@ Use these MCP tools in order (arguments shown as JSON):
 6. `stop_game {}`. `restart_game {}` starts a fresh paused game; use
    `restart_game {"rebuild":true}` after changing demo code.
 
-A recorded macOS/Metal MCP smoke session launched on port 15994, queried state,
+A recorded macOS/Metal MCP smoke session launched on port 15703, queried state,
 set forward movement plus held fire, stepped six frames, cleared held actions,
 captured the primary window, and stopped the owned process. Player tick advanced
 0 → 6, Z moved 9.5 → 9.2, ammo changed 12 → 11, and the corridor sentry's health
