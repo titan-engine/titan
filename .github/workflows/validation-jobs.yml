@@ -8,7 +8,11 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - release-*
+  schedule:
+    - cron: "47 4 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{github.workflow}}-${{github.ref}}
@@ -24,8 +28,25 @@ env:
   RUSTFLAGS: "-C debuginfo=0 -D warnings"
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upstream: ${{ steps.filter.outputs.upstream }}
+      titan: ${{ steps.filter.outputs.titan }}
+      docs: ${{ steps.filter.outputs.docs }}
+      ecs: ${{ steps.filter.outputs.ecs }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: filter
+
   build-and-install-on-iOS:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: macos-14
     timeout-minutes: 30
     steps:
@@ -57,7 +78,8 @@ jobs:
         run: cd examples/mobile && make install
 
   build-android:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -101,7 +123,8 @@ jobs:
         run: cd examples/mobile/android_example && chmod +x gradlew && ./gradlew build
 
   run-examples-on-wasm:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -159,7 +182,8 @@ jobs:
           path: .github/start-wasm-example/screenshot-*.png
 
   build-without-default-features:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     timeout-minutes: 30
     strategy:
       max-parallel: 1
@@ -177,21 +201,20 @@ jobs:
         run: cargo build -p ${{ matrix.crate }} --no-default-features
 
   build-without-default-features-status:
-    if: |
-      always() &&
-      github.event_name == 'merge_group'
-    needs: build-without-default-features
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
+    needs: [changes, build-without-default-features]
     runs-on: ubuntu-latest
     steps:
       - name: Successful
-        if: ${{ !(contains(needs.*.result, 'failure')) }}
+        if: ${{ needs.build-without-default-features.result == 'success' }}
         run: exit 0
       - name: Failing
-        if: ${{ contains(needs.*.result, 'failure') }}
+        if: ${{ needs.build-without-default-features.result != 'success' }}
         run: exit 1
 
   check-unused-dependencies:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -223,7 +246,8 @@ jobs:
         run: cargo udeps
 
   check-example-showcase-patches-still-work:
-    if: ${{ github.event_name == 'merge_group' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

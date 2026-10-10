@@ -1,0 +1,52 @@
+name: Classify CI changes
+description: Conservative PR and merge-group job selection; all other events run full CI.
+outputs:
+  upstream:
+    description: Run Bevy-wide coverage
+    value: ${{ steps.filter.outputs.upstream }}
+  titan:
+    description: Run Titan coverage
+    value: ${{ steps.filter.outputs.titan }}
+  docs:
+    description: Documentation changed
+    value: ${{ steps.filter.outputs.docs }}
+  ecs:
+    description: Run ECS Miri tests
+    value: ${{ steps.filter.outputs.ecs }}
+runs:
+  using: composite
+  steps:
+    - name: Test classifiers
+      shell: bash
+      run: |
+        bash .github/scripts/test-ci-paths-changed.sh
+        bash .github/scripts/test-miri-paths-changed.sh
+        bash .github/scripts/test-titan-scoped-ci.sh
+    - name: Select jobs
+      id: filter
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+      run: |
+        # Start with full coverage. Script errors or malformed outputs must never
+        # turn into a successful empty output and skip consumers.
+        selection=$'upstream=true\ntitan=true\ndocs=true'
+        ecs=true
+        pattern=$'^upstream=(true|false)\ntitan=(true|false)\ndocs=(true|false)$'
+        if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == merge_group ]]; then
+          if detected=$(bash .github/scripts/ci-paths-changed.sh "$BASE_SHA" "$HEAD_SHA") &&
+            [[ "$detected" =~ $pattern ]]; then
+            selection=$detected
+          fi
+          # Any .github/ or unknown-path change must run everything, including Miri.
+          if [[ "$selection" == upstream=false* ]]; then
+            if detected=$(bash .github/scripts/miri-paths-changed.sh "$BASE_SHA" "$HEAD_SHA") &&
+              [[ "$detected" == true || "$detected" == false ]]; then
+              ecs=$detected
+            fi
+          fi
+        fi
+        printf '%s\necs=%s\n' "$selection" "$ecs" >> "$GITHUB_OUTPUT"
+        printf '## CI classification\n\n```text\n%s\necs=%s\n```\n' "$selection" "$ecs" >> "$GITHUB_STEP_SUMMARY"

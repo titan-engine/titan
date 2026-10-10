@@ -7,7 +7,10 @@ on:
   merge_group:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, release-*]
+  schedule:
+    - cron: "47 4 * * *"
+  workflow_dispatch:
 
 # Keep in sync with the repository's other Rust workflows.
 env:
@@ -22,7 +25,25 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upstream: ${{ steps.filter.outputs.upstream }}
+      titan: ${{ steps.filter.outputs.titan }}
+      docs: ${{ steps.filter.outputs.docs }}
+      ecs: ${{ steps.filter.outputs.ecs }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/ci-changes
+        id: filter
+
   titan-tests:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.titan != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -47,6 +68,9 @@ jobs:
         with:
           components: clippy
       - uses: ./.github/actions/install-linux-deps
+      - name: Test Titan crates with default features
+        if: ${{ needs.changes.outputs.upstream == 'false' }}
+        run: bash .github/scripts/titan-scoped-ci.sh test
       - name: Test all Titan crates with extra features
         shell: bash
         run: |
@@ -59,7 +83,7 @@ jobs:
             exit 1
           fi
 
-          # Default-feature coverage is provided by ci.yml's workspace tests.
+          # Default features: workspace tests on full runs, scoped tests above otherwise.
           # New titan_* workspace crates are automatically tested with all features.
           while IFS= read -r crate; do
             test_args=(test -p "$crate" --all-features)

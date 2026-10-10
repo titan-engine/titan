@@ -5,9 +5,7 @@ permissions:
 
 on:
   workflow_call:
-  # Scheduled workflows run on the default branch (main).
-  schedule:
-    - cron: "23 4 * * *"
+  # Daily coverage comes from ci.yml's full scheduled run; do not duplicate it.
   workflow_dispatch:
 
 # Keep in sync with ci.yml.

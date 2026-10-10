@@ -8,7 +8,11 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - release-*
+  schedule:
+    - cron: "47 4 * * *"
+  workflow_dispatch:
 
 # Environment variables must be kept in sync with all workflows that defines them.
 env:
@@ -28,6 +32,8 @@ jobs:
   # Share steps with YAML aliases to keep the upstream build recipe in one place.
   build:
     name: build (ubuntu-latest)
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps: &build-steps
@@ -56,25 +62,37 @@ jobs:
       - name: Restore cached source timestamps
         run: node .github/scripts/cache-source-mtimes.cjs restore
       - name: Build & run tests
-        # See tools/ci/src/main.rs for the commands this runs
-        # Benchmark smoke tests only need to run on Linux.
-        run: cargo run -p ci -- test ${{ runner.os != 'Linux' && '--skip-benches' || '' }}
+        shell: bash
+        env:
+          SCOPED: ${{ needs.changes.result == 'success' && needs.changes.outputs.upstream == 'false' }}
+        run: |
+          if [[ "$SCOPED" == true ]]; then
+            # Keep native Titan tests in merge groups without building all of Bevy.
+            bash .github/scripts/titan-scoped-ci.sh test
+          else
+            # Benchmark smoke tests only need to run on Linux.
+            cargo run -p ci -- test ${{ runner.os != 'Linux' && '--skip-benches' || '' }}
+          fi
 
   build-windows:
     name: build (windows-latest)
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false' || (github.event_name != 'pull_request' && needs.changes.outputs.titan != 'false')) }}
     runs-on: windows-latest
     timeout-minutes: 40
     steps: *build-steps
 
   build-macos:
     name: build (macos-latest)
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false' || (github.event_name != 'pull_request' && needs.changes.outputs.titan != 'false')) }}
     runs-on: macos-latest
     timeout-minutes: 40
     steps: *build-steps
 
   ci:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.titan != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -106,43 +124,43 @@ jobs:
           x264: true
           fontconfig: true
       - name: CI job
-        # See tools/ci/src/main.rs for the commands this runs
-        run: cargo run -p ci -- lints
+        env:
+          SCOPED: ${{ needs.changes.result == 'success' && needs.changes.outputs.upstream == 'false' }}
+        run: |
+          if [[ "$SCOPED" == true ]]; then
+            bash .github/scripts/titan-scoped-ci.sh lints
+          else
+            cargo run -p ci -- lints
+          fi
 
-  miri-changes:
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  changes:
+    # Preserve the existing classifier check name while sharing its runner.
+    name: miri-changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      upstream: ${{ steps.filter.outputs.upstream }}
+      titan: ${{ steps.filter.outputs.titan }}
+      docs: ${{ steps.filter.outputs.docs }}
       ecs: ${{ steps.filter.outputs.ecs }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Test Miri path filter
-        run: bash .github/scripts/test-miri-paths-changed.sh
-      - name: Detect changes affecting Miri
+      - uses: ./.github/actions/ci-changes
         id: filter
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-        run: |
-          changed=$(bash .github/scripts/miri-paths-changed.sh "$BASE_SHA" "$HEAD_SHA")
-          echo "ecs=$changed" >> "$GITHUB_OUTPUT"
 
   miri:
-    needs: miri-changes
-    # Release pushes still run in full. always() lets them bypass the skipped filter.
-    # A failed filter conservatively runs Miri rather than losing coverage.
-    # Keep Miri non-required; relevant PRs run it despite the general fast-path policy.
-    if: ${{ always() && !cancelled() && (github.event_name == 'push' || needs.miri-changes.result == 'failure' || needs.miri-changes.outputs.ecs == 'true') }}
+    needs: changes
+    # Failure or missing/malformed output runs coverage, never a silent skip.
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ecs != 'false') }}
     uses: ./.github/workflows/miri.yml
 
-  # Keep compile, no_std, wasm and MSRV checks independent of ci so merge groups
-  # can start them alongside lints. They still report skipped checks on PRs.
+  # Gate jobs, not workflows: required checks still report success/skipped.
   check-compiles:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -171,7 +189,8 @@ jobs:
         run: cargo run -p ci -- compile
 
   check-compiles-no-std:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -206,7 +225,8 @@ jobs:
         run: cargo check -p bevy --no-default-features --features default_no_std,web --target x86_64-unknown-none
 
   check-compiles-no-std-portable-atomic:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -236,7 +256,8 @@ jobs:
         run: cargo check -p bevy --no-default-features --features default_no_std --target thumbv6m-none-eabi
 
   check-compiles-no-std-examples:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -266,7 +287,8 @@ jobs:
         run: cd examples/no_std/library && cargo check --no-default-features --features libm,critical-section --target x86_64-unknown-none
 
   build-wasm:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -296,7 +318,8 @@ jobs:
         run: cargo check --target wasm32-unknown-unknown
 
   build-wasm-atomics:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -330,8 +353,8 @@ jobs:
   markdownlint:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: check-missing-features-in-docs
-    if: always()
+    # Markdown does not depend on the generated-feature checks.
+    if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -387,6 +410,8 @@ jobs:
           echo 'You can find the extension here: https://marketplace.visualstudio.com/items?itemName=tekumara.typos-vscode'
 
   check-doc:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.titan != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -416,8 +441,14 @@ jobs:
           x264: true
           fontconfig: true
       - name: Build and check doc
-        # See tools/ci/src/main.rs for the commands this runs
-        run: cargo run -p ci -- doc
+        env:
+          SCOPED: ${{ needs.changes.result == 'success' && needs.changes.outputs.upstream == 'false' }}
+        run: |
+          if [[ "$SCOPED" == true ]]; then
+            bash .github/scripts/titan-scoped-ci.sh doc
+          else
+            cargo run -p ci -- doc
+          fi
       # This currently report a lot of false positives
       # Enable it again once it's fixed - https://github.com/bevyengine/bevy/issues/1983
       # - name: Installs cargo-deadlinks
@@ -427,6 +458,8 @@ jobs:
       #   continue-on-error: true
 
   check-missing-examples-in-docs:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -463,9 +496,10 @@ jobs:
           path: missing-examples/
 
   check-missing-features-in-docs:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: check-missing-examples-in-docs
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -500,7 +534,8 @@ jobs:
           path: missing-features/
 
   msrv:
-    if: ${{ github.event_name != 'pull_request' }}
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -547,6 +582,8 @@ jobs:
           path: msrv/
 
   check-bevy-internal-imports:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -571,6 +608,8 @@ jobs:
           fi
 
   check-release-content:
+    needs: changes
+    if: ${{ always() && !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.upstream != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

@@ -77,6 +77,89 @@ time to time and run CI. Don't merge that branch. It's only a warning signal.
 Important fixes can be cherry-picked from Bevy (`git cherry-pick -x <sha>`)
 before the next release.
 
+## CI change scoping
+
+`ci.yml`, `titan.yml`, `validation-jobs.yml` and `example-run.yml` classify PRs
+and merge groups with `.github/scripts/ci-paths-changed.sh`, through the shared
+`ci-changes` action. Each workflow needs its own cheap classifier job (outputs
+cannot be shared across independent workflow runs). CI reuses the existing
+`miri-changes` check name for this job.
+
+Classification uses `git diff --name-only --no-renames -z BASE...HEAD`. The PR
+base/head SHAs exclude unrelated changes on the base branch; merge groups use
+GitHub's group base/head SHAs and include **every queued entry**. Deletions and
+moves out of upstream paths still count. Job-level `if:` conditions report
+skipped checks instead of leaving required checks pending. No required check
+names or repository ruleset settings change.
+
+| Changed paths | Coverage |
+| --- | --- |
+| Only `crates/titan_*/*` and/or `demos/*` | Titan default/all-feature tests, scoped `ci` and `check-doc`, text lints; scoped Windows/macOS tests in merge groups |
+| Only standalone Markdown and/or `docs/*` | `markdownlint`, `toml`, `typos` |
+| Titan paths plus standalone docs | Same coverage as Titan-only |
+| Anything else, including Bevy code, `.github/*`, `.cargo/*`, root `Cargo.toml`/`Cargo.lock`, build configuration or unknown paths | Full coverage, including Titan consumers |
+
+Upstream directories are checked **before** the Markdown rule: Markdown under
+`crates/bevy_*`, `src`, `examples`, `benches`, `tools`, `errors`, `tests`,
+`tests-integration`, `_release-content` or `release-content` triggers full
+coverage because it may be generated or included by code. `docs/cargo_features.md` also
+requires full coverage: it is generated and included by `src/lib.rs`.
+Documentation inside Titan crates/demos gets Titan coverage too. These are allowlists: new top-level
+areas default to full coverage until reviewed explicitly.
+
+Missing SHAs, unavailable history, script errors and malformed outputs default
+to full coverage. Consumer conditions also run on classifier-job failure or
+missing output; cancellation still cancels the run. The action publishes its
+selection in the job summary. A genuinely empty diff only needs the text lints.
+
+Titan's fast path selects **all** `titan_*` workspace packages using Cargo
+metadata, including demos, rather than only the changed package. This preserves
+cross-crate consumer coverage and automatically includes new Titan packages.
+`ci` keeps workspace rustfmt (cheap), but scopes all-target/all-feature Clippy.
+`check-doc` scopes default-feature doctests and all-feature rustdoc, with warnings
+denied. `titan-tests` adds scoped default-feature tests when the Bevy workspace
+build is skipped, retaining its existing per-crate extra-feature/headless tests.
+The `bevy_remote/bevy_render` feature matches workspace feature unification and
+avoids upstream HTTP-only dead-code warnings. Dependencies still compile as
+needed; their own tests and Bevy-wide platform builds are not run on this fast
+path. Titan-only merge groups retain scoped Windows/macOS default-feature tests
+under the existing `build (windows-latest)` and `build (macos-latest)` names.
+Those two checks stay skipped for Titan-only PRs, as before; upstream-affecting
+PRs run them in full.
+
+Pushes to `main` and `release-*`, the daily scheduled runs, and manual dispatches
+of these four workflows always run full coverage. Miri's daily coverage comes
+from CI's schedule rather than a duplicate independent scheduled run. To force a full run before
+merging, dispatch **each** workflow from Actions using the PR's branch (or
+`gh workflow run <workflow-file> --ref <branch>` in the repository hosting that
+branch). A re-run of a PR run keeps its original classification; it is not a
+force-full override. Upstream-affecting PRs now run the same full job selection
+as merge groups, including platforms previously deferred until the queue.
+Screenshot comparisons still only run outside PRs, after their producer succeeds.
+The independent security/dependency/cache workflows keep their existing policy;
+consolidating their jobs is a separate follow-up, not part of this fast path.
+
+Validate changes without compiling Rust:
+
+```sh
+bash .github/scripts/test-ci-paths-changed.sh
+bash .github/scripts/test-miri-paths-changed.sh
+bash .github/scripts/test-titan-scoped-ci.sh
+actionlint -shellcheck= .github/workflows/{ci,titan,validation-jobs,example-run}.yml
+shellcheck .github/scripts/{ci-paths-changed,test-ci-paths-changed,titan-scoped-ci,test-titan-scoped-ci}.sh
+```
+
+The tests cover Titan, upstream, mixed, docs, shared CI/build configuration,
+unknown paths, deletions, renames, unusual filenames, diverged PR bases,
+multiple merge-group entries and fail-safe behavior. They also execute the
+composite action's actual selection shell block for diff/non-diff events,
+script failures and malformed outputs, and verify scoped Cargo command flags.
+Run real full CI when changing this shared infrastructure. To demonstrate the
+fast path before it lands, open a temporary PR against a branch containing the
+implementation in an Actions-enabled fork, with only a Titan-path change in
+its diff. Do not weaken the `.github/*` full-coverage rule for the implementation
+PR itself. Report runner-consuming jobs separately from skipped check records.
+
 ## Proposing changes upstream
 
 Contributors who want to upstream a Titan change should cherry-pick it onto a
