@@ -92,13 +92,25 @@ upstream follow-up.
 Example result:
 
 ```json
-{"schedule":"Update","status":"initialized","ambiguities":{"items":[{"systems":["game::move_player","game::reset_player"],"conflicts":{"items":["game::Position"],"total":1,"truncated":false},"world_access":false}],"total":1,"truncated":false}}
+{"schedule":"Update","status":"initialized","ambiguities":{"items":[{"systems":["game::move_player","game::reset_player"],"conflicts":{"items":["game::Position"],"total":1,"truncated":false},"world_access":false,"world_wide":false}],"total":1,"truncated":false}}
 ```
 
 Reports Bevy's built ambiguity analysis, including conflicting component/resource
-type names (resources are components in this ECS revision). An empty type list
-with `world_access: true` denotes an exclusive World-access conflict. Explicitly
-ignored ambiguities are omitted, just as they are by Bevy. Detection works even
+type names (resources are components in this ECS revision). `world_wide: true`
+explicitly identifies a world-wide/non-specific access conflict: the empty type
+list means **all types**, not no conflict. This includes exclusive World-access
+systems and non-exclusive systems with unrestricted component access, such as
+`Query<EntityMut>`. Exclusivity is reported separately by `titan.systems`;
+`world_wide` does not imply it. `world_access` is retained as an equivalent alias
+for compatibility. Both flags are false for conflicts on named types.
+
+For example, two unordered `Query<EntityMut>` systems produce a pair like:
+
+```json
+{"systems":["game::edit_a","game::edit_b"],"conflicts":{"items":[],"total":0,"truncated":false},"world_access":true,"world_wide":true}
+```
+
+Explicitly ignored ambiguities are omitted, just as they are by Bevy. Detection works even
 with the default `ambiguity_detection: Ignore` logging setting.
 
 ## Availability and stability
@@ -112,6 +124,9 @@ processing; their names remain visible in `titan.schedules`.
 
 Bevy moves conditions into private executable storage on build. `InspectPlugin`
 installs a **non-mutating build pass** at plugin finish to retain their names.
+Valid captures made by explicitly observing and initializing schedules before
+finish (including in earlier plugin finish hooks) are preserved, along with
+their original capture pass, rather than discarded or made to await a rebuild.
 Only schedules present when this plugin's finish hook runs are automatically
 observed. A later plugin's finish hook may create or replace schedules; plugin
 order independence applies to BRP registration, not condition-capture timing.

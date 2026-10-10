@@ -38,6 +38,30 @@ pub(super) fn identity(system: &bevy_ecs::system::ScheduleSystem) -> Option<usiz
     (size_of_val(&**system) != 0).then(|| core::ptr::from_ref(&**system).cast::<()>() as usize)
 }
 
+pub(super) fn for_schedule<'w>(world: &'w World, schedule: &Schedule) -> Option<&'w Conditions> {
+    // Use the same instance validation for inspection and automatic observation.
+    // A valid pre-finish capture must keep its pass token alive, not be replaced.
+    if !schedule
+        .systems()
+        .ok()?
+        .any(|(_, system)| identity(system).is_some())
+    {
+        return None;
+    }
+    world
+        .get_resource::<Captured>()?
+        .0
+        .get(&schedule.label())?
+        .iter()
+        .find(|capture| {
+            capture.lifetime.upgrade().is_some()
+                && schedule
+                    .systems()
+                    .expect("checked initialization")
+                    .all(|(key, system)| capture.identities.get(&key) == Some(&identity(system)))
+        })
+}
+
 impl ScheduleBuildPass for Capture {
     type EdgeOptions = ();
 

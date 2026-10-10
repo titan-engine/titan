@@ -18,11 +18,12 @@ use serde_json::{json, Value};
 use crate::protocol::{
     check_limit, default_limit, invalid, names, page, params, value, ListParams,
 };
-use capture::{identity, Capture, Captured};
+use capture::Capture;
 
 /// Installs non-mutating run-condition capture for a schedule's next build.
 ///
-/// [`crate::InspectPlugin`] calls this for existing schedules at plugin finish.
+/// [`crate::InspectPlugin`] calls this for existing schedules at plugin finish
+/// unless they already have a valid capture, in which case it preserves the pass.
 /// Call it yourself for schedules created or replaced later, before initialization.
 /// Installing after a build cannot recover conditions until the next rebuild;
 /// inspection reports them as unavailable rather than inventing an empty list.
@@ -34,6 +35,29 @@ pub fn observe_schedule(schedule: &mut Schedule) {
         label: schedule.label(),
         lifetime: alloc::sync::Arc::new(()),
     });
+}
+
+pub(crate) fn observe_existing(world: &mut World) {
+    // An earlier finish hook (or app setup) may already have observed and built
+    // a schedule. Keep that capture and token; replacing the pass cannot recover
+    // its private executable conditions without an unrelated future rebuild.
+    let labels: Vec<_> = world
+        .resource::<Schedules>()
+        .iter()
+        .filter_map(|(_, schedule)| {
+            capture::for_schedule(world, schedule)
+                .is_none()
+                .then_some(schedule.label())
+        })
+        .collect();
+    let mut schedules = world.resource_mut::<Schedules>();
+    for label in labels {
+        observe_schedule(
+            schedules
+                .get_mut(label)
+                .expect("collected existing schedule"),
+        );
+    }
 }
 
 pub(crate) fn list(In(input): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -222,19 +246,7 @@ pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpRes
         .systems_with_access()
         .expect("checked initialization")
         .collect();
-    let captured = world
-        .get_resource::<Captured>()
-        .and_then(|c| c.0.get(&schedule.label()))
-        .and_then(|candidates| {
-            candidates.iter().find(|capture| {
-                capture.lifetime.upgrade().is_some()
-                // At least one actual allocation must witness schedule identity.
-                && systems.iter().any(|(_, system)| identity(system.system()).is_some())
-                && systems.iter().all(|(key, system)| {
-                    capture.identities.get(key) == Some(&identity(system.system()))
-                })
-            })
-        });
+    let captured = capture::for_schedule(world, schedule);
     let system_names: BTreeMap<_, _> = systems
         .iter()
         .map(|(key, system)| (*key, system.system().name().to_string()))
@@ -323,7 +335,7 @@ pub(crate) fn ambiguities(In(input): In<Option<Value>>, world: &mut World) -> Br
             .filter_map(|id| world.components().get_info(*id))
             .map(|info| info.name().to_string())
             .collect();
-        items.push(json!({"systems": pair, "conflicts": names(types, params.limit), "world_access": conflicts.is_empty()}));
+        items.push(json!({"systems": pair, "conflicts": names(types, params.limit), "world_access": conflicts.is_empty(), "world_wide": conflicts.is_empty()}));
     }
     Ok(
         json!({"schedule": params.schedule, "status": state, "ambiguities": crate::protocol::page_with_total(items, total)}),

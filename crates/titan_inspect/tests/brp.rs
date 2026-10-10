@@ -170,6 +170,8 @@ fn schedules_order_conditions_and_conflicts_over_brp() {
         "::Position"
     ));
     assert_eq!(pair("::a", "::exclusive").unwrap()["world_access"], true);
+    assert_eq!(pair("::a", "::exclusive").unwrap()["world_wide"], true);
+    assert_eq!(pair("::a", "::unordered").unwrap()["world_wide"], false);
     // Inspection and initialization never execute gameplay systems/conditions.
     assert_eq!(app.world().resource::<Counter>().0, 0);
 }
@@ -539,6 +541,88 @@ fn large_ambiguity_list_materializes_only_the_requested_prefix() {
         json!(["writer_000", "writer_001"])
     );
     assert!(contains(&pairs["items"][0]["conflicts"], "::Counter"));
+}
+
+#[test]
+fn captures_initialized_before_inspect_finish_are_preserved() {
+    use bevy_app::Plugin;
+    struct EarlyObservation;
+    impl Plugin for EarlyObservation {
+        fn build(&self, _app: &mut App) {}
+        fn finish(&self, app: &mut App) {
+            observe_and_initialize(app);
+        }
+    }
+    fn observe_and_initialize(app: &mut App) {
+        app.world_mut().schedule_scope(Demo, |world, schedule| {
+            observe_schedule(schedule);
+            schedule.initialize(world).unwrap();
+        });
+    }
+    // Cover both explicit app setup before finish and an earlier plugin hook.
+    for earlier_hook in [false, true] {
+        let mut app = App::new();
+        app.init_resource::<Counter>()
+            .add_systems(Demo, a.in_set(Sets::Inner).run_if(condition))
+            .configure_sets(
+                Demo,
+                (
+                    Sets::Inner.in_set(Sets::Outer),
+                    Sets::Outer.run_if(set_condition),
+                ),
+            );
+        if earlier_hook {
+            app.add_plugins(EarlyObservation);
+        }
+        app.add_plugins((InspectPlugin, RemotePlugin::default()));
+        if !earlier_hook {
+            observe_and_initialize(&mut app);
+        }
+        app.finish();
+        app.cleanup();
+        app.update();
+        let response = inspect(&mut app, "titan.systems");
+        let a = system(&response, "::a");
+        assert!(contains(&a["run_conditions"], "::condition"));
+        assert!(contains(&a["run_conditions"], "::set_condition"));
+        assert!(contains(&a["sets"], "Outer"));
+        assert_eq!(app.world().resource::<Counter>().0, 0);
+        assert_eq!(response, inspect(&mut app, "titan.systems"));
+        app.add_systems(Demo, c.run_if(condition));
+        initialize(&mut app, Demo);
+        let response = inspect(&mut app, "titan.systems");
+        assert!(contains(
+            &system(&response, "::a")["run_conditions"],
+            "::set_condition"
+        ));
+        assert!(contains(
+            &system(&response, "::c")["run_conditions"],
+            "::condition"
+        ));
+    }
+}
+
+#[test]
+fn non_exclusive_entity_mut_ambiguity_is_explicitly_world_wide() {
+    fn world_writer_a(_query: Query<EntityMut>) {}
+    fn world_writer_b(_query: Query<EntityMut>) {}
+    let mut app = app();
+    let mut schedule = Schedule::new(Demo);
+    schedule.add_systems((world_writer_a, world_writer_b));
+    observe_schedule(&mut schedule);
+    schedule.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(schedule);
+    let systems = inspect(&mut app, "titan.systems");
+    assert_eq!(system(&systems, "::world_writer_a")["exclusive"], false);
+    assert_eq!(system(&systems, "::world_writer_b")["exclusive"], false);
+    let response = inspect(&mut app, "titan.ambiguities");
+    assert_eq!(response["ambiguities"]["total"], 1);
+    let pair = &response["ambiguities"]["items"][0];
+    assert_eq!(pair["world_wide"], true);
+    assert_eq!(pair["world_access"], true);
+    assert_eq!(pair["conflicts"]["total"], 0);
+    assert_eq!(pair["conflicts"]["items"], json!([]));
+    assert_eq!(pair["conflicts"]["truncated"], false);
 }
 
 #[test]
