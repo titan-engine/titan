@@ -7,8 +7,9 @@ panic hook. Explicit per-command/observer error handlers still take precedence.
 
 ## Headless usage
 
-Install the tracing layer once, then add the plugin after your other plugins and
-configured error handler. The plugin adds `FrameCountPlugin` if absent.
+Install the tracing layer once, then add the plugin after your base engine
+plugins and configured error handler, but before registering game observers.
+The plugin adds `FrameCountPlugin` if absent.
 
 ```rust,no_run
 use bevy_app::{App, Update};
@@ -40,7 +41,8 @@ app.update();
 For an existing `bevy_log::LogPlugin`, set its `custom_layer` to
 `|_| Some(Box::new(titan_diagnostics::DiagnosticsLayer))` instead of installing
 another subscriber. With `DefaultPlugins`, configure the `LogPlugin` through
-`PluginGroup::set`, then add `DiagnosticsPlugin` afterward. This crate does not
+`PluginGroup::set`, then add `DiagnosticsPlugin` afterward, before game plugins
+that register observers. This crate does not
 replace the existing subscriber or filters, and does not require a renderer.
 The layer is compatible with the public `bevy_log::BoxedLayer` type.
 
@@ -63,6 +65,12 @@ other worlds, remove the ownership resource, or overwrite the fallback handler
 while diagnostics is active. The installed panic hook remains in place but is
 inert when there is no active app. Install any other panic hooks first, or chain
 them rather than replacing this hook afterward.
+
+Bevy observers can cache their fallback handler when initialized. Install the
+plugin before registering observers whose errors should be recorded; existing
+cached handlers and explicit observer/command handlers are not retroactively
+replaced. Dynamically rerouting already initialized observers would require an
+upstream public hook rather than patching ECS internals here.
 
 Thread-local schedule stacks track Bevy's public tracing spans, including
 nested schedules. Worker threads with detached system spans and recognized
