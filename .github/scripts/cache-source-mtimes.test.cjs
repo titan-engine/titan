@@ -54,7 +54,9 @@ async function assertTouched(filename, start, end) {
 test('save/restore resets identical freshly checked-out sources without touching artifacts', async t => {
   const root = await repository(t);
   const filenames = [];
-  for (const name of ['src/lib.rs', 'Cargo.toml', 'space and\nnewline.rs']) {
+  // Newlines are valid Git filenames on Unix, but not on Windows filesystems.
+  const unusualName = process.platform === 'win32' ? 'space and unicode-é.rs' : 'space and\nnewline.rs';
+  for (const name of ['src/lib.rs', 'Cargo.toml', unusualName]) {
     filenames.push(await source(root, name));
   }
   const untracked = await source(root, 'untracked.rs', 'untracked', false);
