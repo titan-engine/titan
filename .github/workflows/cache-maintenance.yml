@@ -12,6 +12,7 @@ on:
       - .github/workflows/cache-maintenance.yml
       - .github/scripts/titan-packages-changed*
       - .github/scripts/titan-test-features*
+      - .github/scripts/titan-workflow*
   push:
     branches: [main]
     paths:
@@ -24,6 +25,7 @@ on:
       - .github/workflows/cache-maintenance.yml
       - .github/scripts/titan-packages-changed*
       - .github/scripts/titan-test-features*
+      - .github/scripts/titan-workflow*
 
 permissions:
   contents: read
@@ -44,4 +46,4 @@ jobs:
         shell: bash
         run: bash .github/scripts/test-titan-scoped-ci.sh
       - name: Test affected packages and Cargo feature routing without compilation
-        run: node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs
+        run: node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs .github/scripts/titan-workflow.test.cjs

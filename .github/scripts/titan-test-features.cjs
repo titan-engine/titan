@@ -54,13 +54,17 @@ function plan(metadata, names) {
   const route = (target, feature) => {
     for (const pkg of selected) {
       if (pkg.name === target) return `${target}/${feature}`;
-      const dependency = pkg.dependencies.find(dep => dep.name === target);
+      // A build-only or platform-inapplicable route does not enable runtime
+      // features under resolver 2/3. Require an unconditional target/test route.
+      const dependency = pkg.dependencies.find(dep => dep.name === target &&
+        dep.kind !== 'build' && !dep.target);
       if (dependency) return `${dependency.rename || dependency.name}/${feature}`;
     }
     // Bevy exposes ECS tracking publicly; demos have only this transitive route.
     if (target === 'bevy_ecs') {
       for (const pkg of selected) {
-        const bevy = pkg.dependencies.find(dep => dep.name === 'bevy');
+        const bevy = pkg.dependencies.find(dep => dep.name === 'bevy' &&
+          dep.kind !== 'build' && !dep.target);
         if (bevy && packages.get('bevy')?.features?.track_location) return `${bevy.rename || bevy.name}/track_location`;
       }
     }

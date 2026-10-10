@@ -12,7 +12,7 @@ outputs:
     value: ${{ steps.filter.outputs.docs }}
   ecs:
     description: Run ECS Miri tests
-    value: ${{ steps.filter.outputs.ecs }}
+    value: ${{ steps.filter.outputs.ecs == 'true' || steps.titan-filter.outputs.upstream != 'false' }}
   titan_packages:
     description: Affected Titan test packages, * for full coverage, none for inapplicable
     value: ${{ steps.titan-filter.outputs.packages }}
@@ -25,7 +25,7 @@ runs:
         bash .github/scripts/test-ci-paths-changed.sh
         bash .github/scripts/test-miri-paths-changed.sh
         bash .github/scripts/test-titan-scoped-ci.sh
-        node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs
+        node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs .github/scripts/titan-workflow.test.cjs
     - name: Select jobs
       id: filter
       shell: bash

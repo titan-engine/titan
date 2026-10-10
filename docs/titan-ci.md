@@ -41,7 +41,9 @@ are routed through direct dependencies accepted by Cargo: ECS-only leaves do not
 request unrelated remote features, and demos use `bevy/track_location`. A
 metadata-only feature planner follows default/forwarded features (including
 optional and weak forwarding), conservatively unions target predicates, and
-falls back to all Titan packages if an active dependency has no valid CLI route.
+falls back to all Titan packages if an active dependency has no unconditional
+runtime/dev CLI route. Build-only or platform-inapplicable direct routes cannot
+silently substitute for runtime features under Cargo resolver 2/3.
 Current Titan leaves and demos all have valid selective routes. Full upstream
 runs retain the workspace
 CI default-feature tests instead. Extra tests run `--all-features` for each
@@ -61,7 +63,7 @@ boundaries without compiling Rust. Feature-routing regressions also run real
 `cargo tree --offline` in tiny registry-free workspaces (no builds):
 
 ```sh
-node --test .github/scripts/titan-packages-changed.test.cjs .github/scripts/titan-test-features.test.cjs
+node --test .github/scripts/titan-*.test.cjs
 bash .github/scripts/test-ci-paths-changed.sh
 bash .github/scripts/test-titan-scoped-ci.sh
 ```
