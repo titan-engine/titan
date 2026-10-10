@@ -46,6 +46,8 @@ an R-to-restart prompt.
 - Start with **100 health and 12 rounds**. The weapon deals **25 damage** per
   valid hit, has a **15-tick cooldown** (four shots/second), and a 32-unit range.
   Each sentry starts with 50 health. Aim at its chest; vertical aiming matters.
+  Shots and sight traverse only the grid cells touched by each ray, conservatively
+  including corner contacts and both sides of a grid-boundary-aligned ray.
 - Walls and closed doors stop shots and enemy line of sight. Sentries idle
   without a clear nearby view, chase visible players, attack at close range,
   and leave a flattened gray corpse when killed. Their sprite turns orange

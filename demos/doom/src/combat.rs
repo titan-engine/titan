@@ -2,6 +2,10 @@
 
 use bevy::prelude::*;
 
+#[cfg(test)]
+#[path = "combat/ray_tests.rs"]
+mod ray_tests;
+
 use crate::{GameplayActions, Level, LevelError, ObjectKind, PlayerState, FIXED_HZ};
 
 /// Number of ticks between weapon shots (four shots per second).
@@ -261,36 +265,89 @@ fn set_cell_wall(level: &mut Level, position: Vec2, wall: bool) -> bool {
     true
 }
 
-// Exact ray/AABB slabs, including corner contacts; no sampled LOS gaps.
+// Supercover grid traversal: inspect only cells touched by the ray, including
+// both sides of boundary-aligned rays and the side cells at corner crossings.
 fn wall_distance(level: &Level, origin: Vec2, direction: Vec2, range: f32) -> f32 {
-    let mut nearest = range;
-    for z in 0..level.height() {
-        for x in 0..level.width() {
-            if !level.is_wall(x as i32, z as i32) {
-                continue;
-            }
-            let min = Vec2::new(x as f32, z as f32);
-            let max = min + Vec2::ONE;
-            let mut enter: f32 = 0.0;
-            let mut leave = range;
-            for axis in 0..2 {
-                if direction[axis].abs() < 0.000001 {
-                    if origin[axis] < min[axis] || origin[axis] > max[axis] {
-                        leave = -1.0;
-                    }
-                } else {
-                    let a = (min[axis] - origin[axis]) / direction[axis];
-                    let b = (max[axis] - origin[axis]) / direction[axis];
-                    enter = enter.max(a.min(b));
-                    leave = leave.min(a.max(b));
-                }
-            }
-            if enter <= leave {
-                nearest = nearest.min(enter);
-            }
+    grid_ray_distance(origin, direction, range, |cell| {
+        level.is_wall(cell.x, cell.y)
+    })
+}
+
+fn grid_ray_distance(
+    origin: Vec2,
+    direction: Vec2,
+    range: f32,
+    mut is_wall: impl FnMut(IVec2) -> bool,
+) -> f32 {
+    let mut cell = origin.floor().as_ivec2();
+    let origin_edge = origin.cmpeq(origin.floor());
+    let mut blocked = |cell: IVec2, x_edge: bool, z_edge: bool| {
+        is_wall(cell)
+            || (x_edge && is_wall(cell - IVec2::X))
+            || (z_edge && is_wall(cell - IVec2::Y))
+            || (x_edge && z_edge && is_wall(cell - IVec2::ONE))
+    };
+    // A wall touched at the starting point blocks even when facing away.
+    if blocked(cell, origin_edge.x, origin_edge.y) {
+        return 0.0;
+    }
+    let step = IVec2::new(
+        i32::from(direction.x > 0.0) - i32::from(direction.x < 0.0),
+        i32::from(direction.y > 0.0) - i32::from(direction.y < 0.0),
+    );
+    let parallel_x_edge = direction.x == 0.0 && origin_edge.x;
+    let parallel_z_edge = direction.y == 0.0 && origin_edge.y;
+    loop {
+        // Recompute from integer boundaries rather than accumulate t deltas,
+        // avoiding drift that could skip a later exact corner contact.
+        let next = Vec2::new(
+            if direction.x == 0.0 {
+                f32::INFINITY
+            } else {
+                ((cell.x + i32::from(step.x > 0)) as f32 - origin.x) / direction.x
+            },
+            if direction.y == 0.0 {
+                f32::INFINITY
+            } else {
+                ((cell.y + i32::from(step.y > 0)) as f32 - origin.y) / direction.y
+            },
+        );
+        let distance = next.min_element();
+        if distance > range {
+            return range;
+        }
+        let cross_x = next.x <= next.y;
+        let cross_z = next.y <= next.x;
+        // At a tie, test both side cells before entering the diagonal cell.
+        // A ray cannot slip between walls merely by touching their corner.
+        if cross_x
+            && blocked(
+                cell + IVec2::new(step.x, 0),
+                parallel_x_edge,
+                parallel_z_edge,
+            )
+        {
+            return distance;
+        }
+        if cross_z
+            && blocked(
+                cell + IVec2::new(0, step.y),
+                parallel_x_edge,
+                parallel_z_edge,
+            )
+        {
+            return distance;
+        }
+        if cross_x {
+            cell.x += step.x;
+        }
+        if cross_z {
+            cell.y += step.y;
+        }
+        if cross_x && cross_z && blocked(cell, parallel_x_edge, parallel_z_edge) {
+            return distance;
         }
     }
-    nearest
 }
 
 fn visible(level: &Level, from: Vec2, to: Vec2) -> bool {
