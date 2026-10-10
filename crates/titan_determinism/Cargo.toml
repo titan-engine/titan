@@ -14,8 +14,10 @@ default = []
 track_location = ["bevy_ecs/track_location"]
 
 [dependencies]
+bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", features = [
   "multi_threaded",
+  "debug",
 ] }
 bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
 titan_snapshot = { path = "../titan_snapshot", version = "0.1.0" }
@@ -23,7 +25,6 @@ titan_test = { path = "../titan_test", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_input = { path = "../bevy_input", version = "0.20.0" }
 bevy_time = { path = "../bevy_time", version = "0.20.0" }
 serde_json = "1.0.140"
