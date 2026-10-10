@@ -26,7 +26,8 @@ listed in [the dependency guide](../../docs/linux_dependencies.md).
 Completing a level shows its solved board, then advances after 1.2 seconds. Undo
 or restart during that interval cancels the transition. On the last level the
 solved board stays visible; undo and restart still work. Loading a custom file
-creates a one-level campaign. Invalid files fail before creating a window.
+creates a one-level campaign. The board fits the window (including large custom
+levels) and refits on resize. Invalid files fail before creating a window.
 `--capture` saves a PNG after 120 presentation frames and exits; save failure or
 closing the window early returns a nonzero status. This is not a headless command.
 
@@ -34,7 +35,7 @@ closing the window early returns a nonzero status. This is not a headless comman
 
 This new demo has no before image. The capture is from the running macOS/Metal
 build. Shapes are original procedural placeholders (square blocks, cross targets,
-and a diamond player), under the repository's MIT/Apache-2.0 licence. No external
+and a diamond player), under the repository's MIT/Apache-2.0 license. No external
 art or audio assets are bundled; text uses Bevy's existing default font.
 
 ## Parallel ownership / architecture

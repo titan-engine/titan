@@ -35,7 +35,9 @@ render = [
 ]
 
 [dependencies]
-bevy = { path = "../..", version = "0.20.0", default-features = false, features = ["std"] }
+bevy = { path = "../..", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
 
 [dev-dependencies]
 titan_test = { path = "../../crates/titan_test" }
