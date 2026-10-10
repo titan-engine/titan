@@ -70,6 +70,14 @@ cargo test -p titan_doom --no-default-features
 
 See its README for controls, the level format, and simulation tests.
 
+The [Puzzle demo](demos/puzzle) is a playable push-puzzle foundation with
+undo/redo, validated text levels, and shared headless actions and gameplay events:
+
+```sh
+cargo run -p titan_puzzle
+cargo test -p titan_puzzle --no-default-features
+```
+
 ## Contributing
 
 AI-assisted contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)

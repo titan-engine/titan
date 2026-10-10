@@ -1,0 +1,15 @@
+puzzle 1
+id around-the-wall
+title Around the Wall
+grid
+#######
+#.....#
+#..#..#
+#.....#
+#.....#
+#######
+objects
+player hero 1 3
+block crate 2 3
+target goal 4 1
+end

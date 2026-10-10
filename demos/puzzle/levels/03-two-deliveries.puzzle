@@ -1,0 +1,16 @@
+puzzle 1
+id two-deliveries
+title Two Deliveries
+grid
+#######
+#.....#
+#.....#
+#.....#
+#######
+objects
+player hero 1 2
+block upper-crate 2 1
+block lower-crate 2 3
+target upper-goal 4 1
+target lower-goal 4 3
+end

@@ -1,0 +1,14 @@
+puzzle 1
+id turn-the-corner
+title Turn the Corner
+grid
+######
+#....#
+#....#
+#....#
+######
+objects
+player hero 1 2
+block crate 2 2
+target goal 3 1
+end
