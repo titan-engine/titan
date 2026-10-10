@@ -343,6 +343,26 @@ fn click_button_stalled_poll_obeys_barrier_deadline() {
 }
 
 #[test]
+fn key_tap_stalled_release_baseline_obeys_barrier_deadline() {
+    assert_barrier_deadline("send_key", 4);
+}
+
+#[test]
+fn key_tap_stalled_release_poll_obeys_barrier_deadline() {
+    assert_barrier_deadline("send_key", 5);
+}
+
+#[test]
+fn click_release_stalled_baseline_obeys_barrier_deadline() {
+    assert_barrier_deadline("click", 7);
+}
+
+#[test]
+fn click_release_stalled_poll_obeys_barrier_deadline() {
+    assert_barrier_deadline("click", 8);
+}
+
+#[test]
 fn partial_key_press_attempts_both_deliveries_and_releases() {
     for rejected_message in [KEYBOARD_INPUT, WINDOW_EVENT] {
         let fixture = Fixture::configure(usize::MAX, Some(rejected_message));

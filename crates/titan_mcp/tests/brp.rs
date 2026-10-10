@@ -1229,9 +1229,10 @@ fn titan_send_key_frame_barrier_crosses_u32_wrap_while_paused() {
     assert_eq!(key["aggregate"], key["raw"]);
     // Polls at zero and one satisfy wrapping_sub(MAX) >= 2. Ordinary or
     // saturating subtraction instead times out, even though input is updating.
+    // The post-release barrier then adds a baseline and two polls.
     assert_eq!(
         paused_frame(&fixture.client.call("titan.status", None).unwrap()),
-        6
+        9
     );
     let after = fixture.time_trace();
     assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
@@ -1264,9 +1265,10 @@ fn titan_click_cursor_frame_barrier_crosses_u32_wrap_while_paused() {
         mouse["press_frames"][0][0].as_u64().unwrap()
             < mouse["press_frames"][0][1].as_u64().unwrap()
     );
+    // Includes the post-release barrier's baseline and two polls.
     assert_eq!(
         paused_frame(&fixture.client.call("titan.status", None).unwrap()),
-        11
+        14
     );
     let after = fixture.time_trace();
     assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);

@@ -136,7 +136,9 @@ diagnostic prefix with explicit truncation/omitted-byte metadata and guidance.
 HTTP responses, screenshot sizes, and waits are bounded. A game restart may
 invalidate previously obtained entity IDs; query again after reconnecting.
 
-Keyboard taps and clicks use frame barriers when `titan.status` is available.
+Keyboard taps and clicks use frame barriers when `titan.status` is available,
+including one after the release, so a follow-up query or screenshot sees the
+input fully processed.
 Each barrier's baseline and status polls share a three-second deadline; failed
 barriers still attempt releases after a delivered press. Partial press delivery
 also triggers best-effort release in both input channels. Individual release
@@ -205,7 +207,8 @@ waiting on the fixture process releases the detached HTTP listener. Protocol
 tests pipe JSON through the built binary. Time-control tests use the real
 `TitanRemotePlugin` and verify actual virtual-time deltas, paused input, and
 counter rollover. Controlled loopback HTTP tests stall baseline/poll responses
-at all three input barriers and verify the shared deadline and cleanup phases.
+at every input barrier, including the post-release one, and verify the shared
+deadline and cleanup phases.
 The `remote-render` test feature enables real screenshot
 handlers with synthetic GPU readback: the server publishes the PNG atomically,
 and MCP returns its decoded pixels. The shared Titan workflow discovers

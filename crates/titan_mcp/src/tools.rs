@@ -632,7 +632,11 @@ fn send_key(client: &Client, args: &Value) -> Result<Value, String> {
         // Even if the barrier fails, release the key to avoid leaving it held.
         let release = send("Released");
         barrier?;
-        release
+        let release = release?;
+        // Return only once the release has traversed PreUpdate, so a follow-up
+        // query or screenshot never observes the key still held.
+        separate_frames(client, has_status)?;
+        Ok(release)
     } else {
         Ok(result)
     }
@@ -780,7 +784,11 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     let barrier = separate_frames(client, has_status);
     let release = send("Released");
     barrier?;
-    release
+    let release = release?;
+    // As with key taps, wait until the release (and any click observers it
+    // triggers) has been processed before reporting success.
+    separate_frames(client, has_status)?;
+    Ok(release)
 }
 
 #[cfg(test)]
