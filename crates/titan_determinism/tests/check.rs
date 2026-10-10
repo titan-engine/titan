@@ -78,7 +78,11 @@ fn deterministic_game_passes_both_variants_with_fresh_worlds() {
         assert_eq!(constructions, 3);
         assert_eq!(
             report,
-            DeterminismReport::Deterministic { runs: 3, ticks: 8 }
+            DeterminismReport::Deterministic {
+                runs: 3,
+                ticks: 8,
+                entity_matching: titan_determinism::EntityMatching::ById,
+            }
         );
         report.assert_deterministic();
     }
@@ -88,7 +92,11 @@ fn deterministic_game_passes_both_variants_with_fresh_worlds() {
 fn repeat_and_two_runs_are_the_defaults() {
     assert_eq!(
         DeterminismCheck::new(deterministic_sim).ticks(3).run(),
-        DeterminismReport::Deterministic { runs: 2, ticks: 3 }
+        DeterminismReport::Deterministic {
+            runs: 2,
+            ticks: 3,
+            entity_matching: titan_determinism::EntityMatching::ById,
+        }
     );
 }
 

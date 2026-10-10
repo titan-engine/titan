@@ -7,7 +7,7 @@ use bevy_ecs::{
     component::ComponentId, reflect::AppTypeRegistry, schedule::Schedules, world::World,
 };
 use serde::{Deserialize, Serialize};
-use titan_snapshot::WorldDiff;
+use titan_snapshot::{MatchedWorldDiff, WorldDiff};
 
 /// An unordered pair of systems that may affect a diverging type.
 ///
@@ -54,6 +54,44 @@ pub struct Hints {
 #[cfg(test)]
 pub(crate) fn collect(world: &World, diff: &WorldDiff) -> Hints {
     collect_with_seed(world, diff, None)
+}
+
+// Structural diffs identify pairs by the reference ID, but location metadata
+// lives in the candidate world. Never inspect a removed entity's coincident ID.
+pub(crate) fn collect_matched(
+    world: &World,
+    matched: &MatchedWorldDiff,
+    shuffle_seed: Option<u64>,
+) -> Hints {
+    let hints = collect_with_seed(world, &matched.diff, shuffle_seed);
+    #[cfg(feature = "track_location")]
+    {
+        use titan_snapshot::ChangeKind;
+        let mut candidate_diff = matched.diff.clone();
+        candidate_diff.entities.retain_mut(|entity| {
+            if entity.kind == ChangeKind::Removed {
+                return false;
+            }
+            if entity.kind == ChangeKind::Changed
+                && let Some(identity) = matched
+                    .matches
+                    .iter()
+                    .find(|m| m.before == Some(entity.entity))
+                && let Some(after) = identity.after
+            {
+                entity.entity = after;
+            }
+            true
+        });
+        // Keep removed types for ambiguity leads, but use only candidate identities
+        // for last-change locations (reported with the candidate's ID).
+        Hints {
+            change_locations: change_locations(world, &candidate_diff, &snapshot_type_keys(world)),
+            ..hints
+        }
+    }
+    #[cfg(not(feature = "track_location"))]
+    hints
 }
 
 pub(crate) fn collect_with_seed(

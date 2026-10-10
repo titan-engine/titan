@@ -7,13 +7,15 @@ mod hints;
 mod shuffle;
 
 pub use hints::{AmbiguityHint, ChangeLocationHint, Hints};
-pub use titan_snapshot::{DiffConfig, SnapshotConfig};
+pub use titan_snapshot::{DiffConfig, EntityMatching, SnapshotConfig};
 pub use titan_test::InputScript;
 
 use alloc::collections::BTreeSet;
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use titan_snapshot::{TypeFilter, WorldDiff, WorldSnapshot};
+use titan_snapshot::{
+    EntityMatch, MatchDiagnostic, MatchedWorldDiff, TypeFilter, WorldDiff, WorldSnapshot,
+};
 use titan_test::{ExecutorKind, Sim, SimSeed};
 
 /// Configuration applied to runs after the reference run.
@@ -111,6 +113,9 @@ pub struct ScenarioParameters {
     pub snapshot_config: SnapshotSettings,
     /// Numeric comparison policy (invalid tolerances are normalized to zero).
     pub diff_config: DiffConfig,
+    /// Entity identity strategy used for every compared tick.
+    #[serde(default)]
+    pub entity_matching: EntityMatching,
 }
 
 /// The first observed difference from the reference run.
@@ -122,6 +127,12 @@ pub struct Divergence {
     pub tick: u64,
     /// Observable entity, component, resource, and field differences at this tick.
     pub diff: WorldDiff,
+    /// Logical keys and both world-local IDs, including unchanged pairs.
+    #[serde(default)]
+    pub matches: Vec<EntityMatch>,
+    /// Missing, opaque, or duplicate keys; these also count as divergence.
+    #[serde(default)]
+    pub diagnostics: Vec<MatchDiagnostic>,
     /// Settings needed to replay with the same scenario factory and build.
     pub parameters: ScenarioParameters,
     /// Best-effort debugging leads, not proof of the cause.
@@ -141,6 +152,9 @@ pub enum DeterminismReport {
         runs: usize,
         /// Completed ticks per run.
         ticks: u64,
+        /// Entity identity strategy used for every compared tick.
+        #[serde(default)]
+        entity_matching: EntityMatching,
     },
     /// Earliest mismatch across runs; ties choose the lowest run number.
     Diverged(Divergence),
@@ -157,9 +171,9 @@ impl DeterminismReport {
 impl fmt::Display for DeterminismReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Deterministic { runs, ticks } => write!(
+            Self::Deterministic { runs, ticks, entity_matching } => write!(
                 f,
-                "Deterministic: {runs} runs agreed for {ticks} ticks (observable state only)"
+                "Deterministic: {runs} runs agreed for {ticks} ticks (observable state only; matcher: {entity_matching:?})"
             ),
             Self::Diverged(divergence) => divergence.fmt(f),
         }
@@ -191,7 +205,18 @@ impl fmt::Display for Divergence {
             self.parameters.snapshot_config,
             self.parameters.diff_config
         )?;
-        writeln!(f, "\n{}", self.diff)?;
+        writeln!(f, "  entity matcher: {:?}", self.parameters.entity_matching)?;
+        // Reuse snapshot's side-aware key/diagnostic formatting. The structural
+        // diff stays directly accessible for existing report consumers.
+        writeln!(
+            f,
+            "\n{}",
+            MatchedWorldDiff {
+                diff: self.diff.clone(),
+                matches: self.matches.clone(),
+                diagnostics: self.diagnostics.clone(),
+            }
+        )?;
         writeln!(f, "Hints (best effort; not proof of causation):")?;
         if self.hints.ambiguities.is_empty() && self.hints.change_locations.is_empty() {
             writeln!(
@@ -241,6 +266,7 @@ pub struct DeterminismCheck<F> {
     variant: Variant,
     snapshot_config: SnapshotConfig,
     diff_config: DiffConfig,
+    entity_matching: EntityMatching,
 }
 
 impl<F: FnMut() -> Sim> DeterminismCheck<F> {
@@ -256,6 +282,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             variant: Variant::Repeat,
             snapshot_config: SnapshotConfig::default(),
             diff_config: DiffConfig::default(),
+            entity_matching: EntityMatching::default(),
         }
     }
 
@@ -295,6 +322,19 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
         self
     }
 
+    /// Choose entity identity, defaulting to full index/generation IDs.
+    ///
+    /// Use `ByName` for unique, stable names or `ByComponent` for a captured,
+    /// reflected stable key. These ignore allocation order and normalize typed
+    /// entity references. Missing, opaque, or duplicate keys cause divergence;
+    /// there is no ID fallback. ID matching is stricter: it also detects spawn
+    /// order differences. Key modes build identity maps and normalize snapshot
+    /// copies each tick; they do not use an ID-ordered hash shortcut.
+    pub fn entity_matching(mut self, matching: EntityMatching) -> Self {
+        self.entity_matching = matching;
+        self
+    }
+
     /// Execute the check, reporting the earliest diverging tick across all runs.
     ///
     /// Every candidate stops at its first mismatch. Later candidates only advance
@@ -324,6 +364,9 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
         if !self.diff_config.float_tolerance.is_finite() || self.diff_config.float_tolerance < 0.0 {
             self.diff_config.float_tolerance = 0.0;
         }
+        let match_config = self
+            .diff_config
+            .with_entity_matching(self.entity_matching.clone());
         // Sort once, stably, so equal-tick actions retain recording order.
         // Keep the original script unchanged for the reproduction payload.
         let mut sorted_script = self.script.clone();
@@ -390,13 +433,27 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
                     shuffle::validate(candidate.world(), seed);
                 }
                 let snapshot = WorldSnapshot::capture(candidate.world(), &self.snapshot_config);
-                let diff = reference.diff(&snapshot, &self.diff_config);
-                if !diff.is_empty() {
+                // Preserve the inexpensive default comparison. Only build its
+                // identity metadata on failure. Key modes compare every tick
+                // after matching/normalization, so reordered IDs cannot obscure
+                // the first actual gameplay divergence.
+                let matched = if self.entity_matching == EntityMatching::ById {
+                    if reference.diff(&snapshot, &self.diff_config).is_empty() {
+                        continue;
+                    }
+                    reference.diff_matched(&snapshot, &match_config)
+                } else {
+                    reference.diff_matched(&snapshot, &match_config)
+                };
+                if !matched.is_empty() {
+                    let hints = hints::collect_matched(candidate.world(), &matched, shuffle_seed);
                     earliest = Some(Divergence {
                         run,
                         tick: candidate.current_tick(),
-                        hints: hints::collect_with_seed(candidate.world(), &diff, shuffle_seed),
-                        diff,
+                        hints,
+                        diff: matched.diff,
+                        matches: matched.matches,
+                        diagnostics: matched.diagnostics,
                         parameters: ScenarioParameters {
                             seed,
                             reference_seed,
@@ -406,6 +463,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
                             script: self.script.clone(),
                             snapshot_config: (&self.snapshot_config).into(),
                             diff_config: self.diff_config,
+                            entity_matching: self.entity_matching.clone(),
                         },
                     });
                     break;
@@ -422,6 +480,7 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
             DeterminismReport::Deterministic {
                 runs: self.runs,
                 ticks,
+                entity_matching: self.entity_matching,
             },
             DeterminismReport::Diverged,
         )
