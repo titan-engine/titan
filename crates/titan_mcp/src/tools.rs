@@ -17,6 +17,7 @@ const WINDOW: &str = "bevy_window::window::Window";
 const PRIMARY_WINDOW: &str = "bevy_window::window::PrimaryWindow";
 const WINDOW_EVENT: &str = "bevy_window::event::WindowEvent";
 const CURSOR_MOVED: &str = "bevy_window::event::CursorMoved";
+const CURSOR_ENTERED: &str = "bevy_window::event::CursorEntered";
 const KEYBOARD_INPUT: &str = "bevy_input::keyboard::KeyboardInput";
 const MOUSE_BUTTON_INPUT: &str = "bevy_input::mouse::MouseButtonInput";
 const POLL_TIMEOUT: Duration = Duration::from_secs(15);
@@ -761,6 +762,15 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
             value: json!(physical),
         },
     )?;
+    // Winit announces entry before the first move inside the window; games
+    // tracking hover through CursorEntered would otherwise ignore the click.
+    if delta.is_none() {
+        let entered = json!({"window":window});
+        let standalone = write_message(client, CURSOR_ENTERED, entered.clone());
+        let aggregate = write_message(client, WINDOW_EVENT, json!({"CursorEntered":entered}));
+        standalone?;
+        aggregate?;
+    }
     let cursor = json!({"window":window,"position":[x,y],"delta":delta});
     let standalone = write_message(client, CURSOR_MOVED, cursor.clone());
     let aggregate = write_message(client, WINDOW_EVENT, json!({"CursorMoved":cursor}));

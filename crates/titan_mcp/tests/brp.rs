@@ -26,7 +26,7 @@ use bevy_input::{
 use bevy_reflect::{Reflect, TypePath};
 use bevy_remote::{http::RemoteHttpPlugin, BrpReceiver, BrpResult, RemotePlugin};
 use bevy_time::{Time, TimePlugin, TimeUpdateStrategy, Virtual};
-use bevy_window::{CursorMoved, PrimaryWindow, Window, WindowEvent};
+use bevy_window::{CursorEntered, CursorMoved, PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
 use titan_mcp::{client::Client, tools};
 use titan_remote::TitanRemotePlugin;
@@ -138,6 +138,8 @@ struct MouseState {
     raw_cursor_window: u64,
     raw_cursor: Vec<CursorRecord>,
     aggregate_cursor: Vec<CursorRecord>,
+    raw_entered: Vec<u64>,
+    aggregate_entered: Vec<u64>,
     frame: u32,
     cursor_frame: u32,
     press_frames: Vec<[u32; 2]>,
@@ -190,10 +192,14 @@ fn record_mouse(
     mut raw: MessageReader<MouseButtonInput>,
     mut aggregate: MessageReader<WindowEvent>,
     mut cursor: MessageReader<CursorMoved>,
+    mut entered: MessageReader<CursorEntered>,
     windows: Query<&Window>,
     mut state: ResMut<MouseState>,
 ) {
     state.frame += 1;
+    state
+        .raw_entered
+        .extend(entered.read().map(|event| event.window.to_bits()));
     for event in cursor.read() {
         state.raw_cursor_moves += 1;
         state.raw_cursor_x = event.position.x;
@@ -224,6 +230,9 @@ fn record_mouse(
     for event in aggregate.read() {
         match event {
             WindowEvent::MouseButtonInput(input) => state.aggregate.push(input.into()),
+            WindowEvent::CursorEntered(entered) => {
+                state.aggregate_entered.push(entered.window.to_bits());
+            }
             WindowEvent::CursorMoved(cursor) => {
                 state.cursor_moves += 1;
                 state.cursor_x = cursor.position.x;
@@ -347,8 +356,10 @@ fn brp_fixture_process() {
         .register_type::<MouseButtonInput>()
         .register_type::<WindowEvent>()
         .register_type::<CursorMoved>()
+        .register_type::<CursorEntered>()
         .add_message::<WindowEvent>()
         .add_message::<CursorMoved>()
+        .add_message::<CursorEntered>()
         .register_type::<first::Ambiguous>()
         .register_type::<second::Ambiguous>()
         .register_type::<KeyboardInput>()
@@ -766,6 +777,22 @@ fn click_updates_button_input_and_both_message_consumers() {
     );
 }
 
+/// Like winit, only moves entering a window (those without a delta) announce
+/// `CursorEntered`, in both message channels.
+fn assert_entered(observed: &Value, expected: &[Value]) {
+    let entries: Vec<u64> = expected
+        .iter()
+        .filter(|cursor| cursor["delta"].is_null())
+        .map(|cursor| {
+            serde_json::from_value::<Entity>(cursor["window"].clone())
+                .unwrap()
+                .to_bits()
+        })
+        .collect();
+    assert_eq!(observed["raw_entered"], json!(entries));
+    assert_eq!(observed["aggregate_entered"], json!(entries));
+}
+
 #[test]
 fn click_reports_native_cursor_deltas_in_both_message_channels() {
     let fixture = Fixture::start(false);
@@ -797,6 +824,7 @@ fn click_reports_native_cursor_deltas_in_both_message_channels() {
         let observed = state();
         assert_eq!(observed["raw_cursor"], json!(expected));
         assert_eq!(observed["aggregate_cursor"], json!(expected));
+        assert_entered(&observed, &expected);
     }
 
     // A changed override must apply to the stored *physical* position, rather
@@ -809,6 +837,7 @@ fn click_reports_native_cursor_deltas_in_both_message_channels() {
         let observed = state();
         assert_eq!(observed["raw_cursor"], json!(expected));
         assert_eq!(observed["aggregate_cursor"], json!(expected));
+        assert_entered(&observed, &expected);
     }
 
     let component = fixture.tool(
@@ -834,6 +863,7 @@ fn click_reports_native_cursor_deltas_in_both_message_channels() {
         let observed = state();
         assert_eq!(observed["raw_cursor"], json!(expected));
         assert_eq!(observed["aggregate_cursor"], json!(expected));
+        assert_entered(&observed, &expected);
     }
 }
 
@@ -1247,11 +1277,12 @@ fn titan_click_cursor_frame_barrier_crosses_u32_wrap_while_paused() {
         ["entity"]
         .clone();
     let frozen = fixture.time_trace();
-    // Discovery, get/mutate Window, both cursor messages, then the first status:
-    // six queued requests put the cursor-to-press barrier's first status at MAX.
+    // Discovery, get/mutate Window, both entered and both cursor messages, then
+    // the first status: eight queued requests put the cursor-to-press barrier's
+    // first status at MAX.
     fixture
         .client
-        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 6})))
+        .call("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 8})))
         .unwrap();
     fixture.tool("click", json!({"x": 8.5, "y": 12.25, "window": window}));
     let mouse = fixture.tool("get_resource", json!({"resource": "MouseState"}))["value"].clone();
