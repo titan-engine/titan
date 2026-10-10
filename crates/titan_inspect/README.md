@@ -134,7 +134,12 @@ For schedules added/replaced later (including in later finish hooks), call
 `titan_inspect::schedules::observe_schedule(&mut schedule)` before their first
 build, **after all build passes that modify conditions**. Calling it again moves
 capture to the end of the pass list. Condition-modifying passes installed after
-capture are not supported; Bevy has no post-build public condition getter. Attaching after a build cannot recover names until the next rebuild;
+capture are not supported; Bevy has no post-build public condition getter. If a
+later pass only inserts systems, valid captures for existing systems are retained;
+late-added systems (or inherited sets absent from the snapshot) report their own
+`run_conditions: null`, not an invented empty list. Install capture after
+system-inserting passes too when complete coverage of their additions is needed.
+Attaching after a build cannot recover names until the next rebuild;
 `run_conditions: null` explicitly reports unavailable capture. To reject stale
 capture from replacement schedules, validation uses a live pass token and private
 boxed-system allocation identities (never transmitted). Schedules containing

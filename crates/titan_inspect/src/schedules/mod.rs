@@ -267,12 +267,13 @@ pub(crate) fn systems(In(input): In<Option<Value>>, world: &mut World) -> BrpRes
             .filter_map(|key| graph.system_sets.get(key))
             .map(|set| format!("{set:?}"))
             .collect();
-        let conditions = captured.map(|capture| {
-            let mut conditions = capture.systems.get(key).cloned().unwrap_or_default();
+        let conditions = captured.and_then(|capture| {
+            let mut conditions = capture.systems.get(key)?.clone();
             for set in ancestors.iter().filter_map(NodeId::as_set) {
-                conditions.extend(capture.sets.get(&set).into_iter().flatten().cloned());
+                // A set added after capture may have unknown inherited conditions.
+                conditions.extend(capture.sets.get(&set)?.iter().cloned());
             }
-            names(conditions, params.limit)
+            Some(names(conditions, params.limit))
         });
         let ordered = |before| {
             names(

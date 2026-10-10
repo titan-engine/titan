@@ -41,24 +41,32 @@ pub(super) fn identity(system: &bevy_ecs::system::ScheduleSystem) -> Option<usiz
 pub(super) fn for_schedule<'w>(world: &'w World, schedule: &Schedule) -> Option<&'w Conditions> {
     // Use the same instance validation for inspection and automatic observation.
     // A valid pre-finish capture must keep its pass token alive, not be replaced.
-    if !schedule
-        .systems()
-        .ok()?
-        .any(|(_, system)| identity(system).is_some())
-    {
-        return None;
-    }
     world
         .get_resource::<Captured>()?
         .0
         .get(&schedule.label())?
         .iter()
         .find(|capture| {
-            capture.lifetime.upgrade().is_some()
-                && schedule
-                    .systems()
-                    .expect("checked initialization")
-                    .all(|(key, system)| capture.identities.get(&key) == Some(&identity(system)))
+            if capture.lifetime.upgrade().is_none() {
+                return false;
+            }
+            let Ok(mut systems) = schedule.systems() else {
+                return false;
+            };
+            let mut witnessed = false;
+            let matches = systems.all(|(key, system)| {
+                let Some(expected) = capture.identities.get(&key) else {
+                    // A later pass may insert a new system. It has no captured
+                    // conditions, but must not invalidate existing systems.
+                    return true;
+                };
+                let current = identity(system);
+                witnessed |= current.is_some();
+                *expected == current
+            });
+            // Unknown keys never witness ownership; a matching captured non-ZST
+            // allocation is still required to reject replacement schedules.
+            matches && witnessed
         })
 }
 

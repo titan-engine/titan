@@ -659,6 +659,60 @@ fn ambiguity_pairs_are_sorted_by_system_names() {
 }
 
 #[test]
+fn later_system_insertion_preserves_known_conditions() {
+    use bevy_ecs::{
+        schedule::{
+            graph::DiGraph, FlattenedDependencies, NodeId, ScheduleBuildError, ScheduleBuildPass,
+            ScheduleGraph, SystemKey, SystemSetKey,
+        },
+        system::IntoSystem,
+    };
+    use bevy_platform::hash::FixedHasher;
+    use indexmap::IndexSet;
+    #[derive(Debug)]
+    struct AddSystem;
+    impl ScheduleBuildPass for AddSystem {
+        type EdgeOptions = ();
+        fn add_dependency(&mut self, _: NodeId, _: NodeId, _: Option<&()>) {}
+        fn collapse_set(
+            &mut self,
+            _: SystemSetKey,
+            _: &IndexSet<SystemKey, FixedHasher>,
+            _: &DiGraph<NodeId>,
+        ) -> impl Iterator<Item = (NodeId, NodeId)> {
+            core::iter::empty()
+        }
+        fn build(
+            &mut self,
+            _: &mut World,
+            graph: &mut ScheduleGraph,
+            mut dependencies: FlattenedDependencies<'_>,
+        ) -> Result<(), ScheduleBuildError> {
+            let existing = graph.systems.iter().next().unwrap().0;
+            let added = graph
+                .systems
+                .insert(Box::new(IntoSystem::into_system(c)), Vec::new());
+            dependencies.add_edge(existing, added);
+            Ok(())
+        }
+    }
+    let mut app = app();
+    let mut schedule = Schedule::new(Demo);
+    schedule.add_systems(a.in_set(Sets::Outer).run_if(condition));
+    schedule.configure_sets(Sets::Outer.run_if(set_condition));
+    observe_schedule(&mut schedule);
+    schedule.add_build_pass(AddSystem);
+    schedule.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(schedule);
+    let response = inspect(&mut app, "titan.systems");
+    assert_eq!(response["systems"]["total"], 2);
+    let a = system(&response, "::a");
+    assert!(contains(&a["run_conditions"], "::condition"));
+    assert!(contains(&a["run_conditions"], "::set_condition"));
+    assert!(system(&response, "::c")["run_conditions"].is_null());
+}
+
+#[test]
 fn observing_again_captures_condition_modifying_passes() {
     use bevy_ecs::{
         schedule::{
