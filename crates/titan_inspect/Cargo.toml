@@ -3,11 +3,12 @@ name = "titan_inspect"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.1"
-description = "Read-only schedule inspection over the Bevy Remote Protocol"
+description = "Read-only schedule and asset inspection over the Bevy Remote Protocol"
 repository = "https://github.com/titan-engine/titan"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+bevy_asset = { path = "../bevy_asset", version = "0.20.0" }
 bevy_app = { path = "../bevy_app", version = "0.20.0" }
 bevy_ecs = { path = "../bevy_ecs", version = "0.20.0" }
 bevy_remote = { path = "../bevy_remote", version = "0.20.0", default-features = false }
@@ -18,6 +19,7 @@ serde_json = "1.0.140"
 
 [dev-dependencies]
 async-channel = "2"
+bevy_reflect = { path = "../bevy_reflect", version = "0.20.0" }
 
 [lints]
 workspace = true

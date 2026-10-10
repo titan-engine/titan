@@ -98,6 +98,8 @@ Example | Command | Description
 --- | --- | ---
 [Headless nondeterminism report](../crates/titan_determinism/examples/hashmap_order.rs) | `cargo run -p titan_determinism --example hashmap_order` | Locate an order-dependent `HashMap` bug and print the first differing entity, component, and field
 
+[Headless asset diagnostics](../crates/titan_inspect/examples/assets.rs) | `cargo run -p titan_inspect --example assets` | Report loaded and missing assets, retained startup failures, and dependency chains through BRP
+
 ## The Bare Minimum
 
 <!-- MD026 - Hello, World! looks better with the ! -->

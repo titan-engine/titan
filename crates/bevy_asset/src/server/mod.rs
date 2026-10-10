@@ -1049,6 +1049,16 @@ impl AssetServer {
         self.data.asset_event_sender.send(event).unwrap();
     }
 
+    /// Returns the IDs of all assets currently tracked by this server.
+    ///
+    /// Includes assets that are loading or failed, and server-managed assets
+    /// without paths. This snapshot does not retain handles or trigger loads.
+    /// Assets inserted directly into `Assets<T>` are not tracked by the server.
+    /// The order is unspecified; IDs may cease to be tracked after this call.
+    pub fn asset_ids(&self) -> Vec<UntypedAssetId> {
+        self.read_infos().ids().map(Into::into).collect()
+    }
+
     /// Retrieves all loads states for the given asset id.
     pub fn get_load_states(
         &self,
