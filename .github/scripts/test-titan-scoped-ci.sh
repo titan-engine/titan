@@ -69,14 +69,17 @@ SH
 chmod +x "$fixture/bin/jq"
 for ending in LF CRLF; do
   TOOL_ENDING=$ending
-  # Verify that the CRLF fixture really reaches the parser, not just its label.
-  actual=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
-  expected=titan_test
+  # Verify raw bytes through a file, not command substitution: MSYS can translate
+  # CRLF at shell/pipe boundaries. The fixture must really emit titan_test + EOL.
+  cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name' > "$fixture/jq-output"
+  actual=$(od -An -tx1 "$fixture/jq-output" | tr -d '[:space:]')
+  expected=746974616e5f746573740a
   if [[ "$ending" == CRLF ]]; then
-    expected+=$'\r'
+    expected=746974616e5f746573740d0a
   fi
   if [[ "$actual" != "$expected" ]]; then
-    printf 'Bad %s jq fixture: expected %q, got %q (jq=%s)\n' "$ending" "$expected" "$actual" "$(command -v jq)" >&2
+    printf 'Bad %s jq fixture bytes: expected %s, got %s (jq=%s)\n' "$ending" "$expected" "$actual" "$(command -v jq)" >&2
+    node -e 'console.error("Native producer TOOL_ENDING:", process.env.TOOL_ENDING)'
     exit 1
   fi
   assert_modes
