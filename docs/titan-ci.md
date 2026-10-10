@@ -72,8 +72,10 @@ bash .github/scripts/test-titan-scoped-ci.sh
 
 The issue's all-Titan baselines were 17m32s for PR #100 (4m48s default,
 10m59s extra) and 15m28s for PR #101 (3m49s default, 8m42s extra).
-A representative leaf-change CI measurement will be recorded here before
-review readiness.
+[PR #104](https://github.com/titan-engine/titan/pull/104) records the
+representative `titan_determinism` leaf comparison, with CI run links, per-step
+durations and cache details. Its temporary stacked probe PR is closed without
+merging after the measurement.
 
 Selection reduces unrelated test targets, not necessarily all their dependency
 compilation. Restored workspace artifacts may need rebuilding when package or
