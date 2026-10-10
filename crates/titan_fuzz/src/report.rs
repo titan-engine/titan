@@ -68,7 +68,7 @@ pub enum FuzzReport {
 }
 
 impl FuzzReport {
-    /// Save a failing script as ordinary version-1 RON, returning its path.
+    /// Save a failing script as ordinary versioned RON, returning its path.
     /// Returns `None` for a passed report. Parent directories are created.
     /// An existing file at this configured path is overwritten.
     pub fn save_script(&self) -> io::Result<Option<PathBuf>> {

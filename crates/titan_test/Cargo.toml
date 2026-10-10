@@ -25,7 +25,11 @@ bevy_input = { path = "../bevy_input", version = "0.20.0", default-features = fa
   "std",
   "keyboard",
   "mouse",
+  "gamepad",
   "serialize",
+] }
+bevy_math = { path = "../bevy_math", version = "0.20.0", default-features = false, features = [
+  "std",
 ] }
 bevy_state = { path = "../bevy_state", version = "0.20.0", default-features = false, features = [
   "std",

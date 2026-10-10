@@ -275,7 +275,7 @@ fn generator_extreme_hold_limits_keep_pairs_ordered_and_bounded() {
     ] {
         for ticks in [0, 1, 2, 8] {
             let script = generator.generate(&buttons, ticks, u64::MAX, u64::MAX);
-            assert_eq!(script.version, 1);
+            assert_eq!(script.version, titan_test::SCRIPT_VERSION);
             assert!(script.events.windows(2).all(|p| p[0].tick <= p[1].tick));
             let mut held: Vec<(InputButton, u64)> = Vec::new();
             for event in &script.events {
@@ -296,7 +296,11 @@ fn generator_extreme_hold_limits_keep_pairs_ordered_and_bounded() {
                         assert!(duration >= generator.min_hold_ticks);
                         assert!(duration <= generator.max_hold_ticks);
                     }
-                    InputAction::Tap(_) => {
+                    InputAction::Tap(_)
+                    | InputAction::ConnectGamepad { .. }
+                    | InputAction::SetAxis { .. }
+                    | InputAction::SetButtonValue { .. }
+                    | InputAction::MouseMotion { .. } => {
                         panic!("generator must only produce press/release pairs")
                     }
                 }

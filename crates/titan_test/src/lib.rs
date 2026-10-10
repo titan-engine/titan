@@ -5,7 +5,7 @@ extern crate alloc;
 
 mod script;
 
-pub use script::{InputAction, InputButton, InputScript, ScriptEvent, SCRIPT_VERSION};
+pub use script::{GamepadSlot, InputAction, InputButton, InputScript, ScriptEvent, SCRIPT_VERSION};
 
 use alloc::collections::BTreeMap;
 use bevy_app::{App, PluginsState, ScheduleRunnerPlugin, TaskPoolPlugin};
@@ -19,10 +19,15 @@ use bevy_ecs::{
     world::{World, WorldId},
 };
 use bevy_input::{
+    gamepad::{
+        GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent,
+        RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent, RawGamepadEvent,
+    },
     keyboard::{Key, KeyboardInput, NativeKey},
-    mouse::MouseButtonInput,
+    mouse::{MouseButtonInput, MouseMotion},
     ButtonState, InputPlugin,
 };
+use bevy_math::Vec2;
 use bevy_state::app::StatesPlugin;
 use bevy_time::{Fixed, Real, Time, TimePlugin, TimeUpdateStrategy, Virtual};
 use bevy_transform::TransformPlugin;
@@ -68,7 +73,8 @@ pub struct Sim {
     app: App,
     tick: u64,
     input_window: Entity,
-    pending_input: BTreeMap<u64, Vec<(InputButton, ButtonState)>>,
+    pending_input: BTreeMap<u64, Vec<InputAction>>,
+    gamepads: BTreeMap<GamepadSlot, Entity>,
     executor: ExecutorKind,
     configured_schedules: HashSet<(WorldId, InternedScheduleLabel)>,
 }
@@ -78,7 +84,7 @@ impl Sim {
     ///
     /// The exact base is `TaskPoolPlugin`, `FrameCountPlugin`, `TimePlugin`, and
     /// `ScheduleRunnerPlugin::run_once()` (the unconditional `MinimalPlugins`),
-    /// plus `InputPlugin` (keyboard/mouse), `TransformPlugin`, and `StatesPlugin`.
+    /// plus `InputPlugin` (keyboard/mouse/gamepad), `TransformPlugin`, and `StatesPlugin`.
     /// Add gameplay plugins in `setup`; don't add `DefaultPlugins` or duplicate
     /// the base plugins. No app update runs during construction. After setup,
     /// the harness replaces frame timing and the fixed timestep with 60 Hz;
@@ -101,8 +107,8 @@ impl Sim {
     /// Wrap a ready app without installing any plugins.
     ///
     /// Requires `TimePlugin`; input helpers additionally require `InputPlugin`
-    /// with keyboard/mouse support. Plugins must be ready synchronously: this
-    /// does not wait for async plugin initialization. Calls `finish`/`cleanup`
+    /// with support for the input devices used. Plugins must be ready
+    /// synchronously: this does not wait for async plugin initialization. Calls `finish`/`cleanup`
     /// only if needed. Installs the default manual timestep and sequential
     /// executor policy, but preserves virtual time speed and pause settings.
     /// An already-updated app keeps its existing time and fixed-loop overstep,
@@ -136,6 +142,7 @@ impl Sim {
             tick: 0,
             input_window,
             pending_input: BTreeMap::new(),
+            gamepads: BTreeMap::new(),
             executor: ExecutorKind::SingleThreaded,
             configured_schedules: HashSet::new(),
         };
@@ -254,8 +261,8 @@ impl Sim {
     pub fn tick(&mut self) {
         self.configure_schedules();
         if let Some(inputs) = self.pending_input.remove(&self.tick) {
-            for (button, state) in inputs {
-                self.send_input(button, state);
+            for action in inputs {
+                self.send_action(action);
             }
         }
         self.app.update();
@@ -316,8 +323,8 @@ impl Sim {
     }
 
     /// Queue a press for the next tick; accepts [`bevy_input::keyboard::KeyCode`]
-    /// or [`bevy_input::mouse::MouseButton`]. Uses real input messages, never
-    /// writes `ButtonInput` directly. The button stays held until released.
+    /// or [`bevy_input::mouse::MouseButton`], or use [`GamepadSlot::button`].
+    /// Uses real input messages, never writes `ButtonInput` directly. The button stays held until released.
     /// Messages identify a spawned empty entity, not a `Window` or a placeholder
     /// entity. Consumers requiring window components must provide their own
     /// input messages. Keyboard messages carry an unidentified logical key, no
@@ -346,15 +353,190 @@ impl Sim {
         self.release(button);
     }
 
+    /// Spawn and connect a virtual gamepad in the lowest unused slot.
+    ///
+    /// Does not advance time. Bevy installs the `Gamepad` component on the next
+    /// update, before queued button/axis input is processed. No hardware plugin
+    /// is needed. The returned slot can be used in scripts as well as helpers.
+    pub fn connect_gamepad(&mut self) -> GamepadSlot {
+        let mut slot = GamepadSlot(0);
+        while self.gamepads.contains_key(&slot) {
+            slot.0 = slot.0.checked_add(1).expect("gamepad slot overflow");
+        }
+        self.ensure_gamepad(slot);
+        slot
+    }
+
+    /// Look up a virtual gamepad's entity, including before its first update.
+    ///
+    /// Returns `None` for a slot not yet connected by a helper or playback.
+    /// Use this entity to query `Gamepad` or customize `GamepadSettings`.
+    pub fn gamepad_entity(&self, slot: GamepadSlot) -> Option<Entity> {
+        self.gamepads.get(&slot).copied()
+    }
+
+    fn ensure_gamepad(&mut self, slot: GamepadSlot) -> Entity {
+        if let Some(entity) = self.gamepad_entity(slot) {
+            return entity;
+        }
+        let entity = self.app.world_mut().spawn_empty().id();
+        let event = GamepadConnectionEvent::new(
+            entity,
+            GamepadConnection::Connected {
+                name: format!("titan_test gamepad {}", slot.0),
+                vendor_id: None,
+                product_id: None,
+            },
+        );
+        self.app
+            .world_mut()
+            .write_message(event.clone())
+            .unwrap_or_else(|| panic!("gamepad input requires InputPlugin at tick {}", self.tick));
+        self.send_raw_gamepad(RawGamepadEvent::Connection(event));
+        self.gamepads.insert(slot, entity);
+        entity
+    }
+
+    /// Queue a raw axis value for the next update, connecting the slot if needed.
+    /// The filtered value persists until changed; Bevy applies dead zones and
+    /// change thresholds from `GamepadSettings`.
+    ///
+    /// # Panics
+    /// Panics if `value` is nonfinite or outside -1.0..=1.0.
+    pub fn set_axis(&mut self, slot: GamepadSlot, axis: GamepadAxis, value: f32) {
+        self.queue_action(self.tick, InputAction::SetAxis { slot, axis, value });
+    }
+
+    /// Queue a raw analog button value (e.g. a trigger) for the next update.
+    /// Bevy derives digital press/release edges using its button thresholds.
+    /// `press` and `release` send raw values 1.0 and 0.0 respectively.
+    ///
+    /// # Panics
+    /// Panics if `value` is nonfinite or outside 0.0..=1.0.
+    pub fn set_button_value(&mut self, slot: GamepadSlot, button: GamepadButton, value: f32) {
+        self.queue_action(
+            self.tick,
+            InputAction::SetButtonValue {
+                slot,
+                button,
+                value,
+            },
+        );
+    }
+
+    /// Queue raw mouse motion for the next update only. Multiple deltas add up
+    /// in Bevy's `AccumulatedMouseMotion`; it resets on the following update.
+    ///
+    /// # Panics
+    /// Panics if either component is nonfinite.
+    pub fn mouse_motion(&mut self, delta: Vec2) {
+        self.queue_action(
+            self.tick,
+            InputAction::MouseMotion {
+                x: delta.x,
+                y: delta.y,
+            },
+        );
+    }
+
+    fn queue_action(&mut self, tick: u64, action: InputAction) {
+        action.validate(SCRIPT_VERSION);
+        self.pending_input.entry(tick).or_default().push(action);
+    }
+
     fn queue_input(&mut self, tick: u64, button: InputButton, state: ButtonState) {
-        self.pending_input
-            .entry(tick)
-            .or_default()
-            .push((button, state));
+        self.queue_action(
+            tick,
+            match state {
+                ButtonState::Pressed => InputAction::Press(button),
+                ButtonState::Released => InputAction::Release(button),
+            },
+        );
+    }
+
+    fn send_raw_gamepad(&mut self, event: RawGamepadEvent) {
+        // Like Bevy's hardware backend, publish both combined and typed streams.
+        // InputPlugin processes the combined stream; raw-input consumers may
+        // read the typed streams instead.
+        match &event {
+            RawGamepadEvent::Axis(axis) => {
+                self.app
+                    .world_mut()
+                    .write_message(*axis)
+                    .unwrap_or_else(|| {
+                        panic!("gamepad input requires InputPlugin at tick {}", self.tick)
+                    });
+            }
+            RawGamepadEvent::Button(button) => {
+                self.app
+                    .world_mut()
+                    .write_message(*button)
+                    .unwrap_or_else(|| {
+                        panic!("gamepad input requires InputPlugin at tick {}", self.tick)
+                    });
+            }
+            // The connection message is already emitted by ensure_gamepad.
+            RawGamepadEvent::Connection(_) => {}
+        }
+        self.app
+            .world_mut()
+            .write_message(event)
+            .unwrap_or_else(|| panic!("gamepad input requires InputPlugin at tick {}", self.tick));
+    }
+
+    fn send_action(&mut self, action: InputAction) {
+        match action {
+            InputAction::Press(button) => self.send_input(button, ButtonState::Pressed),
+            InputAction::Release(button) => self.send_input(button, ButtonState::Released),
+            InputAction::Tap(button) => {
+                self.send_input(button, ButtonState::Pressed);
+                self.queue_input(self.tick + 1, button, ButtonState::Released);
+            }
+            InputAction::ConnectGamepad { slot } => {
+                self.ensure_gamepad(slot);
+            }
+            InputAction::SetAxis { slot, axis, value } => {
+                let entity = self.ensure_gamepad(slot);
+                self.send_raw_gamepad(RawGamepadEvent::Axis(RawGamepadAxisChangedEvent::new(
+                    entity, axis, value,
+                )));
+            }
+            InputAction::SetButtonValue {
+                slot,
+                button,
+                value,
+            } => {
+                let entity = self.ensure_gamepad(slot);
+                self.send_raw_gamepad(RawGamepadEvent::Button(RawGamepadButtonChangedEvent::new(
+                    entity, button, value,
+                )));
+            }
+            InputAction::MouseMotion { x, y } => {
+                self.app
+                    .world_mut()
+                    .write_message(MouseMotion {
+                        delta: Vec2::new(x, y),
+                    })
+                    .unwrap_or_else(|| {
+                        panic!("mouse motion requires InputPlugin at tick {}", self.tick)
+                    });
+            }
+        }
     }
 
     fn send_input(&mut self, button: InputButton, state: ButtonState) {
         match button {
+            InputButton::Gamepad { slot, button } => {
+                let entity = self.ensure_gamepad(slot);
+                let value = if state == ButtonState::Pressed {
+                    1.0
+                } else {
+                    0.0
+                };
+                self.send_raw_gamepad(RawGamepadEvent::Button(RawGamepadButtonChangedEvent::new(
+                    entity, button, value,
+                )));
+            }
             InputButton::Key(key_code) => {
                 self.app
                     .world_mut()
@@ -396,15 +578,12 @@ impl Sim {
     /// tick, including when playback resumes with [`Self::tick`].
     ///
     /// # Panics
-    /// Panics before playback for unsupported versions or an endpoint earlier
-    /// than the current tick.
+    /// Panics before playback for unsupported versions, version 2 actions in a
+    /// version 1 script, invalid analog values/deltas, or an endpoint earlier
+    /// than the current tick. All events are validated, including past events.
     #[track_caller]
     pub fn run_script(&mut self, script: &InputScript, until_tick: u64) {
-        assert_eq!(
-            script.version, SCRIPT_VERSION,
-            "unsupported script version at tick {}",
-            self.tick
-        );
+        script.validate();
         assert!(
             until_tick >= self.tick,
             "script endpoint {until_tick} precedes current tick {}",
@@ -419,14 +598,7 @@ impl Sim {
         let mut events = events.into_iter().peekable();
         while self.tick < until_tick {
             while let Some(event) = events.next_if(|event| event.tick == self.tick) {
-                match event.action {
-                    InputAction::Press(button) => self.press(button),
-                    InputAction::Release(button) => self.release(button),
-                    InputAction::Tap(button) => {
-                        self.press(button);
-                        self.queue_input(self.tick + 1, button, ButtonState::Released);
-                    }
-                }
+                self.queue_action(self.tick, event.action);
             }
             self.tick();
         }
