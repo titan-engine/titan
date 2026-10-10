@@ -8,6 +8,7 @@ use std::{
     io::Write,
     net::{Ipv4Addr, TcpListener},
     process::{Child, Command, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -24,7 +25,7 @@ use bevy_input::{
     ButtonInput, ButtonState, InputPlugin,
 };
 use bevy_reflect::{Reflect, TypePath};
-use bevy_remote::{http::RemoteHttpPlugin, BrpReceiver, BrpResult, RemotePlugin};
+use bevy_remote::{http::RemoteHttpPlugin, BrpMessage, BrpReceiver, BrpResult, RemotePlugin};
 use bevy_time::{Time, TimePlugin, TimeUpdateStrategy, Virtual};
 use bevy_window::{CursorEntered, CursorMoved, PrimaryWindow, Window, WindowEvent};
 use serde_json::{json, Value};
@@ -34,6 +35,11 @@ use titan_remote::TitanRemotePlugin;
 const FIXTURE_PORT: &str = "TITAN_MCP_TEST_BRP_PORT";
 const FIXTURE_TITAN: &str = "TITAN_MCP_TEST_TITAN";
 const WAIT: Duration = Duration::from_secs(10);
+// Many child fixtures initialize their task pools and HTTP listeners at once.
+// Startup has its own budget; input/step synchronization still uses WAIT.
+const STARTUP_WAIT: Duration = Duration::from_secs(60);
+// Only serialize startup, not the requests or assertions in ready fixtures.
+static FIXTURE_STARTUP: Mutex<()> = Mutex::new(());
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
@@ -274,7 +280,31 @@ struct WrapProbe {
 }
 
 #[derive(Resource, Default)]
-struct InputFrameGate(bool);
+struct InputFrameGate(Option<GatedRequests>);
+
+struct GatedRequests {
+    incoming: async_channel::Receiver<BrpMessage>,
+    staged: async_channel::Sender<BrpMessage>,
+}
+
+impl GatedRequests {
+    fn stage_next_request(&self) {
+        let deadline = Instant::now() + WAIT;
+        while self.incoming.is_empty() {
+            assert!(
+                Instant::now() < deadline,
+                "input test never queued its next request"
+            );
+            bevy_tasks::tick_global_task_pools_on_main_thread();
+            thread::sleep(Duration::from_millis(1));
+        }
+        // Only this loop consumes the HTTP mailbox or writes to the staged one.
+        // Later arrivals stay in incoming until the next complete app update.
+        self.staged
+            .try_send(self.incoming.try_recv().unwrap())
+            .unwrap();
+    }
+}
 
 fn arm_input_wrap(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     assert!(world.resource::<Time<Virtual>>().is_paused());
@@ -283,8 +313,14 @@ fn arm_input_wrap(In(params): In<Option<Value>>, world: &mut World) -> BrpResult
         .unwrap()
         .try_into()
         .unwrap();
+    assert!(world.resource::<InputFrameGate>().0.is_none());
     world.resource_mut::<FrameCount>().0 = frame;
-    world.resource_mut::<InputFrameGate>().0 = true;
+    let (staged, receiver) = async_channel::bounded(1);
+    // BRP sends responses before its mailbox drain finishes. Swap here, before
+    // the arming response can prompt another HTTP request in this same update.
+    // BrpSender still writes to the original mailbox, not the staged receiver.
+    let incoming = std::mem::replace(&mut **world.resource_mut::<BrpReceiver>(), receiver);
+    world.resource_mut::<InputFrameGate>().0 = Some(GatedRequests { incoming, staged });
     Ok(json!({"frame": frame}))
 }
 
@@ -398,22 +434,14 @@ fn brp_fixture_process() {
     app.finish();
     app.cleanup();
     loop {
-        if app
+        if let Some(gate) = app
             .world()
             .get_resource::<InputFrameGate>()
-            .is_some_and(|gate| gate.0)
+            .and_then(|gate| gate.0.as_ref())
         {
-            // Exactly one real update per HTTP request lets input barriers start
-            // at MAX and poll across zero, without relying on wall-clock timing.
-            let deadline = Instant::now() + WAIT;
-            while app.world().resource::<BrpReceiver>().is_empty() {
-                assert!(
-                    Instant::now() < deadline,
-                    "input test never queued its next request"
-                );
-                bevy_tasks::tick_global_task_pools_on_main_thread();
-                thread::sleep(Duration::from_millis(1));
-            }
+            // Exactly one BRP message per update puts input barriers at MAX
+            // and polls across zero, without relying on HTTP delivery timing.
+            gate.stage_next_request();
         }
         app.update();
         let hide_finish = app
@@ -447,6 +475,11 @@ struct Fixture {
 
 impl Fixture {
     fn start(titan: bool) -> Self {
+        // Avoid a burst of child initialization and port reservations. Recover
+        // from poisoning so one failed startup does not cascade to other tests.
+        let _startup = FIXTURE_STARTUP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // Use the OS-assigned ephemeral port rather than the default BRP port.
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -467,12 +500,16 @@ impl Fixture {
         drop(listener);
         let child = command.spawn().unwrap();
         let mut fixture = Self { child, client };
-        let deadline = Instant::now() + WAIT;
+        let deadline = Instant::now() + STARTUP_WAIT;
         loop {
             if let Some(status) = fixture.child.try_wait().unwrap() {
                 panic!("headless BRP fixture exited before readiness: {status}");
             }
-            match fixture.client.call("rpc.discover", None) {
+            match fixture.client.call_with_deadline(
+                "rpc.discover",
+                None,
+                deadline.min(Instant::now() + WAIT),
+            ) {
                 Ok(_) => return fixture,
                 Err(error) => assert!(
                     Instant::now() < deadline,
@@ -1271,6 +1308,63 @@ fn titan_input_barriers_work_while_real_virtual_time_is_paused() {
     let after = fixture.time_trace();
     assert_eq!(after["elapsed_ns"], frozen["elapsed_ns"]);
     assert_eq!(after["unpaused_updates"], frozen["unpaused_updates"]);
+}
+
+#[test]
+fn input_frame_gate_isolates_arming_and_each_queued_request() {
+    let mut app = App::new();
+    app.add_plugins((
+        TimePlugin,
+        FrameCountPlugin,
+        TitanRemotePlugin,
+        RemotePlugin::default().with_method_main("test.arm_input_wrap", arm_input_wrap),
+    ))
+    .init_resource::<InputFrameGate>();
+    app.finish();
+    app.cleanup();
+    app.update(); // Initialize the real BRP mailbox.
+    app.world_mut().resource_mut::<Time<Virtual>>().pause();
+
+    let queue = |method: &str, params: Option<Value>| {
+        let (sender, response) = async_channel::bounded(1);
+        app.world()
+            .resource::<bevy_remote::BrpSender>()
+            .try_send(BrpMessage {
+                method: method.to_owned(),
+                params,
+                sender,
+            })
+            .unwrap();
+        response
+    };
+    // Prequeue a burst so even the arming update must not drain the follow-ups.
+    // No child startup, HTTP scheduling, or sleeps are needed to expose the bug.
+    let armed = queue("test.arm_input_wrap", Some(json!({"frame": u32::MAX - 1})));
+    let first = queue("titan.status", None);
+    let second = queue("titan.status", None);
+    app.update();
+    assert_eq!(armed.try_recv().unwrap().unwrap()["frame"], u32::MAX - 1);
+    assert!(first.is_empty());
+    assert!(second.is_empty());
+
+    app.world()
+        .resource::<InputFrameGate>()
+        .0
+        .as_ref()
+        .unwrap()
+        .stage_next_request();
+    app.update();
+    assert_eq!(paused_frame(&first.try_recv().unwrap().unwrap()), u32::MAX);
+    assert!(second.is_empty());
+
+    app.world()
+        .resource::<InputFrameGate>()
+        .0
+        .as_ref()
+        .unwrap()
+        .stage_next_request();
+    app.update();
+    assert_eq!(paused_frame(&second.try_recv().unwrap().unwrap()), 0);
 }
 
 #[test]
