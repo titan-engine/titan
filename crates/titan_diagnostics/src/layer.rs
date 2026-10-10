@@ -31,7 +31,8 @@ struct Fields(BTreeMap<String, String>);
 
 impl Visit for Fields {
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        self.0.insert(field.name().into(), format!("{value:?}"));
+        self.0
+            .insert(field.name().into(), crate::format_field(value));
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {

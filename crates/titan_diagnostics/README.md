@@ -112,9 +112,12 @@ system/on-set, schedule, message (excluding Bevy's appended origin backtrace),
 and panic location. Frame, change tick, logs and backtraces are not part of the
 key. Panic payloads are compared verbatim. Bevy does not expose a separate
 message/backtrace accessor, so exclusion of its appended origin stack is
-format-based, requiring Bevy's filter note or standard capture symbols and a
-trailing stack-frame block. Unrecognized formats remain part of the key;
-messages deliberately imitating trailing Rust stack frames can alias. Deduplication covers the most recent `max_reports` distinct reports in
+format-based, requiring a trailing stack and Bevy error-construction symbols
+or source locations. Full stacks use their last recognized capture boundary;
+filtered stacks stop at a verified construction frame and may retain a stable
+capture/construction prefix in the key. Embedded ordinary Rust backtraces stay
+part of the message key. Unrecognized formats remain part of the key;
+messages deliberately imitating Bevy construction stacks can alias. Deduplication covers the most recent `max_reports` distinct reports in
 this app session, not reports loaded from previous runs.
 
 After each successful write, retention limits all regular report files matching
@@ -166,7 +169,12 @@ not a guessed `ErrorContext`; unavailable fields stay null.
 Each recent log has `unix_ms` (integer), `level` (`WARN`/`ERROR`), `target`
 (string), and `fields` (object mapping field names to formatted strings,
 including `message`). String fields retain their values; other values use
-tracing's Debug visitor representation.
+tracing's Debug visitor representation. A panicking or failed field formatter
+is contained by this layer and retained as
+`<diagnostics: field formatter failed>` instead of unwinding into the app.
+Rust still invokes the previously installed panic hook for caught formatter
+panics; this layer does not create extra app panic reports for them. Other
+subscriber layers are responsible for their own formatting failures.
 
 The `backtrace` field is captured at the reporter, not at error construction.
 If another workspace crate enables `bevy_ecs/backtrace`, Bevy's error Display

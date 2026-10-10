@@ -165,6 +165,18 @@ fn reporting(f: impl FnOnce()) {
     });
 }
 
+pub(crate) fn format_field(value: &dyn core::fmt::Debug) -> String {
+    REPORTING.with(|flag| {
+        // The hook still chains to the previous hook, but must not mistake a
+        // diagnostics visitor's formatter failure for a new app panic report.
+        let previous = flag.replace(true);
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| format!("{value:?}")));
+        flag.set(previous);
+        result.unwrap_or_else(|_| "<diagnostics: field formatter failed>".into())
+    })
+}
+
 fn capture_backtrace() -> Option<String> {
     let trace = Backtrace::capture();
     (trace.status() == BacktraceStatus::Captured).then(|| trace.to_string())

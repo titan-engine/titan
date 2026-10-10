@@ -202,55 +202,92 @@ fn message_key<'a>(kind: &str, message: &'a str) -> &'a str {
         return message;
     }
     const FILTER_NOTE: &str = "note: Some \"noisy\" backtrace lines have been filtered out. Run with `BEVY_BACKTRACE=full` for a verbose backtrace.";
-    // Require Bevy's filter marker or std's full backtrace capture symbols.
-    // Ordinary numbered error text and panic payloads must remain verbatim.
+    // An embedded Rust backtrace is error content, not necessarily Bevy's
+    // origin stack. Only consider the LAST capture boundary and verify that
+    // its entire suffix is a stack containing Bevy error construction evidence.
     let mut offset = 0;
+    let mut full_start = None;
     for line in message.split_inclusive('\n') {
-        if stack_symbol(line).is_some_and(|symbol| {
-            symbol.contains("std::backtrace_rs::backtrace::")
-                || symbol.contains("std::backtrace::Backtrace::capture")
-                || symbol.contains("<std::backtrace::Backtrace>::capture")
+        if stack_frame(line).is_some_and(|(index, symbol)| {
+            index == 0
+                && (symbol.contains("std::backtrace_rs::backtrace::")
+                    || symbol.contains("std::backtrace::Backtrace::capture")
+                    || symbol.contains("<std::backtrace::Backtrace>::capture"))
         }) {
-            // Full stacks have a recognizable capture boundary. Never walk
-            // backwards from it into numbered application payload lines.
-            return &message[..offset];
+            full_start = Some(offset);
         }
         offset += line.len();
+    }
+    if let Some(start) = full_start
+        && is_full_bevy_stack(&message[start..])
+    {
+        return &message[..start];
     }
     if !message.trim_end().ends_with(FILTER_NOTE) {
         return message;
     }
     offset = message.len();
-    let mut first_frame = None;
     let mut has_location = false;
+    let mut constructor_location = false;
+    let mut later_index = None;
     for line in message.split_inclusive('\n').rev() {
         offset -= line.len();
         let line = line.trim_end_matches(['\r', '\n']);
-        if let Some(symbol) = stack_symbol(line) {
-            // Short names need a following source location. Arbitrary asset
-            // paths/identifiers are not sufficient evidence of a stack frame.
-            if symbol.contains('/')
+        if let Some((index, symbol)) = stack_frame(line) {
+            if later_index.is_some_and(|later| index >= later)
+                || symbol.contains('/')
                 || symbol.contains('\\')
                 || !(has_location || symbol.contains("::") || symbol.contains('<'))
             {
                 break;
             }
-            first_frame = Some(offset);
+            // Stop at the verified construction frame, never walk into payload
+            // frames preceding it. Any remaining capture/construction prefix is
+            // stable across repetitions and is safe to leave in the key.
+            if constructor_location || bevy_constructor(symbol) {
+                return &message[..offset];
+            }
+            later_index = Some(index);
             has_location = false;
+            constructor_location = false;
         } else if line.starts_with("             at ") {
             has_location = true;
+            constructor_location = bevy_constructor(line);
         } else if !(line.is_empty() || line == FILTER_NOTE) {
             break;
         }
     }
-    &message[..first_frame.unwrap_or(message.len())]
+    message
 }
 
-fn stack_symbol(line: &str) -> Option<&str> {
+fn stack_frame(line: &str) -> Option<(u32, &str)> {
     let (index, symbol) = line.split_once(": ")?;
-    (index.len() >= 4
-        && index.starts_with(' ')
-        && !index.trim().is_empty()
-        && index.trim().bytes().all(|byte| byte.is_ascii_digit()))
-    .then_some(symbol)
+    if index.len() < 4 || !index.starts_with(' ') {
+        return None;
+    }
+    Some((index.trim().parse().ok()?, symbol))
+}
+
+fn bevy_constructor(line: &str) -> bool {
+    line.contains("bevy_ecs/src/error/bevy_error.rs")
+        || line.contains("bevy_ecs\\src\\error\\bevy_error.rs")
+        || line.contains("bevy_ecs::error::bevy_error::BevyError::")
+        || (line.contains("<bevy_ecs::error::bevy_error::BevyError as ") && line.contains("::from"))
+}
+
+fn is_full_bevy_stack(stack: &str) -> bool {
+    let mut constructor = false;
+    let mut previous_index = None;
+    for line in stack.lines() {
+        if let Some((index, _)) = stack_frame(line) {
+            if previous_index.is_some_and(|previous| index <= previous) {
+                return false;
+            }
+            previous_index = Some(index);
+        } else if !(line.is_empty() || line.starts_with("             at ")) {
+            return false;
+        }
+        constructor |= bevy_constructor(line);
+    }
+    constructor && previous_index.is_some()
 }

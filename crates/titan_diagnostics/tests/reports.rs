@@ -255,6 +255,8 @@ fn child_process_entry() {
                 assert!(error.is::<BrokenDisplay>());
                 FORWARDED.fetch_add(1, Ordering::SeqCst);
             }
+        } else if mode == "field-formatter" {
+            bevy_ecs::error::ignore
         } else {
             bevy_ecs::error::panic
         }));
@@ -273,6 +275,8 @@ fn child_process_entry() {
             app.add_systems(Update, || -> Result { Err(BrokenDisplay.into()) });
         } else if mode == "unrelated-thread" {
             app.add_systems(Update, unrelated_thread_panic);
+        } else if mode == "field-formatter" {
+            app.add_systems(Update, broken_field_formatters);
         } else {
             app.add_systems(Update, panic_as_result);
         }
@@ -297,6 +301,26 @@ impl core::fmt::Display for BrokenDisplay {
 }
 impl core::error::Error for BrokenDisplay {}
 
+struct BrokenDebug;
+impl core::fmt::Debug for BrokenDebug {
+    fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        panic!("broken structured field formatter");
+    }
+}
+struct ErrorDebug;
+impl core::fmt::Debug for ErrorDebug {
+    fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Err(core::fmt::Error)
+    }
+}
+fn broken_field_formatters() -> Result {
+    let span =
+        tracing::info_span!(target: "bevy_ecs::diagnostics_test", "system", name = ?BrokenDebug);
+    let _entered = span.enter();
+    tracing::warn!(bad_debug = ?BrokenDebug, bad_error = ?ErrorDebug, "broken fields");
+    Err(BevyError::error("structured fields survived"))
+}
+
 fn unrelated_thread_panic() {
     assert!(std::thread::spawn(|| {
         panic!("unrelated thread panic");
@@ -318,6 +342,7 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
         "second-app",
         "broken-display",
         "unrelated-thread",
+        "field-formatter",
     ] {
         let directory = tempfile::tempdir().unwrap();
         let output = Command::new(std::env::current_exe().unwrap())
@@ -331,6 +356,30 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
             assert!(
                 output.status.success(),
                 "original error policy was changed: {output:?}"
+            );
+            continue;
+        }
+        if mode == "field-formatter" {
+            assert!(
+                output.status.success(),
+                "field formatter changed app behavior: {output:?}"
+            );
+            let saved = reports(directory.path());
+            assert_eq!(saved.len(), 1, "formatter panics are not app panic reports");
+            assert_eq!(saved[0].kind, "error");
+            assert!(saved[0].message.contains("structured fields survived"));
+            let log = saved[0]
+                .recent_logs
+                .iter()
+                .find(|log| log.fields.contains_key("bad_debug"))
+                .unwrap();
+            assert_eq!(
+                log.fields["bad_debug"],
+                "<diagnostics: field formatter failed>"
+            );
+            assert_eq!(
+                log.fields["bad_error"],
+                "<diagnostics: field formatter failed>"
             );
             continue;
         }
