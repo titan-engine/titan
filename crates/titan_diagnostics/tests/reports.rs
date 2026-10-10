@@ -271,6 +271,8 @@ fn child_process_entry() {
             app.add_systems(Update, failing_system);
         } else if mode == "broken-display" {
             app.add_systems(Update, || -> Result { Err(BrokenDisplay.into()) });
+        } else if mode == "unrelated-thread" {
+            app.add_systems(Update, unrelated_thread_panic);
         } else {
             app.add_systems(Update, panic_as_result);
         }
@@ -295,6 +297,14 @@ impl core::fmt::Display for BrokenDisplay {
 }
 impl core::error::Error for BrokenDisplay {}
 
+fn unrelated_thread_panic() {
+    assert!(std::thread::spawn(|| {
+        panic!("unrelated thread panic");
+    })
+    .join()
+    .is_err());
+}
+
 fn panic_as_result() -> Result {
     panicking_system();
     Ok(())
@@ -302,7 +312,13 @@ fn panic_as_result() -> Result {
 
 #[test]
 fn panics_write_reports_and_chain_hook_in_child_processes() {
-    for mode in ["panic", "returned-error", "second-app", "broken-display"] {
+    for mode in [
+        "panic",
+        "returned-error",
+        "second-app",
+        "broken-display",
+        "unrelated-thread",
+    ] {
         let directory = tempfile::tempdir().unwrap();
         let output = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "child_process_entry", "--nocapture"])
@@ -316,6 +332,21 @@ fn panics_write_reports_and_chain_hook_in_child_processes() {
                 output.status.success(),
                 "original error policy was changed: {output:?}"
             );
+            continue;
+        }
+        if mode == "unrelated-thread" {
+            assert!(
+                output.status.success(),
+                "parent app unexpectedly failed: {output:?}"
+            );
+            assert!(String::from_utf8_lossy(&output.stderr).contains("previous-panic-hook-ran"));
+            let saved = reports(directory.path());
+            assert_eq!(saved.len(), 1);
+            assert_eq!(saved[0].kind, "panic");
+            assert!(saved[0].message.contains("unrelated thread panic"));
+            assert!(saved[0].context.is_none());
+            assert!(saved[0].schedule.is_none());
+            assert_eq!(saved[0].frame, Some(0));
             continue;
         }
         assert!(

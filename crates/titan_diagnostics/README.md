@@ -51,12 +51,6 @@ have the precise `ErrorContext` name, but `schedule` is null and recent logs are
 empty. Events logged through `log` macros require the usual `LogTracer` bridge
 (provided by Bevy's `LogPlugin`); the layer directly captures `tracing` events.
 
-Run the renderer-free example with:
-
-```sh
-cargo run -p titan_diagnostics --example headless
-```
-
 ## Context and process-global ownership
 
 `ErrorHandler` is a plain function pointer with no world argument. The plugin
@@ -71,9 +65,10 @@ inert when there is no active app. Install any other panic hooks first, or chain
 them rather than replacing this hook afterward.
 
 Thread-local schedule stacks track Bevy's public tracing spans, including
-nested schedules. Worker threads with detached system spans use the active
-caller schedule only when all active schedules belong to a single caller
-thread. If concurrent schedule execution makes that fallback ambiguous, the
+nested schedules. Worker threads with detached system spans and recognized
+ECS failure context use the active caller schedule only when all active
+schedules belong to a single caller thread. An unrelated thread's panic with
+no ECS context does not inherit the active app schedule. If concurrent schedule execution makes that fallback ambiguous, the
 schedule is null, never an unrelated thread's innermost label. Running
 independent worlds concurrently is still **not supported for app ownership**:
 the public fallback API cannot identify which world called it. Panics outside

@@ -73,8 +73,11 @@ impl Sink {
         let mut state = self.lock();
         let now = unix_ms();
         let schedule = crate::layer::current_schedule().or_else(|| {
-            // Executor workers have detached system spans. Use the caller's
-            // schedule only when all active schedule spans belong to one thread.
+            // Executor workers have detached system spans. A process-global
+            // panic from an unrelated thread has no ECS context and must not
+            // inherit the app's schedule just because it happens to be active.
+            context.as_ref()?;
+            // Use the caller's schedule only when active spans have one owner.
             let (_, thread, name) = state.schedules.last()?;
             state
                 .schedules
