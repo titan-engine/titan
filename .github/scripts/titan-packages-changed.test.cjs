@@ -74,7 +74,10 @@ test('multiple changed packages and demo ownership', t => {
 
 test('file additions, deletions and renames include both old/new owners, even with unusual names', t => {
   const f = fixture(t);
-  f.write('crates/titan_chain/src/file\nwith spaces.rs'); f.commit();
+  // Native Win32 APIs reject control characters in filenames; the shared Bash
+  // classifier fixtures still exercise NUL/newline handling on MSYS and Unix.
+  const unusual = process.platform === 'win32' ? 'file with spaces.rs' : 'file\nwith spaces.rs';
+  f.write(`crates/titan_chain/src/${unusual}`); f.commit();
   assert.equal(f.selection().packages, 'titan_chain');
   f.git('reset', '--hard', f.base);
   f.git('rm', 'crates/titan_chain/src/lib.rs'); f.commit();
@@ -131,6 +134,8 @@ test('invalid/missing refs and unrelated histories select full', t => {
   for (const base of ['', undefined, 'missing-ref']) assert.equal(f.selection({ base }).packages, '*');
   f.git('checkout', '--orphan', 'unrelated');
   f.git('rm', '-rf', '.'); f.write('README.md'); f.commit();
+  // Keep the producer available so this specifically tests a missing merge base.
+  f.write('.github/scripts/ci-paths-changed.sh', fs.readFileSync(path.join(__dirname, 'ci-paths-changed.sh')));
   assert.equal(f.selection().packages, '*');
 });
 
