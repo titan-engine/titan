@@ -43,6 +43,7 @@ serde = { version = "1", features = ["derive"] }
 ron = "0.12"
 
 [dev-dependencies]
+titan_fuzz = { path = "../../crates/titan_fuzz" }
 titan_test = { path = "../../crates/titan_test" }
 tempfile = "3"
 

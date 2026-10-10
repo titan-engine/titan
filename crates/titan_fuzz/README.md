@@ -174,16 +174,19 @@ under unwind; aborts and hangs cannot be caught. Use a fresh factory and pure,
 deterministic callbacks; keep the adapter, generator and game seed with the
 test because Rust closures are not serialized in the report.
 
-[`tests/doom_actions.rs`](tests/doom_actions.rs) runs eight headless 600-tick
-campaigns against Doom's public `GameplayActions`, `GameplayPlugin`, `Level`
-and `PlayerState` APIs and checks that the player never enters a wall cell.
-It uses a serializable DTO to avoid imposing serde on the game's resource and
-a render-disabled dev-dependency; no existing Doom source is modified.
+[`demos/doom/tests/fuzz_actions.rs`](../../demos/doom/tests/fuzz_actions.rs)
+runs eight headless 600-tick campaigns against Doom's public gameplay APIs.
+It generates movement, aim, fire, interaction and occasional restart actions,
+checks walls and closed doors, and verifies tick advancement while playing
+(with restarts resetting the gameplay clock and terminal phases freezing it).
+It uses a serializable DTO to avoid imposing serde on the game's resource.
+The demo depends on `titan_fuzz` for tests, not the other way around; no Doom
+gameplay source is modified.
 [`tests/actions.rs`](tests/actions.rs) finds a deliberately broken handler,
 shrinks it to a single readable action, saves it and replays the same failure.
 
 ```sh
-cargo test -p titan_fuzz --test doom_actions
+cargo test -p titan_doom --no-default-features --test fuzz_actions
 cargo test -p titan_fuzz --test actions
 ```
 
