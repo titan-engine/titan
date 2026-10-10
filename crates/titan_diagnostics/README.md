@@ -105,8 +105,11 @@ see partially serialized JSON. The directory is created lazily. Atomic replace
 is not a guarantee against power-loss of the directory entry.
 
 Filenames are predictable from the report ID:
-`titan-diagnostics-<32-hex-session-time>-<8-hex-pid>-<16-hex-sequence>.json`.
-Session time is Unix nanoseconds. Reports contain no user-controlled path
+`titan-diagnostics-<32-hex-session-id>-<8-hex-pid>-<16-hex-sequence>.json`.
+The session component combines 16 hex digits of Unix nanoseconds (modulo
+2^64) with a checked, process-global 16-hex-digit session counter. Equal clock
+readings, rollback, or pre-epoch clock fallback cannot collide between sessions
+in one process. Reports contain no user-controlled path
 segments. Deduplication replaces the **same file**, increments `count`, and
 updates latest frame, context, logs, message and reporting backtrace, keeping
 the first frame/time. The key is kind, severity, context kind/name/associated
@@ -191,7 +194,7 @@ Example (backtrace disabled, second occurrence):
 ```json
 {
   "schema_version": 1,
-  "id": "000000000000000018ba32cf46a00000-00001234-0000000000000001",
+  "id": "18ba32cf46a000000000000000000001-00001234-0000000000000001",
   "kind": "error",
   "severity": "Error",
   "app_name": "my-game",
@@ -225,6 +228,14 @@ Example (backtrace disabled, second occurrence):
   ]
 }
 ```
+
+## Testing
+
+`cargo test -p titan_diagnostics --all-features` includes a test-only
+`bevy_ecs/multi_threaded` dependency feature. The executor regression verifies
+that a system really executes off the caller thread, rather than merely selecting
+a multithreaded executor backed by a single-threaded task pool. Production
+headless users do not have to enable a thread pool.
 
 ## Follow-ups
 

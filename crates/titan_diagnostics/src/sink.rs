@@ -1,12 +1,15 @@
 use crate::{DiagnosticReport, DiagnosticsPlugin, FailureContext, RecentLog};
 use alloc::collections::VecDeque;
 use bevy_ecs::error::ErrorHandler;
+use core::sync::atomic::{AtomicU64, Ordering};
 use std::{
     fs,
     io::{self, Write},
     sync::{Mutex, MutexGuard, PoisonError},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 
 pub(crate) struct Sink {
     config: DiagnosticsPlugin,
@@ -41,7 +44,7 @@ impl Sink {
         Self {
             config,
             previous,
-            session: format!("{nanos:032x}-{:08x}", std::process::id()),
+            session: session_id(nanos, std::process::id()),
             state: Mutex::new(State::default()),
         }
     }
@@ -171,6 +174,19 @@ impl Sink {
     }
 }
 
+fn session_id(nanos: u128, pid: u32) -> String {
+    let counter = NEXT_SESSION
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+            next.checked_add(1)
+        })
+        .expect("diagnostics session counter exhausted");
+    // Preserve the 32-hex session grammar, but clock precision, rollback and
+    // pre-epoch fallback cannot collide within this process: the low half is
+    // a checked monotonic counter, independent of the timestamp's low 64 bits.
+    let time = nanos & u128::from(u64::MAX);
+    format!("{time:016x}{counter:016x}-{pid:08x}")
+}
+
 fn owned_filename(name: &str) -> bool {
     let Some(id) = name
         .strip_prefix("titan-diagnostics-")
@@ -290,4 +306,16 @@ fn is_full_bevy_stack(stack: &str) -> bool {
         constructor |= bevy_constructor(line);
     }
     constructor && previous_index.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::session_id;
+
+    #[test]
+    fn session_ids_do_not_collide_with_equal_or_pre_epoch_clock_readings() {
+        assert_ne!(session_id(123, 42), session_id(123, 42));
+        assert_ne!(session_id(0, 42), session_id(0, 42));
+        assert_ne!(session_id(123, 42), session_id(0, 42));
+    }
 }

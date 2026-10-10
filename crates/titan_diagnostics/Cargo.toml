@@ -30,5 +30,12 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
   "std",
 ] }
 
+[dev-dependencies]
+# Exercise detached executor workers in isolated and shared all-features tests,
+# without forcing a thread pool on production headless users.
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", default-features = false, features = [
+  "multi_threaded",
+] }
+
 [lints]
 workspace = true

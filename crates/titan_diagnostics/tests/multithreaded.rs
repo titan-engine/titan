@@ -6,18 +6,27 @@ use bevy_ecs::{
     prelude::*,
     schedule::{MultiThreadedExecutor, ScheduleLabel},
 };
-use std::fs;
+use std::{
+    fs,
+    sync::Mutex,
+    thread::{self, ThreadId},
+};
 use titan_diagnostics::{DiagnosticReport, DiagnosticsLayer, DiagnosticsPlugin};
 use tracing_subscriber::prelude::*;
 
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
 struct Nested;
 
-fn fail_one() -> Result {
+#[derive(Resource, Default)]
+struct ObservedThreads(Mutex<Vec<ThreadId>>);
+
+fn fail_one(threads: Res<ObservedThreads>) -> Result {
+    threads.0.lock().unwrap().push(thread::current().id());
     tracing::warn!("worker warning");
     Err(BevyError::error("one"))
 }
-fn fail_two() -> Result {
+fn fail_two(threads: Res<ObservedThreads>) -> Result {
+    threads.0.lock().unwrap().push(thread::current().id());
     Err(BevyError::error("two"))
 }
 fn nested(world: &mut World) {
@@ -31,6 +40,8 @@ fn worker_errors_and_nested_schedules_are_attributed() {
     let directory = tempfile::tempdir().unwrap();
     let mut app = App::new();
     app.insert_resource(FallbackErrorHandler(ignore));
+    app.init_resource::<ObservedThreads>();
+    let caller = thread::current().id();
     app.add_plugins(DiagnosticsPlugin {
         directory: directory.path().into(),
         ..Default::default()
@@ -46,6 +57,16 @@ fn worker_errors_and_nested_schedules_are_attributed() {
             .set_apply_final_deferred(true);
     });
     app.update();
+    assert!(
+        app.world()
+            .resource::<ObservedThreads>()
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|thread| *thread != caller),
+        "the test must execute a detached worker, not a single-threaded task pool"
+    );
     let saved: Vec<DiagnosticReport> = fs::read_dir(directory.path())
         .unwrap()
         .map(|entry| serde_json::from_slice(&fs::read(entry.unwrap().path()).unwrap()).unwrap())
