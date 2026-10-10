@@ -40,6 +40,8 @@ members = [
   "benches",
   # Internal tools that are not published.
   "tools/*",
+  # Self-contained Titan game demos.
+  "demos/*",
   # Bevy's error codes. This is a crate so we can automatically check all of the code blocks.
   "errors",
 ]

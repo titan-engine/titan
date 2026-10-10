@@ -1,0 +1,24 @@
+// One world unit per cell; # is a solid wall, . is flat walkable floor.
+// Two chambers connected by the two-cell-wide east/west corridor at z=5..7.
+// Object positions are authored separately, in (x, z) world coordinates.
+(
+    rows: [
+        "#################",
+        "#......###......#",
+        "#......###......#",
+        "#......###......#",
+        "#......###......#",
+        "#...............#",
+        "#...............#",
+        "#......###......#",
+        "#......###......#",
+        "#......###......#",
+        "#......###......#",
+        "#......###......#",
+        "#################",
+    ],
+    objects: [
+        (id: "player-spawn", kind: Spawn, position: (3.5, 9.5), yaw: 0.0),
+        (id: "industrial-marker", kind: Marker, position: (13.5, 3.5), yaw: 0.0),
+    ],
+)
