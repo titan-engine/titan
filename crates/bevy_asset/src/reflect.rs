@@ -205,6 +205,10 @@ impl<A: Asset + FromReflect> CreateTypeData<A> for ReflectAsset {
 
 /// Reflect type data struct relating a [`Handle<T>`] back to the `T` asset type.
 ///
+/// Registered automatically by [`init_asset`](crate::AssetApp::init_asset), even
+/// when the asset contents do not implement [`Reflect`]. Its read-only metadata
+/// methods can enumerate stored IDs and declared dependencies without exposing contents.
+///
 /// Say you want to look up the asset values of a list of handles when you have access to their `&dyn Reflect` form.
 /// Assets can be looked up in the world using [`ReflectAsset`], but how do you determine which [`ReflectAsset`] to use when
 /// only looking at the handle? [`ReflectHandle`] is stored in the type registry on each `Handle<T>` type, so you can use [`ReflectHandle::asset_type_id`] to look up

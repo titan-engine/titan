@@ -181,7 +181,6 @@ fn assets_brp_in_memory_uuid_assets_and_cycles_are_bounded() {
             DemoAsset { children: vec![] },
         )
         .unwrap();
-    drop(assets);
     let result = call(&mut app, "titan.assets", None).unwrap();
     let memory: Vec<_> = result["items"]
         .as_array()

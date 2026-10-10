@@ -1,8 +1,6 @@
 //! Shared headless asset fixture for the example and BRP acceptance tests.
-use std::{
-    path::Path,
-    time::{Duration, Instant},
-};
+use core::time::Duration;
+use std::{path::Path, time::Instant};
 
 use bevy_app::{App, Startup, TaskPoolPlugin};
 use bevy_asset::{
@@ -18,9 +16,10 @@ use bevy_remote::{BrpMessage, BrpResult, BrpSender, RemotePlugin};
 use serde_json::Value;
 use titan_inspect::InspectPlugin;
 
-// Intentionally not Reflect: inspecting metadata must not require asset contents.
+/// A non-reflected asset whose text file lists direct dependency paths.
 #[derive(Asset, TypePath)]
 pub struct DemoAsset {
+    /// Assets declared as dependencies by the loader.
     #[dependency]
     pub children: Vec<Handle<DemoAsset>>,
 }
@@ -56,6 +55,7 @@ impl AssetLoader for DemoLoader {
     }
 }
 
+/// Strong handles retained for the startup loads.
 #[derive(Resource)]
 pub struct DemoHandles(pub Vec<Handle<DemoAsset>>);
 
@@ -67,6 +67,7 @@ fn load_at_startup(mut commands: Commands, server: Res<AssetServer>) {
     ));
 }
 
+/// Builds the in-memory startup fixture with BRP and inspection enabled.
 pub fn demo_app() -> App {
     let mut app = App::new();
     let root = Dir::default();
@@ -91,6 +92,7 @@ pub fn demo_app() -> App {
     app
 }
 
+/// Advances the fixture until all loads and recursive dependencies settle.
 pub fn settle(app: &mut App) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -113,6 +115,7 @@ pub fn settle(app: &mut App) {
     }
 }
 
+/// Sends one request through BRP's real mailbox and returns its response.
 pub fn call(app: &mut App, method: &str, params: Option<Value>) -> BrpResult {
     let (sender, receiver) = async_channel::bounded(1);
     app.world()
