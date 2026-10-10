@@ -105,6 +105,38 @@ pub(crate) fn unique_buttons(buttons: impl IntoIterator<Item = InputButton>) -> 
     unique
 }
 
+/// Portable seeded RNG for user-defined action generators. Not cryptographic.
+/// The fixed `SplitMix64` algorithm and per-case seed mixing match [`Generator`].
+pub struct ActionRng(SplitMix64);
+
+impl ActionRng {
+    /// Create an independent stream for a zero-based case index.
+    pub fn new(seed: u64, case_index: u64) -> Self {
+        let mut seeder =
+            SplitMix64(seed.wrapping_add(case_index.wrapping_mul(0x9e37_79b9_7f4a_7c15)));
+        Self(SplitMix64(seeder.next()))
+    }
+
+    /// Draw a full-width unsigned integer.
+    pub fn next_u64(&mut self) -> u64 {
+        self.0.next()
+    }
+
+    /// Draw in `0..bound` using bounded multiply-high sampling.
+    ///
+    /// # Panics
+    /// Panics if `bound` is zero.
+    pub fn below(&mut self, bound: u64) -> u64 {
+        assert!(bound > 0, "RNG bound must be nonzero");
+        self.0.below(bound)
+    }
+
+    /// Draw a 53-bit probability in `[0, 1)`.
+    pub fn unit_f64(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / ((1_u64 << 53) as f64)
+    }
+}
+
 // SplitMix64 (Steele, Lea and Flood): fixed-width wrapping arithmetic makes
 // this portable and freezes the corpus independently of dependency upgrades.
 // This is a simulation RNG, not suitable for secrets or cryptography.

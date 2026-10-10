@@ -1,6 +1,6 @@
 # `titan_fuzz`: find a gameplay bug, keep a tiny replay
 
-`titan_fuzz` generates keyboard/mouse input scripts for a headless
+`titan_fuzz` generates game-defined actions or keyboard/mouse input scripts for a headless
 [`titan_test::Sim`](../titan_test/README.md), checks gameplay invariants after
 every tick, and shrinks a failure into a short reproduction. No window,
 renderer, GPU, wall-clock waiting, live game, or MCP server is needed. Bevy's
@@ -86,6 +86,109 @@ The factory must build a **fresh** simulation for every case and every shrink
 attempt. Keep gameplay separate from presentation: do not install
 `DefaultPlugins` in `Sim::new`. The headless base plugins, input injection, and
 controlled frame/fixed timestep are already installed by `titan_test`.
+
+## Fuzz the game's action layer
+
+Use `ActionFuzz` when the game already translates input into gameplay actions.
+The generator receives a portable `ActionRng`, and an adapter writes one tick's
+complete action value into the world **before** `Sim::tick`. Both callbacks are
+ordinary functions or closures; no action-layer plugin or trait is required.
+Actions need `Clone + Serialize + DeserializeOwned`, not `Resource`, `Default`,
+`Debug`, or `PartialEq`. Add `serde` with its `derive` feature to your test crate.
+
+```rust
+use bevy_ecs::prelude::*;
+use serde::{Deserialize, Serialize};
+use titan_fuzz::{ActionFuzz, ActionScript};
+use titan_test::Sim;
+
+#[derive(Clone, Serialize, Deserialize)]
+struct Actions { movement: i32, jump: bool }
+
+#[derive(Resource, Default)]
+struct Player(i32);
+
+fn game() -> Sim {
+    Sim::new(|app| { app.init_resource::<Player>(); })
+}
+
+fn apply_actions(world: &mut World, action: &Actions) {
+    // A deliberately broken handler: jumping bypasses wall collision.
+    let mut player = world.resource_mut::<Player>();
+    player.0 = (player.0 + action.movement).min(if action.jump { 100 } else { 2 });
+}
+
+let report = ActionFuzz::new(
+    game,
+    Actions { movement: 0, jump: false }, // neutral tick, used by shrinking
+    |rng| Actions { movement: rng.below(5) as i32, jump: rng.below(2) == 0 },
+    apply_actions,
+)
+.invariant("outside wall", |world| {
+    if world.resource::<Player>().0 <= 2 { Ok(()) }
+    else { Err("player inside wall".into()) }
+})
+.simplify_action(|action| vec![Actions { movement: 3, jump: action.jump }])
+.cases(4).ticks(32).seed(68).max_shrink_runs(100)
+.run();
+
+// Turn the standalone RON into an ordinary regression, without a fuzzer.
+if let titan_fuzz::FuzzReport::Failed(failure) = report {
+    let ron = failure.script.to_ron().unwrap();
+    let script = ActionScript::<Actions>::from_ron(&ron).unwrap();
+    let mut sim = game();
+    script.replay(&mut sim, apply_actions);
+    assert!(sim.resource::<Player>().0 > 2); // confirms this demonstration bug
+}
+```
+
+The explicit neutral action is saved with the regression. Missing ticks apply
+that value, **not** the preceding event: adapters must overwrite held movement
+and one-shot aim on every tick. This makes dropping an action genuinely remove
+its effect rather than accidentally extending a hold. Ensure the action
+resource exists in the factory; tick 0's adapter runs before `Startup`. Do not
+let a human-input system overwrite the injected actions in a headless test.
+
+`ActionScript` saves a version, exclusive tick endpoint, neutral value and
+strictly ordered `(tick, action)` events. Parsing rejects unsupported versions,
+duplicate/unsorted ticks and events beyond the endpoint. `replay` can resume a
+partially played simulation and propagates ordinary game panics. To assert a
+transient invariant in a regression, replay prefixes one tick at a time and
+check after each update; the final saved endpoint reproduces the finding.
+
+Action campaigns use the same `Failure` / `FuzzReport` types (with script and
+configuration type parameters), invariant checks, panic handling, output paths
+and `assert_ok` / `save_script` behavior as button campaigns. Sequence shrinking
+truncates after the failure, drops chunks/ticks, then moves remaining actions
+earlier without stacking values on a tick. Every accepted candidate is
+confirmed on a fresh simulation; an inconsistent confirmation returns `Flaky`
+with the original script. An optional `.simplify_action(...)` supplies a finite,
+ordered list of smaller values per surviving event; the first confirmed value
+is accepted. This hook runs once per event, so provide your smallest useful
+candidate first. The shrink budget includes confirmation runs. Non-string
+panics preserve the original sequence without shrinking.
+
+Generation and simplification callback panics propagate as configuration
+errors. Factory, adapter, update and invariant panics become `no_panics` findings
+under unwind; aborts and hangs cannot be caught. Use a fresh factory and pure,
+deterministic callbacks; keep the adapter, generator and game seed with the
+test because Rust closures are not serialized in the report.
+
+[`demos/doom/tests/fuzz_actions.rs`](../../demos/doom/tests/fuzz_actions.rs)
+runs eight headless 600-tick campaigns against Doom's public gameplay APIs.
+It generates movement, aim, fire, interaction and occasional restart actions,
+checks walls and closed doors, and verifies the gameplay clock advances while
+playing, freezes in terminal phases, and resets on restart.
+It uses a serializable DTO to avoid imposing serde on the game's resource.
+The demo depends on `titan_fuzz` for tests, not the other way around; no Doom
+gameplay source is modified.
+[`tests/actions.rs`](tests/actions.rs) finds a deliberately broken handler,
+shrinks it to a single readable action, saves it and replays the same failure.
+
+```sh
+cargo test -p titan_doom --no-default-features --test fuzz_actions
+cargo test -p titan_fuzz --test actions
+```
 
 ## Choose relevant inputs and bounded work
 
@@ -235,16 +338,19 @@ for tick in 0..total_ticks {
 }
 ```
 
-The regression depends only on `titan_test`; it does not need to generate random
-inputs or shrink again.
+This button regression depends only on `titan_test`; it does not need to
+generate random inputs or shrink again. Action regressions use
+`ActionScript::replay` from `titan_fuzz`, without running a campaign.
 
 ## Limits and determinism
 
-This is property-based **input** testing, not coverage-guided fuzzing or direct
-world-state mutation. It only supports button input: keyboard keys and mouse
-buttons, not mouse motion, gamepads, analog axes, or an action mapping layer.
-It explores the chosen inputs and starting state, so a passing campaign is not
-proof of correctness or exhaustive coverage.
+This is property-based **input/action** testing, not coverage-guided fuzzing or
+arbitrary world-state mutation. The raw `Fuzz` API supports keyboard keys and
+mouse buttons, not mouse motion, gamepads, or analog axes. `ActionFuzz` supports
+user-defined gameplay actions, including analog movement and aim, through the
+game's own adapter; it does not provide a standard action-mapping layer.
+Both modes explore the chosen inputs and starting state, so a passing campaign
+is not proof of correctness or exhaustive coverage.
 
 The generated input stream is seedable and portable. That does not make an
 arbitrary game deterministic. `Sim::with_seed` supplies a `SimSeed` resource;
