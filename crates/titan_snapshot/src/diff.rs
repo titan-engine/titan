@@ -15,7 +15,7 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{EntityId, SnapshotValue, WorldSnapshot};
+use crate::{EntityId, EntitySnapshot, SnapshotValue, WorldSnapshot};
 
 /// Options for comparing two snapshots.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -26,6 +26,16 @@ pub struct DiffConfig {
     /// pairs are always compared exactly, including large `u64` values. The
     /// default is zero; negative, infinite, and NaN tolerances act as zero.
     pub float_tolerance: f64,
+}
+
+impl DiffConfig {
+    pub(crate) fn tolerance(&self) -> f64 {
+        if self.float_tolerance.is_finite() && self.float_tolerance >= 0.0 {
+            self.float_tolerance
+        } else {
+            0.0
+        }
+    }
 }
 
 /// The operation represented by a structural difference.
@@ -133,16 +143,11 @@ impl WorldSnapshot {
     /// Only captured data is compared; identical opaque markers cannot reveal
     /// changes to their underlying components or resources.
     pub fn diff(&self, after: &Self, config: &DiffConfig) -> WorldDiff {
-        let tolerance = if config.float_tolerance.is_finite() && config.float_tolerance >= 0.0 {
-            config.float_tolerance
-        } else {
-            0.0
-        };
+        let tolerance = config.tolerance();
         let mut diff = WorldDiff {
             entities: Vec::new(),
             resources: diff_values(&self.resources, &after.resources, tolerance),
         };
-        let empty = BTreeMap::new();
         for entity in self
             .entities
             .keys()
@@ -150,34 +155,49 @@ impl WorldSnapshot {
             .copied()
             .collect::<BTreeSet<_>>()
         {
-            let before_entity = self.entities.get(&entity);
-            let after_entity = after.entities.get(&entity);
-            let before_name = before_entity.and_then(|entity| entity.name.clone());
-            let after_name = after_entity.and_then(|entity| entity.name.clone());
-            let components = diff_values(
-                before_entity.map_or(&empty, |entity| &entity.components),
-                after_entity.map_or(&empty, |entity| &entity.components),
-                tolerance,
-            );
-            let kind = match (before_entity, after_entity) {
-                (None, Some(_)) => ChangeKind::Added,
-                (Some(_), None) => ChangeKind::Removed,
-                _ if components.is_empty() && before_name == after_name => continue,
-                _ => ChangeKind::Changed,
-            };
-            diff.entities.push(EntityDiff {
+            if let Some(change) = diff_entity(
                 entity,
-                kind,
-                before_name,
-                after_name,
-                components,
-            });
+                self.entities.get(&entity),
+                after.entities.get(&entity),
+                tolerance,
+            ) {
+                diff.entities.push(change);
+            }
         }
         diff
     }
 }
 
-fn diff_values(
+pub(crate) fn diff_entity(
+    entity: EntityId,
+    before: Option<&EntitySnapshot>,
+    after: Option<&EntitySnapshot>,
+    tolerance: f64,
+) -> Option<EntityDiff> {
+    let empty = BTreeMap::new();
+    let before_name = before.and_then(|entity| entity.name.clone());
+    let after_name = after.and_then(|entity| entity.name.clone());
+    let components = diff_values(
+        before.map_or(&empty, |entity| &entity.components),
+        after.map_or(&empty, |entity| &entity.components),
+        tolerance,
+    );
+    let kind = match (before, after) {
+        (None, Some(_)) => ChangeKind::Added,
+        (Some(_), None) => ChangeKind::Removed,
+        _ if components.is_empty() && before_name == after_name => return None,
+        _ => ChangeKind::Changed,
+    };
+    Some(EntityDiff {
+        entity,
+        kind,
+        before_name,
+        after_name,
+        components,
+    })
+}
+
+pub(crate) fn diff_values(
     before: &BTreeMap<String, SnapshotValue>,
     after: &BTreeMap<String, SnapshotValue>,
     tolerance: f64,
@@ -239,6 +259,16 @@ fn diff_fields(
     changes: &mut Vec<FieldDiff>,
 ) {
     match (before, after) {
+        // Logical identity is exact even when component-key values contain
+        // floats. Never let structural tolerance hide a changed reference.
+        (Some(Value::Object(before)), Some(Value::Object(after)))
+            if (before.len() == 1 && before.contains_key("$titan_entity_key"))
+                || (after.len() == 1 && after.contains_key("$titan_entity_key")) =>
+        {
+            if before == after {
+                return;
+            }
+        }
         (Some(Value::Object(before)), Some(Value::Object(after))) => {
             for key in before.keys().chain(after.keys()).collect::<BTreeSet<_>>() {
                 diff_fields(
@@ -494,7 +524,7 @@ mod tests {
         let before = WorldSnapshot {
             entities: BTreeMap::from([(
                 old,
-                crate::EntitySnapshot {
+                EntitySnapshot {
                     name: Some("Player".to_owned()),
                     components: BTreeMap::new(),
                 },
@@ -504,7 +534,7 @@ mod tests {
         let after = WorldSnapshot {
             entities: BTreeMap::from([(
                 new,
-                crate::EntitySnapshot {
+                EntitySnapshot {
                     name: Some("Player".to_owned()),
                     components: BTreeMap::new(),
                 },
