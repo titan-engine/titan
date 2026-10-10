@@ -452,6 +452,32 @@ fn detached_rebuild_does_not_displace_active_capture() {
 }
 
 #[test]
+fn empty_child_membership_does_not_create_a_dependency() {
+    let mut app = app();
+    let mut schedule = Schedule::new(Demo);
+    schedule.add_systems((a.before(Sets::Outer), b.in_set(Sets::Outer), c));
+    schedule.configure_sets(Sets::Empty.in_set(Sets::Outer).before(c));
+    observe_schedule(&mut schedule);
+    schedule.initialize(app.world_mut()).unwrap();
+    app.world_mut().resource_mut::<Schedules>().insert(schedule);
+    let response = inspect(&mut app, "titan.systems");
+    assert!(contains(&system(&response, "::a")["before"], "::b"));
+    assert!(!contains(&system(&response, "::a")["before"], "::c"));
+    assert!(!contains(&system(&response, "::c")["after"], "::a"));
+    // If the child acquires a system, it provides the required witness and its
+    // inherited declaration orders a transitively before c.
+    app.world_mut()
+        .resource_mut::<Schedules>()
+        .get_mut(Demo)
+        .unwrap()
+        .add_systems(unordered.in_set(Sets::Empty));
+    initialize(&mut app, Demo);
+    let response = inspect(&mut app, "titan.systems");
+    assert!(contains(&system(&response, "::a")["before"], "::c"));
+    assert!(contains(&system(&response, "::c")["after"], "::a"));
+}
+
+#[test]
 fn long_ordering_chain_is_paged_before_expanding_system_details() {
     use bevy_ecs::system::IntoSystem;
     #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]

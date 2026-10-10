@@ -126,12 +126,20 @@ fn reachable(graph: &DiGraph<NodeId>, start: NodeId, direction: Direction) -> BT
     visited
 }
 
-// Two phases prevent membership edges from falsely ordering siblings: source
-// nodes ascend membership to find applicable declarations, while target nodes
-// descend membership to find affected systems. Only a target system switches
-// back to source phase to continue a transitive path. The graph stays O(V + E),
-// rather than materializing the potentially quadratic transitive closure.
-type OrderingNode = (NodeId, bool);
+// Source nodes ascend membership to find applicable declarations. Declaration
+// nodes follow explicit dependency paths (including through empty sets). Member
+// nodes descend membership, but cannot continue declarations until an actual
+// system witnesses the transition. Thus an empty child set cannot fabricate an
+// ordering from its parent. The graph stays O(V + E), rather than materializing
+// the potentially quadratic transitive closure.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum OrderingPhase {
+    Source,
+    Declaration,
+    Member,
+}
+
+type OrderingNode = (NodeId, OrderingPhase);
 
 #[derive(Default)]
 struct OrderingGraph {
@@ -146,16 +154,25 @@ impl OrderingGraph {
             result.before.entry(a).or_default().push(b);
             result.after.entry(b).or_default().push(a);
         };
+        use OrderingPhase::{Declaration, Member, Source};
         for (parent, child) in graph.hierarchy().graph().all_edges() {
-            edge((child, true), (parent, true));
-            edge((parent, false), (child, false));
+            edge((child, Source), (parent, Source));
+            edge((parent, Declaration), (child, Member));
+            edge((parent, Member), (child, Member));
         }
         for (a, b) in graph.dependency().graph().all_edges() {
-            edge((a, true), (b, false));
-            edge((a, false), (b, false));
+            edge((a, Source), (b, Declaration));
+            edge((a, Declaration), (b, Declaration));
         }
         for key in keys {
-            edge((NodeId::System(key), false), (NodeId::System(key), true));
+            edge(
+                (NodeId::System(key), Member),
+                (NodeId::System(key), Declaration),
+            );
+            edge(
+                (NodeId::System(key), Declaration),
+                (NodeId::System(key), Source),
+            );
         }
         result
     }
@@ -163,12 +180,22 @@ impl OrderingGraph {
     fn related(&self, key: SystemKey, before: bool) -> BTreeSet<SystemKey> {
         let edges = if before { &self.before } else { &self.after };
         let mut visited = BTreeSet::new();
-        let mut pending = vec![(NodeId::System(key), before)];
+        let start = if before {
+            OrderingPhase::Source
+        } else {
+            OrderingPhase::Declaration
+        };
+        let target = if before {
+            OrderingPhase::Declaration
+        } else {
+            OrderingPhase::Source
+        };
+        let mut pending = vec![(NodeId::System(key), start)];
         let mut systems = BTreeSet::new();
         while let Some(node) = pending.pop() {
             for &neighbor in edges.get(&node).into_iter().flatten() {
                 if visited.insert(neighbor) {
-                    if neighbor.1 != before
+                    if neighbor.1 == target
                         && let NodeId::System(other) = neighbor.0
                         && other != key
                     {
