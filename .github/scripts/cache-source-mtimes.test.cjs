@@ -195,7 +195,7 @@ test('manifest-only names are never opened; removed files allow cross-commit cac
   assert.equal((await fs.stat(path.join(root, '.git/config'))).mtimeMs, gitConfig.mtimeMs);
 });
 
-test('unchanged internal links are allowed; changed links and regular-to-link transitions fail closed', async t => {
+test('unchanged internal links are allowed; changed links and regular-to-link transitions touch every source', async t => {
   const root = await repository(t);
   const regular = await source(root, 'regular.rs');
   await source(root, 'replacement.rs', 'different source');
@@ -217,12 +217,20 @@ test('unchanged internal links are allowed; changed links and regular-to-link tr
   near((await fs.stat(regular)).mtimeMs, oldTime.getTime());
   await fs.unlink(path.join(root, 'link.rs'));
   await fs.symlink('replacement.rs', path.join(root, 'link.rs'));
-  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  let start = Date.now();
+  assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
+    cacheMiss: true, restored: 0, touched: 2,
+  });
+  await assertTouched(regular, start, Date.now());
   await fs.unlink(path.join(root, 'link.rs'));
   await fs.symlink('regular.rs', path.join(root, 'link.rs'));
   await fs.unlink(regular);
   await fs.symlink('replacement.rs', regular);
-  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  start = Date.now();
+  assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
+    cacheMiss: true, restored: 0, touched: 1,
+  });
+  await assertTouched(path.join(root, 'replacement.rs'), start, Date.now());
 });
 
 test('link resolution through an untracked intermediate cannot change silently', async t => {
@@ -241,7 +249,11 @@ test('link resolution through an untracked intermediate cannot change silently',
   assert.deepEqual((await manifest(root)).links, [{ path: 'leaf.rs', target: 'alias.rs', resolved: 'sources/a.rs' }]);
   await fs.unlink(path.join(root, 'alias.rs'));
   await fs.symlink('sources/b.rs', path.join(root, 'alias.rs'));
-  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  const start = Date.now();
+  assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
+    cacheMiss: true, restored: 0, touched: 2,
+  });
+  await assertTouched(path.join(root, 'sources/a.rs'), start, Date.now());
 });
 
 test('pre-release manifests without symlink identity fail closed, including existing internal links', async t => {
@@ -282,7 +294,7 @@ test('source links outside the checkout and symlink-parent transitions fail clos
   await fs.writeFile(path.join(root, 'replacement/lib.rs'), 'different source');
   await fs.rm(path.join(root, 'src'), { recursive: true });
   await fs.symlink(path.join(root, 'replacement'), path.join(root, 'src'), process.platform === 'win32' ? 'junction' : 'dir');
-  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Tracked source has a symlink parent/);
   await assert.rejects(saveSourceMtimes({ cwd: root, log: quiet }), /Tracked source has a symlink parent/);
 });
 

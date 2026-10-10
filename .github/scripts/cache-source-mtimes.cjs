@@ -212,23 +212,35 @@ async function restoreSourceMtimes({ cwd = process.cwd(), log = console.log } = 
   const root = await repositoryRoot(cwd);
   // Validate everything first: malformed cache data is fatal, never a partial
   // restore or a silent fallback to potentially unsafe checkout timestamps.
-  const records = await readManifest(root);
+  let records = await readManifest(root);
   if (!records) log(`Source mtime cache miss: ${MANIFEST_PATH} is absent; touching tracked sources`);
+  // Iterate ONLY the current Git allowlist. Safe names left over from another
+  // commit's manifest (deleted/renamed sources) are ignored, never opened.
+  const names = await listTrackedFiles(root);
+  // Check links before changing any mtime. A regular-file -> symlink transition
+  // or a changed/new symlink target is a legitimate source change, so treat the
+  // manifest as a miss: touching every source forces a full rebuild instead of
+  // silently reusing artifacts or failing a job its author cannot fix.
+  for (const name of records ? names : []) {
+    const filename = path.join(root, name);
+    if (!(await lstatOrMissing(filename))?.isSymbolicLink()) continue;
+    const link = await sourceLink(root, name, filename);
+    const cached = records.links.get(name);
+    if (cached?.target !== link.target || cached?.resolved !== link.resolved) {
+      log(`::warning::Source symlink changed since the cache was saved (${name}); touching tracked sources`);
+      records = null;
+      break;
+    }
+  }
   const now = Date.now();
   let restored = 0;
   let touched = 0;
-  // Iterate ONLY the current Git allowlist. Safe names left over from another
-  // commit's manifest (deleted/renamed sources) are ignored, never opened.
-  for (const name of await listTrackedFiles(root)) {
+  for (const name of names) {
     const handle = await openSource(root, name, true, async (linkName, filename) => {
-      const link = await sourceLink(root, linkName, filename);
-      // Missing manifests touch every regular source/Cargo.toml, forcing a
-      // rebuild. With a manifest, never silently reuse artifacts across a
-      // regular-file -> symlink transition or a changed/new symlink target.
-      const cached = records?.links.get(name);
-      if (records && (linkName !== name || cached?.target !== link.target || cached?.resolved !== link.resolved)) {
-        throw new Error(`Source symlink changed; rebuild the cache before restoring mtimes: ${name}`);
-      }
+      // Escaping links stay fatal. Git cannot track files below a symlinked
+      // directory, so a symlink parent means the checkout was altered.
+      await sourceLink(root, linkName, filename);
+      if (records && linkName !== name) throw new Error(`Tracked source has a symlink parent: ${name}`);
     });
     if (!handle) continue;
     try {
