@@ -92,20 +92,20 @@ fn doom_player_never_enters_a_wall_under_generated_gameplay_actions() {
             Ok(())
         }
     })
-    .invariant("gameplay advances every tick", |world| {
-        if world.resource::<CombatState>().phase != GamePhase::Playing {
-            return Ok(());
-        }
-        let gameplay_tick = world.resource::<PlayerState>().tick;
-        let expected_tick = world.resource::<ExpectedGameplayTick>().0;
-        if gameplay_tick == expected_tick {
-            Ok(())
-        } else {
-            Err(format!(
-                "gameplay tick {gameplay_tick} != expected tick {expected_tick}"
-            ))
-        }
-    })
+    .invariant(
+        "gameplay clock advances while playing and freezes when terminal",
+        |world| {
+            let gameplay_tick = world.resource::<PlayerState>().tick;
+            let expected_tick = world.resource::<ExpectedGameplayTick>().0;
+            if gameplay_tick == expected_tick {
+                Ok(())
+            } else {
+                Err(format!(
+                    "gameplay tick {gameplay_tick} != expected tick {expected_tick}"
+                ))
+            }
+        },
+    )
     .no_nan_transforms()
     .cases(8)
     .ticks(600)

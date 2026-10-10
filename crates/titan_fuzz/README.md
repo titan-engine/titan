@@ -177,8 +177,8 @@ test because Rust closures are not serialized in the report.
 [`demos/doom/tests/fuzz_actions.rs`](../../demos/doom/tests/fuzz_actions.rs)
 runs eight headless 600-tick campaigns against Doom's public gameplay APIs.
 It generates movement, aim, fire, interaction and occasional restart actions,
-checks walls and closed doors, and verifies tick advancement while playing
-(with restarts resetting the gameplay clock and terminal phases freezing it).
+checks walls and closed doors, and verifies the gameplay clock advances while
+playing, freezes in terminal phases, and resets on restart.
 It uses a serializable DTO to avoid imposing serde on the game's resource.
 The demo depends on `titan_fuzz` for tests, not the other way around; no Doom
 gameplay source is modified.
