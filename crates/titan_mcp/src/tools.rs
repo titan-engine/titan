@@ -30,7 +30,11 @@ pub fn list() -> Value {
     let components = json!({"type":"object","additionalProperties":true,"description":"Map from component type names to reflected JSON values"});
     let limit = json!({"type":"integer","minimum":1,"maximum":100,"default":50});
     json!([
-        tool("game_status", "Discover the running game's methods and Titan status, when available", json!({}), &[]),
+        tool("game_status", "Process ownership, PID/exit status, discovered BRP methods and optional Titan status", json!({}), &[]),
+        tool("launch_game", "Launch the configured game command and wait for BRP; accepts no command or extra arguments", json!({}), &[]),
+        tool("stop_game", "Stop only the owned game tree; attached games are never stopped", json!({}), &[]),
+        tool("rebuild_game", "Stop the owned game, run the configured build, and stay stopped; failures include bounded diagnostics", json!({}), &[]),
+        tool("restart_game", "Stop, optionally rebuild, and launch the configured game; build failures leave the game stopped", json!({"rebuild":{"type":"boolean","default":false}}), &[]),
         tool("query_entities", "Query components and filter entities; use limit to keep results small", json!({"components":types,"with":types,"without":types,"option":types,"has":types,"strict":{"type":"boolean","default":false},"limit":limit}), &[]),
         tool("get_components", "Read components of an entity", json!({"entity":entity,"components":types,"strict":{"type":"boolean","default":false}}), &["entity","components"]),
         tool("list_components", "List registered components, or components on an entity", json!({"entity":entity}), &[]),
@@ -59,7 +63,56 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 
 /// Dispatches a tool, returning raw JSON (screenshot returns MCP image content).
 pub fn call(client: &Client, name: &str, args: Value) -> Result<Value, String> {
+    call_managed(
+        client,
+        &mut crate::process::ProcessManager::attached(),
+        name,
+        args,
+    )
+}
+
+/// Dispatches with process ownership. A crash is reported before BRP, and again
+/// after a failed BRP call to catch a game that exited during that call.
+pub fn call_managed(
+    client: &Client,
+    manager: &mut crate::process::ProcessManager,
+    name: &str,
+    args: Value,
+) -> Result<Value, String> {
     validate_args(name, &args)?;
+    match name {
+        "launch_game" => return Ok(json!(manager.launch(client)?)),
+        "stop_game" => return Ok(json!(manager.stop()?)),
+        "rebuild_game" => {
+            manager.rebuild()?;
+            return Ok(json!(manager.status()?));
+        }
+        "restart_game" => {
+            return Ok(json!(
+                manager.restart(client, optional_bool(&args, "rebuild", false)?)?
+            ))
+        }
+        "game_status" => {
+            let process = manager.status()?;
+            let mut result = match call_brp(client, name, args) {
+                Ok(result) => result,
+                Err(error) if process.configured => json!({"reachable":false,"error":error}),
+                Err(error) => return Err(error),
+            };
+            result["process"] = json!(manager.status()?);
+            return Ok(result);
+        }
+        _ => {}
+    }
+    manager.check_game()?;
+    let result = call_brp(client, name, args);
+    if result.is_err() {
+        manager.check_game()?;
+    }
+    result
+}
+
+fn call_brp(client: &Client, name: &str, args: Value) -> Result<Value, String> {
     let mut registry = Registry {
         client,
         schemas: None,
@@ -846,7 +899,7 @@ mod tests {
             assert!(names.insert(tool["name"].as_str().unwrap()));
             assert_eq!(tool["inputSchema"]["type"], "object");
         }
-        assert_eq!(names.len(), 20);
+        assert_eq!(names.len(), 24);
     }
 
     #[test]

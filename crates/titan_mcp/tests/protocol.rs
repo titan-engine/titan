@@ -51,6 +51,10 @@ fn initialize_list_call_and_notifications() {
     let tools = responses[1]["result"]["tools"].as_array().unwrap();
     for name in [
         "game_status",
+        "launch_game",
+        "stop_game",
+        "rebuild_game",
+        "restart_game",
         "query_entities",
         "get_components",
         "list_components",
@@ -118,5 +122,40 @@ fn cli_url_overrides_environment_and_rejects_remote_hosts() {
         .output()
         .unwrap();
     assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn lifecycle_cli_rejects_invalid_configuration_and_does_not_autolaunch() {
+    for args in [
+        vec!["--game-cmd", "cargo run"],
+        vec!["--game-cmd", "[]"],
+        vec!["--game-cmd", "[\"\"]"],
+        vec!["--build-cmd", "[\"cargo\",\"build\"]"],
+        vec!["--game-dir", "."],
+        vec!["--ready-timeout-secs", "0"],
+        vec!["--stop-timeout-secs", "3601"],
+        vec!["--build-timeout-secs", "NaN"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_titan_mcp"))
+            .args(["--url", "http://127.0.0.1:1"])
+            .args(&args)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "accepted {args:?}");
+        assert!(output.stdout.is_empty());
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_titan_mcp"))
+        .args([
+            "--url",
+            "http://127.0.0.1:1",
+            "--game-cmd",
+            "[\"this-command-does-not-exist\"]",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "Game must not autolaunch");
     assert!(output.stdout.is_empty());
 }

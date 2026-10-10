@@ -10,9 +10,30 @@ const MAX_ITEMS: usize = 100;
 const PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// Serve MCP requests until EOF, with bounded request size and flushed responses.
-pub fn serve(client: &Client, mut input: impl BufRead, mut output: impl Write) -> io::Result<()> {
+pub fn serve(client: &Client, input: impl BufRead, output: impl Write) -> io::Result<()> {
+    serve_managed(
+        client,
+        &mut crate::process::ProcessManager::attached(),
+        input,
+        output,
+    )
+}
+
+/// Serves with an operator-configured process manager. The caller owns the
+/// manager; dropping it on EOF or an I/O error stops its game. Supplied I/O
+/// determines blocking behavior; the binary uses cancellation-aware stdio
+/// workers so shutdown is not held hostage by unread output or idle input.
+pub fn serve_managed(
+    client: &Client,
+    manager: &mut crate::process::ProcessManager,
+    mut input: impl BufRead,
+    mut output: impl Write,
+) -> io::Result<()> {
     let mut initialized = false;
     loop {
+        if manager.cancellation().is_requested() {
+            return Ok(());
+        }
         let mut line = Vec::new();
         // Bound allocation even when an untrusted client never sends a newline.
         let mut oversized = false;
@@ -47,7 +68,7 @@ pub fn serve(client: &Client, mut input: impl BufRead, mut output: impl Write) -
             ))
         } else {
             match serde_json::from_slice::<Value>(&line) {
-                Ok(request) => handle(client, request, &mut initialized),
+                Ok(request) => handle(client, manager, request, &mut initialized),
                 Err(_) => Some(error(Value::Null, -32700, "Invalid JSON")),
             }
         };
@@ -59,7 +80,12 @@ pub fn serve(client: &Client, mut input: impl BufRead, mut output: impl Write) -
     }
 }
 
-fn handle(client: &Client, request: Value, initialized: &mut bool) -> Option<Value> {
+fn handle(
+    client: &Client,
+    manager: &mut crate::process::ProcessManager,
+    request: Value,
+    initialized: &mut bool,
+) -> Option<Value> {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     if !request.is_object()
         || request["jsonrpc"] != "2.0"
@@ -122,7 +148,7 @@ fn handle(client: &Client, request: Value, initialized: &mut bool) -> Option<Val
             if !args.is_object() {
                 return Some(error(id, -32602, "Tool arguments must be an object"));
             }
-            match tools::call(client, name, args) {
+            match tools::call_managed(client, manager, name, args) {
                 Ok(result) if name == "screenshot" => result,
                 Ok(result) => {
                     json!({"content":[{"type":"text","text":compact(result)}],"isError":false})

@@ -63,9 +63,11 @@ fn main() {
 
 Enable `titan_remote`'s `render` feature for screenshot methods. Its time control
 requires `TimePlugin` and `FrameCountPlugin`, both included in `DefaultPlugins`.
-For a complete runnable setup, use the crate-local server example below. Without
-Titan Remote, standard BRP tools still work, screenshot uses the BRP observer
-fallback, and time-control tools explain how to enable the missing methods.
+For a windowed setup with Titan Remote, use `titan_remote`'s server example at
+the end of this README. The `titan_mcp` server example below is BRP-only and
+headless. Without Titan Remote, standard BRP tools still work, screenshot uses
+the BRP observer fallback when a renderer is present, and time-control tools
+explain how to enable the missing methods.
 Pausing virtual time does not stop systems that ignore time.
 
 ## Build and connect Claude Code
@@ -99,13 +101,127 @@ Configuration priority: `--url` overrides `TITAN_BRP_URL`, which overrides
 MCP uses one JSON-RPC message per line, with `initialize`, `tools/list`,
 `tools/call`, notifications, and `ping`; stdout is reserved for MCP.
 
+## Launch, rebuild, and restart a game
+
+Without `--game-cmd`, the server stays attach-only (the default above). It never
+stops an attached game. To let the agent manage a game, configure **fixed JSON
+argv arrays**, not shell command strings. Arguments are literal: spaces in paths
+work without shell quoting, and pipes, substitutions and redirects are not
+interpreted. The agent cannot supply commands, working directories, or extra
+arguments through a tool. Configuring a shell executable explicitly is trusted
+operator configuration, not a sandbox.
+
+For the crate-local GPU-free BRP example, build once:
+
+```sh
+cargo build -p titan_mcp --example server
+```
+
+Then use this `.mcp.json` (replace all absolute paths):
+
+```json
+{
+  "mcpServers": {
+    "titan": {
+      "command": "/absolute/path/to/titan/target/debug/titan_mcp",
+      "args": [
+        "--url", "http://127.0.0.1:15702",
+        "--game-dir", "/absolute/path/to/titan",
+        "--game-cmd", "[\"/absolute/path/to/titan/target/debug/examples/server\"]",
+        "--build-cmd", "[\"cargo\",\"build\",\"-p\",\"titan_mcp\",\"--example\",\"server\"]",
+        "--ready-timeout-secs", "30",
+        "--stop-timeout-secs", "3",
+        "--build-timeout-secs", "300"
+      ]
+    }
+  }
+}
+```
+
+Use `launch_game`, `get_resource { "resource": "Counter" }`,
+`restart_game { "rebuild": true }`, then query `Counter` again. `rebuild_game`
+also stops the game and builds, but leaves it stopped until `launch_game`.
+`restart_game` without `rebuild` only stops and launches. A second launch of an
+owned running game is rejected; `stop_game` is idempotent in configured mode.
+
+For Doom, set `--game-dir` to your Titan checkout, `--game-cmd` to
+`["cargo","run","-p","titan_doom"]`, and `--build-cmd` to
+`["cargo","build","-p","titan_doom"]`. The selected game must enable BRP at the
+configured URL; these flags do not inject plugins or change Doom code. Prefer a
+prebuilt binary for `--game-cmd` so build time is separate from readiness. If you
+use `cargo run`, raise `--ready-timeout-secs` to include compilation. Cargo must
+be on the server's PATH (or use an absolute path). Binary names on Windows have
+an `.exe` suffix. Respect any custom `CARGO_TARGET_DIR` in executable paths.
+
+Timeout flags accept integer seconds in `1..=3600`; defaults are 30/3/300.
+Readiness checks valid BRP `rpc.discover` responses within one shared deadline,
+including HTTP reads. A failed launch stops the newly launched tree. Launch
+refuses an already responsive BRP endpoint rather than claiming an existing
+game. Reserve a unique loopback port for this server: BRP has no authentication
+or process-identity handshake, so a concurrent external listener can still race
+with launch.
+
+**Rebuild stops first.** A failed/timed-out build leaves the old game stopped
+and does not launch a new one; fix the code and retry. A missing build command
+is rejected *before* stopping the game. Compiler output is captured from both
+stdout and stderr concurrently, with 4 KiB of prefix and 4 KiB of tail per
+stream and explicit middle-byte omission counts. The tail retains compiler
+errors emitted after long dependency-build progress logs. Use Cargo's default human-readable diagnostics (optionally
+`--color=never`); JSON diagnostic lines are returned as text, not parsed. Build
+success returns process state, not logs. Game stdout/stderr are currently
+discarded (log access is tracked in #62), and game stdin is closed; no child
+output can corrupt MCP stdout or fill an unread pipe.
+
+`game_status` adds a `process` object: `configured`, `owned`, `state`, live
+command `pid`, and last `exit` (`code`, `success`, `description`). States are
+`attached`, `stopped` (never launched), `running`, and `exited` (including an
+intentional stop). The PID can be Cargo's PID. Managed status works even when
+BRP is unreachable, returning `reachable: false` and the BRP error; attach-only
+status retains its previous connection-error behavior. After an owned game
+crashes, world tools report its exit status instead of a generic connection
+error. A fresh successful spawn clears the previous exit.
+
+Unix commands run in a private process group: stop sends SIGTERM, waits the
+full grace period (even if the command leader exits), then sends SIGKILL to
+remaining descendants. The leader is observed without reaping until after the
+last group signal, preventing PID/group identity reuse during cleanup. Windows commands
+start suspended into a Job Object; stop makes a bounded best-effort
+`taskkill /T` request, then terminates the job (console apps may not support
+graceful shutdown). Builds get the same tree isolation. Commands must not
+intentionally detach/escape their group or hand inherited pipes to unrelated
+processes. Normal stdio EOF, protocol I/O errors, and dropping the process
+manager stop its game. Ctrl-C and Unix SIGTERM/SIGHUP request cooperative
+shutdown, interrupt idle stdin, blocked stdout, and readiness/build polling,
+then clean up the owned tree. The binary uses bounded 8 KiB stdio chunks and
+blocking I/O workers; each response's output chunks share a ten-second
+backpressure deadline, and shutdown never joins a worker stuck in OS I/O. In-flight BRP calls finish within their existing bounded timeout.
+Power loss, Unix SIGKILL, and other abrupt termination cannot run Rust cleanup;
+call `stop_game` before forcibly terminating the sidecar. Never run two lifecycle
+managers against the same game/port.
+
+### Library API for follow-up tools
+
+`process::{CommandSpec, ProcessConfig, ProcessManager}` separates trusted
+configuration from lifecycle operations. `launch`, `stop`, `rebuild`, `restart`,
+`status`, and `check_game` are synchronous and require mutable access, so callers
+serialize them with other game operations. `tools::call_managed` and
+`protocol::serve_managed` take that manager; the original `call`/`serve` APIs
+remain attach-only wrappers. The caller owns the manager and drops it on
+shutdown. `cancellation()` returns a cloneable, one-way `ProcessCancellation`
+handle for shutdown from another thread; cancellation forbids new launches/builds
+but does not replace dropping/stopping the manager. Log/fuzz/playtest tooling can build on this API without granting MCP
+callers a command-execution interface.
+
 ## Tools
 
 Use `tools/list` for the authoritative JSON input schemas.
 
 | Tool | Purpose |
 | --- | --- |
-| `game_status` | Reachability, discovered BRP methods, optional Titan status |
+| `game_status` | Process ownership/PID/exit, reachability, discovered BRP methods, optional Titan status |
+| `launch_game`, `stop_game` | Start or stop only the configured, owned game tree |
+| `rebuild_game` | Stop, run the fixed build command, and stay stopped |
+| `restart_game` | Stop, optionally `rebuild: true`, then launch and wait for BRP |
 | `query_entities` | Fetch components with `with` / `without` filters |
 | `get_components`, `list_components` | Read entity components or list their types |
 | `set_component` | Mutate a reflected component field by path |
@@ -224,7 +340,14 @@ and MCP returns its decoded pixels. The shared Titan workflow discovers
 `titan_*` workspace crates and runs all-feature tests on Linux, including MCP's
 `bevy_remote/bevy_render` feature combination. No per-crate workflow is needed.
 Renderer dependencies are dev-dependencies, not default sidecar runtime
-dependencies.
+dependencies. Lifecycle tests exercise the crate-local headless example code in
+child processes, with no compilation inside the readiness deadline. They query
+before/after rebuilding restarts, verify real rustc compiler diagnostics, crash
+exit codes, bounded dual-pipe output, readiness/build timeouts, attach-only
+safety, argument rejection, owned descendants/inherited build pipes, descendant
+graceful shutdown, cooperative cancellation, and cleanup on stdio EOF/SIGTERM
+(including an unread, backpressured stdout pipe). They do not modify or rely
+on the timing-sensitive frame-count fixtures tracked in #73.
 
 To reproduce the visual agent workflow:
 
