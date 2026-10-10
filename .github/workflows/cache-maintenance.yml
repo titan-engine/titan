@@ -5,6 +5,8 @@ on:
     paths:
       - .github/scripts/prune-actions-caches*
       - .github/scripts/cache-source-mtimes*
+      - .github/scripts/titan-scoped-ci.sh
+      - .github/scripts/test-titan-scoped-ci.sh
       - .github/workflows/ci.yml
       - .github/workflows/update-caches.yml
       - .github/workflows/cache-maintenance.yml
@@ -13,6 +15,8 @@ on:
     paths:
       - .github/scripts/prune-actions-caches*
       - .github/scripts/cache-source-mtimes*
+      - .github/scripts/titan-scoped-ci.sh
+      - .github/scripts/test-titan-scoped-ci.sh
       - .github/workflows/ci.yml
       - .github/workflows/update-caches.yml
       - .github/workflows/cache-maintenance.yml
@@ -32,3 +36,6 @@ jobs:
           persist-credentials: false
       - name: Test cache pruning and source freshness without touching live caches
         run: node --test .github/scripts/prune-actions-caches.test.cjs .github/scripts/cache-source-mtimes.test.cjs
+      - name: Test scoped CI arguments with native jq and LF/CRLF tool output
+        shell: bash
+        run: bash .github/scripts/test-titan-scoped-ci.sh
