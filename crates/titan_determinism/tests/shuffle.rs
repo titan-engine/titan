@@ -160,8 +160,13 @@ fn install_late(world: &mut World) {
     world.resource_mut::<Schedules>().insert(schedule);
 }
 
-fn run_late(world: &mut World) {
-    world.run_schedule(Late);
+fn run_late(world: &mut World, mut seen_tick: Local<bool>) {
+    // Let the next maintenance boundary configure the newly inserted schedule
+    // before its first execution, rather than creating live deferred state first.
+    if *seen_tick {
+        world.run_schedule(Late);
+    }
+    *seen_tick = true;
 }
 
 #[test]
@@ -188,8 +193,8 @@ fn discovers_new_and_replaced_schedules_before_later_ticks() {
         let DeterminismReport::Diverged(divergence) = report else {
             unreachable!()
         };
-        // Installed and immediately run during tick 1: first eligible boundary
-        // is tick 2, with no stale cache for a replaced schedule's label.
+        // Installed during tick 1 and first run at tick 2, after discovery.
+        // Replacement labels must not inherit an old schedule's cache entry.
         assert_eq!(divergence.tick, 2);
         assert!(divergence
             .hints
@@ -292,6 +297,58 @@ fn preserves_deferred_buffers_across_ticks_and_new_schedule_discovery() {
                 .run()
                 .assert_deterministic();
         }
+    }
+}
+
+#[test]
+fn already_run_replacements_are_rejected_instead_of_reporting_false_divergence() {
+    for copy_seed in [false, true] {
+        let factory = || {
+            Sim::new(|app| {
+                app.register_type::<Decision>()
+                    .init_resource::<Decision>()
+                    .add_systems(Update, || {})
+                    .add_systems(
+                        First,
+                        move |world: &mut World, mut replaced: Local<bool>| {
+                            if *replaced {
+                                return;
+                            }
+                            *replaced = true;
+                            let settings = world
+                                .resource::<Schedules>()
+                                .get(Update)
+                                .unwrap()
+                                .get_build_settings();
+                            let mut replacement = Schedule::new(Update);
+                            replacement
+                                .set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+                            replacement.set_apply_final_deferred(false);
+                            replacement.add_systems((ApplyDeferred, enqueue_increment).chain());
+                            if copy_seed {
+                                replacement.set_build_settings(settings);
+                            }
+                            world.resource_mut::<Schedules>().insert(replacement);
+                        },
+                    );
+            })
+        };
+        DeterminismCheck::new(factory)
+            .ticks(3)
+            .run()
+            .assert_deterministic();
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            DeterminismCheck::new(factory)
+                .ticks(3)
+                .variant(Variant::ShuffleAmbiguous { seed: 42 })
+                .run()
+        }))
+        .expect_err("live replacements must fail before losing pending Commands");
+        let message = failure.downcast_ref::<String>().unwrap();
+        assert!(
+            message.contains("cannot configure already-initialized schedule Update"),
+            "{message}"
+        );
     }
 }
 

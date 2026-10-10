@@ -85,8 +85,8 @@ pub(crate) fn collect_with_seed(
                 .enumerate()
                 .map(|(index, (id, system))| (id, (index, system.name().to_string())))
                 .collect();
-            let shuffled = shuffle_seed.is_some()
-                && schedule.get_build_settings().shuffle_seed == shuffle_seed;
+            let shuffled =
+                shuffle_seed.is_some_and(|seed| crate::shuffle::is_configured(schedule, seed));
             for (first, second, conflicts) in schedule.graph().conflicting_systems().iter() {
                 let mut types: Vec<String> = if conflicts.is_empty() {
                     // An exclusive system or unrestricted entity access can touch
@@ -414,6 +414,27 @@ mod tests {
             serde_json::from_str(r#"{"schedule":"Update","systems":["a","b"],"types":[]}"#)
                 .unwrap();
         assert_eq!(old.order, None);
+    }
+
+    #[test]
+    fn copied_shuffle_seed_is_not_proof_of_a_harness_configured_order() {
+        let mut world = World::new();
+        let entity = world.spawn(Counter(0)).id();
+        world.init_resource::<Schedules>();
+        let mut schedule = Schedule::new(TestSchedule);
+        let mut settings = schedule.get_build_settings();
+        settings.shuffle_seed = Some(42);
+        schedule.set_build_settings(settings);
+        schedule.add_systems((first, second));
+        world.resource_mut::<Schedules>().insert(schedule);
+        world.run_schedule(TestSchedule);
+        let hints = collect_with_seed(
+            &world,
+            &component_diff(entity, ChangeKind::Changed),
+            Some(42),
+        );
+        assert_eq!(hints.ambiguities.len(), 1);
+        assert_eq!(hints.ambiguities[0].order, None);
     }
 
     #[test]

@@ -161,20 +161,28 @@ execution even if the factory selected a multithreaded executor.
 All existing main-world schedules are configured before the first candidate
 update, including `FixedUpdate` and startup schedules. A maintenance system in
 Bevy's `Main` driver, ordered before `Main::run_main`, configures new or replaced
-schedules at subsequent update boundaries without resetting existing executors.
+**not-yet-initialized** schedules at subsequent update boundaries without
+resetting existing executors.
 Normal lazy initialization is preserved: startup-dependent `Local::from_world`
 values initialize at their normal execution time, and dormant schedules do not
 initialize. Unchanged schedules are not rebuilt on every tick, preserving pending
-deferred buffers. A private empty set requests one rebuild when settings change,
-because changing build settings alone does not mark an existing graph dirty.
+deferred buffers. A private empty set records which schedule instances the
+harness configured and requests their first build. Copying a schedule's public
+shuffle seed does **not** copy this marker or establish its executor policy.
 
 This variant requires the standard Bevy `Main` driver used by `Sim::new`; custom
 app update drivers or replacing `Main` itself are not supported. Like `Sim`'s
 executor policy, it cannot configure schedules created and immediately run
-*within* a system. Configure those schedules explicitly. Sub-app schedules are
-not accessible through `Sim` and are not shuffled. Systems added to an already
-configured schedule inherit its shuffle setting on their normal rebuild; if game
-code overrides the setting, the next update boundary restores it. A factory that
+*within* a system. A newly discovered schedule that has already initialized
+causes a clear panic **before** the harness changes its executor or settings:
+Bevy's public APIs cannot preserve the live executor's pending deferred-buffer
+bookkeeping when reconfiguring it. Make new/replacement schedules available at an
+update boundary **before their first run**, not just before a later run. The same
+restriction applies to schedules preinitialized by the factory. Sub-app schedules
+are not accessible through `Sim` and are not shuffled. Systems added to an already
+configured schedule inherit its shuffle setting on their normal rebuild. Do not
+override the executor of a harness-configured schedule; overriding the shuffle
+seed on a live schedule is rejected instead of forcing an unsafe rebuild. A factory that
 makes ambiguities build errors still fails; use warning/ignore severity to explore
 its ambiguities.
 
@@ -247,7 +255,9 @@ Nondeterminism detected: run 2 diverged from run 1 at tick 1 (of 4)
 Hints are debugging leads, **not proof of causation**. Ambiguity hints read
 existing schedule graph access conflicts for diverging types. For
 `ShuffleAmbiguous`, `AmbiguityHint::order` records the chosen topological
-`[before, after]` names from the executable schedule after the diverging tick.
+`[before, after]` names from harness-configured executable schedules after the
+diverging tick. A schedule carrying only a copied shuffle seed has no order hint,
+since it may still use a multithreaded executor.
 The readable report prints `shuffled order: before -> after`; the variant in the
 replay parameters records the shuffle seed. These are configured orders, not
 proof that either system ran (run conditions may skip them) or caused the bug.

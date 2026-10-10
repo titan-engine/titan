@@ -304,7 +304,10 @@ impl<F: FnMut() -> Sim> DeterminismCheck<F> {
     /// Panics before execution if ticks are missing/zero, runs are fewer than two,
     /// or the script version is unsupported. Panics if the factory returns an
     /// already-ticked `Sim`, or if `ShuffleAmbiguous` cannot find the standard
-    /// Bevy `Main` driver. Game/factory panics propagate unchanged.
+    /// Bevy `Main` driver, encounters an already-initialized schedule it has not
+    /// configured, or discovers overridden shuffle settings on a live schedule.
+    /// New/replacement schedules must be available before their first run.
+    /// Game/factory panics propagate unchanged.
     pub fn run(mut self) -> DeterminismReport {
         let ticks = self
             .ticks
