@@ -149,6 +149,12 @@ test('malformed manifests fail before changing any source timestamps', async t =
     null, [], {}, { version: 2, files: [] }, { version: 1, files: {} },
     { version: 1, files: [], extra: true },
     { version: 1, files: [good, good] },
+    { version: 1, files: [], links: {} },
+    { version: 1, files: [], links: [{ path: '../outside', target: 'inside' }] },
+    { version: 1, files: [], links: [{ path: 'link', target: '' }] },
+    { version: 1, files: [], links: [{ path: 'link', target: 1 }] },
+    { version: 1, files: [good], links: [{ path: good.path, target: 'other' }] },
+    { version: 1, files: [], links: [{ path: 'link', target: 'one' }, { path: 'link', target: 'two' }] },
     ...badEntries.map(bad => ({ version: 1, files: [good, bad] })),
   ];
   for (const bad of badManifests) {
@@ -184,13 +190,43 @@ test('manifest-only names are never opened; removed files allow cross-commit cac
   assert.equal((await fs.stat(path.join(root, '.git/config'))).mtimeMs, gitConfig.mtimeMs);
 });
 
-test('tracked leaf and parent symlinks are skipped without touching their destinations', async t => {
+test('unchanged internal links are allowed; changed links and regular-to-link transitions fail closed', async t => {
+  const root = await repository(t);
+  const regular = await source(root, 'regular.rs');
+  await source(root, 'replacement.rs', 'different source');
+  try {
+    await fs.symlink('regular.rs', path.join(root, 'link.rs'));
+  } catch (error) {
+    if (error.code === 'EPERM') return t.skip('Symlink creation requires privileges');
+    throw error;
+  }
+  execFileSync('git', ['add', '--', 'link.rs'], { cwd: root });
+  await saveSourceMtimes({ cwd: root, log: quiet });
+  const saved = await manifest(root);
+  assert.deepEqual(saved.links, [{ path: 'link.rs', target: 'regular.rs' }]);
+  const linkTime = (await fs.lstat(path.join(root, 'link.rs'))).mtimeMs;
+  assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
+    cacheMiss: false, restored: 2, touched: 0,
+  });
+  assert.equal((await fs.lstat(path.join(root, 'link.rs'))).mtimeMs, linkTime);
+  near((await fs.stat(regular)).mtimeMs, oldTime.getTime());
+  await fs.unlink(path.join(root, 'link.rs'));
+  await fs.symlink('replacement.rs', path.join(root, 'link.rs'));
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  await fs.unlink(path.join(root, 'link.rs'));
+  await fs.symlink('regular.rs', path.join(root, 'link.rs'));
+  await fs.unlink(regular);
+  await fs.symlink('replacement.rs', regular);
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+});
+
+test('source links outside the checkout and symlink-parent transitions fail closed', async t => {
   const root = await repository(t);
   const external = await fs.mkdtemp(path.join(os.tmpdir(), 'cache-mtimes-outside-'));
   t.after(() => fs.rm(external, { recursive: true, force: true }));
-  const outside = await source(external, 'lib.rs', 'source bytes', false);
-  const nested = await source(root, 'src/lib.rs');
-  const regular = await source(root, 'regular.rs');
+  const outside = await source(external, 'lib.rs', 'outside', false);
+  await source(root, 'src/lib.rs');
+  await saveSourceMtimes({ cwd: root, log: quiet });
   try {
     await fs.symlink(outside, path.join(root, 'link.rs'));
   } catch (error) {
@@ -198,20 +234,16 @@ test('tracked leaf and parent symlinks are skipped without touching their destin
     throw error;
   }
   execFileSync('git', ['add', '--', 'link.rs'], { cwd: root });
-  await saveSourceMtimes({ cwd: root, log: quiet });
-  assert.ok(!(await manifest(root)).files.some(record => record.path === 'link.rs'));
-  await fs.rm(path.dirname(nested), { recursive: true });
-  await fs.symlink(external, path.join(root, 'src'), process.platform === 'win32' ? 'junction' : 'dir');
-  // Even an injected, valid matching record for a tracked symlink cannot be used.
-  const saved = await manifest(root);
-  saved.files.push(entry('link.rs'));
-  await putManifest(root, saved);
-  assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
-    cacheMiss: false, restored: 1, touched: 0,
-  });
+  await assert.rejects(saveSourceMtimes({ cwd: root, log: quiet }), /Source symlink leaves the checkout/);
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink leaves the checkout/);
   near((await fs.stat(outside)).mtimeMs, oldTime.getTime());
-  near((await fs.stat(regular)).mtimeMs, oldTime.getTime());
-  assert.deepEqual(await saveSourceMtimes({ cwd: root, log: quiet }), { saved: 1 });
+  execFileSync('git', ['rm', '--cached', '--', 'link.rs'], { cwd: root });
+  await fs.mkdir(path.join(root, 'replacement'));
+  await fs.writeFile(path.join(root, 'replacement/lib.rs'), 'different source');
+  await fs.rm(path.join(root, 'src'), { recursive: true });
+  await fs.symlink(path.join(root, 'replacement'), path.join(root, 'src'), process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+  await assert.rejects(saveSourceMtimes({ cwd: root, log: quiet }), /Tracked source has a symlink parent/);
 });
 
 test('target and manifest symlinks fail closed instead of reading or writing outside the checkout', async t => {

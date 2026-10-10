@@ -56,16 +56,25 @@ async function lstatOrMissing(filename) {
 // Check every component, not just the leaf: a directory replaced by a symlink
 // must not grant access to files outside the checkout. Deleted files and gitlink
 // directories are also skipped. The checkout must not be edited concurrently.
-async function openSource(root, name) {
+async function openSource(root, name, restore = false, onSymlink = async () => {}) {
   const parts = name.split('/');
   let filename = root;
   for (let i = 0; i < parts.length; i++) {
     filename = path.join(filename, parts[i]);
     const stat = await lstatOrMissing(filename);
-    if (!stat || stat.isSymbolicLink()) return null;
+    if (!stat) return null;
+    if (stat.isSymbolicLink()) {
+      await onSymlink(parts.slice(0, i + 1).join('/'), filename);
+      return null;
+    }
     if (i < parts.length - 1 ? !stat.isDirectory() : !stat.isFile()) return null;
   }
-  const handle = await fs.open(filename, READ_FLAGS);
+  // Windows futimes requires a writable handle (FILE_WRITE_ATTRIBUTES).
+  // Keep save/hash-only opens read-only, and never write source contents.
+  const flags = restore && process.platform === 'win32'
+    ? constants.O_RDWR | (constants.O_NOFOLLOW || 0)
+    : READ_FLAGS;
+  const handle = await fs.open(filename, flags);
   if (!(await handle.stat()).isFile()) {
     await handle.close();
     return null;
@@ -92,9 +101,21 @@ function exactKeys(value, keys) {
     Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 }
 
+// Do not follow links to read or timestamp their destinations. Existing links
+// inside the checkout are allowed, but changing one must invalidate the cache.
+async function sourceLink(root, name, filename) {
+  const target = await fs.readlink(filename);
+  const resolved = await fs.realpath(filename);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Source symlink leaves the checkout: ${name}`);
+  }
+  return { path: name, target };
+}
+
 /** Validate the entire cache manifest before changing any source mtime. */
 function validateManifest(manifest) {
-  if (!exactKeys(manifest, ['version', 'files']) || manifest.version !== 1 || !Array.isArray(manifest.files)) {
+  if ((!exactKeys(manifest, ['version', 'files']) && !exactKeys(manifest, ['version', 'files', 'links'])) || manifest.version !== 1 || !Array.isArray(manifest.files)) {
     throw new Error('Invalid source mtime manifest schema');
   }
   const records = new Map();
@@ -107,7 +128,19 @@ function validateManifest(manifest) {
     }
     records.set(entry.path, entry);
   }
-  return records;
+  const links = new Map();
+  if (manifest.links !== undefined && !Array.isArray(manifest.links)) {
+    throw new Error('Invalid source mtime manifest links');
+  }
+  for (const entry of manifest.links || []) {
+    if (!exactKeys(entry, ['path', 'target']) || !safeSourcePath(entry.path) ||
+        typeof entry.target !== 'string' || !entry.target || entry.target.includes('\0') ||
+        links.has(entry.path) || records.has(entry.path)) {
+      throw new Error('Invalid source mtime manifest link');
+    }
+    links.set(entry.path, entry);
+  }
+  return { files: records, links };
 }
 
 async function targetDirectory(root, create) {
@@ -140,8 +173,12 @@ async function readManifest(root) {
 async function saveSourceMtimes({ cwd = process.cwd(), log = console.log } = {}) {
   const root = await repositoryRoot(cwd);
   const files = [];
+  const links = [];
   for (const name of await listTrackedFiles(root)) {
-    const handle = await openSource(root, name);
+    const handle = await openSource(root, name, false, async (linkName, filename) => {
+      if (linkName !== name) throw new Error(`Tracked source has a symlink parent: ${name}`);
+      links.push(await sourceLink(root, linkName, filename));
+    });
     if (!handle) continue;
     try {
       const { sha256, stat } = await hashSource(handle);
@@ -150,7 +187,7 @@ async function saveSourceMtimes({ cwd = process.cwd(), log = console.log } = {})
       await handle.close();
     }
   }
-  const manifest = { version: 1, files };
+  const manifest = { version: 1, files, links };
   validateManifest(manifest);
   const target = await targetDirectory(root, true);
   const destination = path.join(root, MANIFEST_PATH);
@@ -180,10 +217,18 @@ async function restoreSourceMtimes({ cwd = process.cwd(), log = console.log } = 
   // Iterate ONLY the current Git allowlist. Safe names left over from another
   // commit's manifest (deleted/renamed sources) are ignored, never opened.
   for (const name of await listTrackedFiles(root)) {
-    const handle = await openSource(root, name);
+    const handle = await openSource(root, name, true, async (linkName, filename) => {
+      const link = await sourceLink(root, linkName, filename);
+      // Missing manifests touch every regular source/Cargo.toml, forcing a
+      // rebuild. With a manifest, never silently reuse artifacts across a
+      // regular-file -> symlink transition or a changed/new symlink target.
+      if (records && (linkName !== name || records.links.get(name)?.target !== link.target)) {
+        throw new Error(`Source symlink changed; rebuild the cache before restoring mtimes: ${name}`);
+      }
+    });
     if (!handle) continue;
     try {
-      const entry = records?.get(name);
+      const entry = records?.files.get(name);
       const { sha256, stat } = entry ? await hashSource(handle) : { stat: await handle.stat() };
       const matches = entry && entry.sha256 === sha256;
       await handle.utimes(stat.atime, (matches ? entry.mtimeMs : now) / 1000);
