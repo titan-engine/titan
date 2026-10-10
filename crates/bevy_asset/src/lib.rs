@@ -675,6 +675,7 @@ impl AssetApp for App {
             .add_message::<AssetEvent<A>>()
             .add_message::<AssetLoadFailedEvent<A>>()
             .register_type::<Handle<A>>()
+            .register_type_data::<Handle<A>, ReflectHandle>()
             .add_systems(
                 PostUpdate,
                 Assets::<A>::asset_events

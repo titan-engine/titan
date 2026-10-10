@@ -1,9 +1,10 @@
 # `titan_inspect`
 
-Read-only, bounded schedule inspection for agents using the Bevy Remote Protocol
+Read-only, bounded schedule and asset inspection for agents using the Bevy Remote Protocol
 (BRP). This is separate from `titan_remote`: that crate controls time and captures
-screenshots; this crate describes the code that changes the world. Neither
-requires the other. No upstream Bevy code is modified.
+screenshots; this crate describes schedules and asset diagnostics. Neither
+requires the other. Asset inspection uses small read-only additions to Bevy's
+asset enumeration and handle reflection metadata; it never reflects asset contents.
 
 ```rust,no_run
 use bevy_app::App;
@@ -113,6 +114,103 @@ For example, two unordered `Query<EntityMut>` systems produce a pair like:
 Explicitly ignored ambiguities are omitted, just as they are by Bevy. Detection works even
 with the default `ambiguity_detection: Ignore` logging setting.
 
+### `titan.assets`
+
+Requires `AssetPlugin` and types registered with Bevy's usual `init_asset::<T>()`
+(already done by built-in asset plugins). Neither asset `Reflect` nor
+`register_asset_reflect` is required. Without an asset plugin the list is empty.
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"titan.assets","params":{"state":"failed","path_prefix":"textures/","limit":64}}
+```
+
+Example result (IDs are illustrative, session-local opaque strings):
+
+```json
+{"items":[{"id":"game::Texture:index:7","path":"textures/missing.png","type":"game::Texture","state":"failed","error":"Path not found: textures/missing.png","server_managed":true,"dependency_state":"failed","dependency_error":"Path not found: textures/missing.png","recursive_dependency_state":"failed","recursive_dependency_error":"Path not found: textures/missing.png","dependencies":null,"dependency_chain":{"items":[],"total":0,"truncated":false},"dependency_chain_complete":false}],"total":1,"truncated":false}
+```
+
+Optional filters are combined with AND, applied **before** computing `total`
+and truncating:
+
+- `type`: exact full asset type path (as returned in `type`).
+- `state`: `not_loaded`, `loading`, `loaded`, or `failed`, for the asset
+  **itself**. A loaded scene with a failed texture still has `state: "loaded"`;
+  inspect its dependency states to diagnose it.
+- `path_prefix`: case-sensitive string prefix of the full Bevy asset path,
+  including source and label where present. Pathless assets never match a prefix,
+  even the empty prefix. Omit this filter to include them.
+
+Assets are sorted by path (null first), then type, then session-local ID. IDs
+identify records and dependency links within the current app, not across runs.
+The list combines server-tracked assets (including loading/failed ones) and
+stored `Assets<T>` values, deduplicated by ID. No strong handles are retained.
+Assets created in code have `path: null`. Stored assets outside the server have
+`state: "loaded"`, `server_managed: false`, and null server dependency states:
+this means present in storage, not a fabricated server load result. An unknown
+referenced asset has null state; an unavailable type name is null, not guessed.
+
+`dependencies` lists declared **direct** dependencies with ID, path, type,
+state, and error. `dependency_chain` is a breadth-first list of edges across
+reachable dependencies. Each edge has `parent_id` and the dependency's summary.
+Sibling edges use the same sort order as assets; duplicate IDs are deduplicated
+per parent and cycles are visited once. The request limit independently bounds
+both lists, and each reports its full `total` and `truncated`.
+
+For example, a scene whose parent asset references a missing texture reports:
+
+```json
+{"id":"game::Scene:index:1","path":"scene.demo","state":"loaded","dependency_state":"loaded","recursive_dependency_state":"failed","recursive_dependency_error":"Path not found: missing.demo","dependency_chain":{"items":[{"parent_id":"game::Scene:index:1","id":"game::Scene:index:2","path":"parent.demo","type":"game::Scene","state":"loaded","error":null},{"parent_id":"game::Scene:index:2","id":"game::Scene:index:3","path":"missing.demo","type":"game::Scene","state":"failed","error":"Path not found: missing.demo"}],"total":2,"truncated":false},"dependency_chain_complete":false}
+```
+
+This excerpt omits the direct list and other fields. Dependency graphs come from
+`VisitAssetDependencies` on **stored** values. If an asset is not yet stored
+(loading/failed), its direct list is `null`, not an invented empty list. If any
+reachable node cannot be visited, `dependency_chain_complete` is false. This
+flag describes graph availability, independently of page truncation. Failed
+leaf assets thus make it false even when the useful chain to that failure is
+visible. Embedded dependencies loaded inside a loader and not declared on the
+asset value cannot be reconstructed; server dependency errors are still reported
+where available. No dependency edges are inferred merely from matching errors.
+
+### `titan.asset_failures`
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"titan.asset_failures","params":{"path_prefix":"textures/","limit":64}}
+```
+
+Example result:
+
+```json
+{"items":[{"sequence":1,"id":"game::Texture:index:7","path":"textures/missing.png","type":"game::Texture","state":"failed","error":"Path not found: textures/missing.png"}],"total":1,"truncated":false,"capacity":256,"dropped":0,"history_truncated":false}
+```
+
+Captures every `UntypedAssetLoadFailedEvent` in `Last`, before BRP dispatch,
+independently of whether anyone polls. Install `InspectPlugin` before startup
+loads to retain startup failures. The fixed **256-record** FIFO ring survives
+message expiry, dropping handles, and later successful reloads. Repeated failures
+of the same asset are separate records. Results are newest-first; `sequence`
+is a monotonically increasing capture number, not a timestamp. Optional `type`
+and `path_prefix` filters work as above; a `state` parameter is not accepted
+because every record is a failure. `total` counts matching **retained** records.
+`dropped` counts all evicted records (before filtering), and
+`history_truncated` explicitly reports retention loss, distinct from response
+page truncation. These are historical errors, not claims about current state.
+Failures of pathless `AssetServer::add_async` assets retain `path: null` and
+never match `path_prefix`, including an empty prefix. History queries read only
+registered type metadata and the bounded ring, never enumerating live asset
+storage or server IDs; their cost is independent of the live asset count.
+
+Both asset methods are read-only: they never load, reload, or retain assets.
+A BRP handler does not advance tasks, alter asset storage, or drain messages.
+
+Run `cargo run -p titan_inspect --example assets` for a headless in-memory
+asset source that loads a valid asset, a missing one, and a scene with a failed
+transitive dependency, then prints both responses through BRP's request mailbox.
+The shared fixture is tested over that same BRP dispatcher, including failure
+retention for 300 frames, filtering, nested truncation, ring eviction, pathless
+and UUID assets, cycles, and a loading-state/read-only check.
+
 ## Availability and stability
 
 These methods never initialize, run, rebuild, or reconfigure schedules, and never
@@ -160,5 +258,4 @@ ordered/unordered systems and a set condition, printing all three BRP responses.
 
 Tests exercise all three methods through BRP's actual request mailbox, including
 repeated calls, fresh app launches, ordering, conditions, conflicts, and limits.
-The `schedules` module owns this area so asset inspection (#76) can be added as
-an independent module and method registration.
+The `schedules` and `assets` modules own their inspection areas independently.

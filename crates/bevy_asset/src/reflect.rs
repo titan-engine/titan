@@ -1,4 +1,4 @@
-use alloc::{borrow::Cow, boxed::Box, format};
+use alloc::{borrow::Cow, boxed::Box, format, vec::Vec};
 use core::any::{Any, TypeId};
 use serde::{de::Error as _, ser::Error as _, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
@@ -205,6 +205,10 @@ impl<A: Asset + FromReflect> CreateTypeData<A> for ReflectAsset {
 
 /// Reflect type data struct relating a [`Handle<T>`] back to the `T` asset type.
 ///
+/// Registered automatically by [`init_asset`](crate::AssetApp::init_asset), even
+/// when the asset contents do not implement [`Reflect`]. Its read-only metadata
+/// methods can enumerate stored IDs and declared dependencies without exposing contents.
+///
 /// Say you want to look up the asset values of a list of handles when you have access to their `&dyn Reflect` form.
 /// Assets can be looked up in the world using [`ReflectAsset`], but how do you determine which [`ReflectAsset`] to use when
 /// only looking at the handle? [`ReflectHandle`] is stored in the type registry on each `Handle<T>` type, so you can use [`ReflectHandle::asset_type_id`] to look up
@@ -233,12 +237,35 @@ pub struct ReflectHandle {
     asset_type_id: TypeId,
     downcast_handle_untyped: fn(&dyn Any) -> Option<UntypedHandle>,
     typed: fn(UntypedHandle) -> Box<dyn Reflect>,
+    asset_type_path: &'static str,
+    ids: for<'w> fn(&'w World) -> Box<dyn Iterator<Item = UntypedAssetId> + 'w>,
+    dependencies: fn(&World, UntypedAssetId) -> Option<Vec<UntypedAssetId>>,
 }
 
 impl ReflectHandle {
     /// The [`TypeId`] of the asset
     pub fn asset_type_id(&self) -> TypeId {
         self.asset_type_id
+    }
+
+    /// The full type path of the asset, even if its contents are not reflected.
+    pub fn asset_type_path(&self) -> &'static str {
+        self.asset_type_path
+    }
+
+    /// IDs present in the corresponding `Assets<T>` resource.
+    ///
+    /// Returns an empty iterator if the resource is absent. Does not retain handles.
+    pub fn ids<'w>(&self, world: &'w World) -> impl Iterator<Item = UntypedAssetId> + 'w {
+        (self.ids)(world)
+    }
+
+    /// The stored asset's declared direct dependencies, without retaining handles.
+    ///
+    /// Returns `None` if the asset or its storage is absent. This visits
+    /// `VisitAssetDependencies`, not embedded loader dependencies or asset contents.
+    pub fn dependencies(&self, world: &World, id: UntypedAssetId) -> Option<Vec<UntypedAssetId>> {
+        (self.dependencies)(world, id)
     }
 
     /// A way to go from a [`Handle<T>`] in a `dyn Any` to a [`UntypedHandle`]
@@ -263,6 +290,19 @@ impl<A: Asset> CreateTypeData<Handle<A>> for ReflectHandle {
                     .map(|h| h.clone().untyped())
             },
             typed: |handle: UntypedHandle| Box::new(handle.typed_debug_checked::<A>()),
+            asset_type_path: A::type_path(),
+            ids: |world| match world.get_resource::<Assets<A>>() {
+                Some(assets) => Box::new(assets.ids().map(AssetId::untyped)),
+                None => Box::new(core::iter::empty()),
+            },
+            dependencies: |world, id| {
+                let asset = world
+                    .get_resource::<Assets<A>>()?
+                    .get(id.try_typed::<A>().ok()?)?;
+                let mut dependencies = Vec::new();
+                asset.visit_dependencies(&mut |id| dependencies.push(id));
+                Some(dependencies)
+            },
         }
     }
 }

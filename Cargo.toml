@@ -818,6 +818,12 @@ path = "crates/titan_determinism/examples/hashmap_order.rs"
 description = "Locate an order-dependent HashMap bug in repeated headless simulations"
 command = "cargo run -p titan_determinism --example hashmap_order"
 
+[package.metadata.titan-example.assets]
+name = "Headless asset diagnostics"
+path = "crates/titan_inspect/examples/assets.rs"
+description = "Inspect loaded, missing, and dependency-failed assets through BRP"
+command = "cargo run -p titan_inspect --example assets"
+
 [package.metadata.example.context_menu]
 name = "Context Menu"
 description = "Example of a context menu"

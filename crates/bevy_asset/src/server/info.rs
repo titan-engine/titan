@@ -338,6 +338,10 @@ impl AssetInfos {
         }
     }
 
+    pub(crate) fn ids(&self) -> impl Iterator<Item = ErasedAssetIndex> + '_ {
+        self.infos.keys().copied()
+    }
+
     pub(crate) fn get(&self, index: ErasedAssetIndex) -> Option<&AssetInfo> {
         self.infos.get(&index)
     }
