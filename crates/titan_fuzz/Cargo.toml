@@ -1,0 +1,38 @@
+[package]
+name = "titan_fuzz"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Headless input fuzzing with gameplay invariants and shrinking for Titan"
+repository = "https://github.com/titan-engine/titan"
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "titan", "testing", "fuzzing", "gamedev"]
+categories = ["game-development", "development-tools::testing"]
+
+[dependencies]
+bevy_ecs = { path = "../bevy_ecs", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_transform = { path = "../bevy_transform", version = "0.20.0", default-features = false, features = [
+  "std",
+  "bevy-support",
+] }
+serde = { version = "1", features = ["derive"] }
+titan_test = { path = "../titan_test", version = "0.1.0" }
+
+[dev-dependencies]
+bevy_math = { path = "../bevy_math", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_app = { path = "../bevy_app", version = "0.20.0", default-features = false, features = [
+  "std",
+] }
+bevy_input = { path = "../bevy_input", version = "0.20.0", default-features = false, features = [
+  "std",
+  "keyboard",
+  "mouse",
+] }
+ron = "0.12"
+
+[lints]
+workspace = true
