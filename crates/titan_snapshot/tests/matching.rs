@@ -140,9 +140,7 @@ fn names_pair_reordered_runs_and_normalize_hierarchy_nested_and_resource_referen
         diff,
         serde_json::from_str::<MatchedWorldDiff>(&encoded).unwrap()
     );
-    assert!(diff
-        .to_string()
-        .contains(r#"{"kind":"name","name":"Parent"}"#));
+    assert_eq!(diff.to_string(), "No observable differences.\n");
     let saved: WorldSnapshot =
         serde_json::from_str(&serde_json::to_string(&before).unwrap()).unwrap();
     assert!(saved
@@ -298,8 +296,10 @@ fn duplicate_and_missing_names_never_fall_back_to_ids_or_drop_entities() {
                 .count(),
             2
         );
-        assert!(diff.to_string().contains("DuplicateKey"));
-        assert!(diff.to_string().contains("MissingKey"));
+        assert!(diff
+            .to_string()
+            .contains("duplicate key Name(\"Duplicate\")"));
+        assert!(diff.to_string().contains("missing key"));
         assert_eq!(
             diff,
             serde_json::from_str(&serde_json::to_string(&diff).unwrap()).unwrap()

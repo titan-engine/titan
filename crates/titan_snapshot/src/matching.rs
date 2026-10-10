@@ -4,7 +4,9 @@ use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{DiffConfig, EntityId, EntitySnapshot, SnapshotValue, WorldDiff, WorldSnapshot};
+use crate::{
+    ChangeKind, DiffConfig, EntityId, EntitySnapshot, SnapshotValue, WorldDiff, WorldSnapshot,
+};
 
 /// How to identify logical entities. No fuzzy matching or ID fallback is used.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,6 +122,8 @@ pub struct MatchDiagnostic {
 /// later ID for additions. Consult `matches` for both IDs and the key. IDs may
 /// overlap across runs, so combine the ID with the change kind when looking up
 /// an addition/removal. Lists are deterministic; matches include unchanged pairs.
+/// Text output shows keys and ID transitions inline only for changed entities,
+/// plus all diagnostics. JSON retains the complete match list.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MatchedWorldDiff {
     /// Structural differences; reflected entity references use keys where possible.
@@ -351,22 +355,119 @@ fn normalize_value(value: &mut Value, keys: &BTreeMap<EntityId, Value>) {
 
 impl core::fmt::Display for MatchedWorldDiff {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.is_empty() {
+            return f.write_str("No observable differences.\n");
+        }
+        // IDs can overlap across runs. Index pairs, additions, and removals
+        // separately so an unmatched removal never borrows an addition's key.
+        let mut changed = BTreeMap::new();
+        let mut added = BTreeMap::new();
+        let mut removed = BTreeMap::new();
         for identity in &self.matches {
-            writeln!(
-                f,
-                "match {}: {:?} -> {:?}",
-                serde_json::to_string(&identity.key).map_err(|_| core::fmt::Error)?,
-                identity.before,
-                identity.after
-            )?;
+            match (identity.before, identity.after) {
+                (Some(before), Some(_)) => {
+                    changed.insert(before, identity);
+                }
+                (Some(before), None) => {
+                    removed.insert(before, identity);
+                }
+                (None, Some(after)) => {
+                    added.insert(after, identity);
+                }
+                (None, None) => {}
+            }
         }
+        let mut before_problems = BTreeMap::new();
+        let mut after_problems = BTreeMap::new();
         for diagnostic in &self.diagnostics {
-            writeln!(
-                f,
-                "unmatched {:?} {}: {:?}",
-                diagnostic.side, diagnostic.entity, diagnostic.problem
-            )?;
+            let (side, problems) = match diagnostic.side {
+                SnapshotSide::Before => ("before", &mut before_problems),
+                SnapshotSide::After => ("after", &mut after_problems),
+            };
+            problems.insert(diagnostic.entity, &diagnostic.problem);
+            write!(f, "unmatched {side} {}: ", diagnostic.entity)?;
+            match &diagnostic.problem {
+                MatchProblem::MissingKey => f.write_str("missing key")?,
+                MatchProblem::OpaqueKey => f.write_str("opaque key")?,
+                MatchProblem::DuplicateKey { key } => {
+                    write!(f, "duplicate key {}", DisplayKey(key))?;
+                }
+            }
+            writeln!(f)?;
         }
-        core::fmt::Display::fmt(&self.diff, f)
+        for entity in &self.diff.entities {
+            let (identities, problems) = match entity.kind {
+                ChangeKind::Changed => (&changed, None),
+                ChangeKind::Added => (&added, Some(&after_problems)),
+                ChangeKind::Removed => (&removed, Some(&before_problems)),
+            };
+            write!(f, "{} ", crate::diff::marker(entity.kind))?;
+            let key = if let Some(identity) = identities.get(&entity.entity) {
+                write!(f, "{} ", DisplayKey(&identity.key))?;
+                display_id(f, identity.before)?;
+                f.write_str(" -> ")?;
+                display_id(f, identity.after)?;
+                Some(&identity.key)
+            } else if let Some(problem) = problems.and_then(|problems| problems.get(&entity.entity))
+            {
+                let key = match problem {
+                    MatchProblem::DuplicateKey { key } => {
+                        write!(f, "{} ", DisplayKey(key))?;
+                        Some(key)
+                    }
+                    _ => {
+                        f.write_str("unkeyed ")?;
+                        None
+                    }
+                };
+                let (before, after) = match entity.kind {
+                    ChangeKind::Removed => (Some(entity.entity), None),
+                    _ => (None, Some(entity.entity)),
+                };
+                display_id(f, before)?;
+                f.write_str(" -> ")?;
+                display_id(f, after)?;
+                key
+            } else {
+                // Retain readable output for manually assembled diffs that do
+                // not carry matching metadata, rather than inventing a key.
+                write!(f, "{}", entity.entity)?;
+                None
+            };
+            if !matches!(key, Some(EntityKey::Name { .. }))
+                && let Some(name) = entity.after_name.as_ref().or(entity.before_name.as_ref())
+            {
+                write!(f, " {name:?}")?;
+            }
+            writeln!(f)?;
+            crate::diff::display_entity_details(f, entity)?;
+        }
+        for resource in &self.diff.resources {
+            crate::diff::display_value(f, "", "resource ", resource)?;
+        }
+        Ok(())
+    }
+}
+
+fn display_id(f: &mut core::fmt::Formatter<'_>, id: Option<EntityId>) -> core::fmt::Result {
+    match id {
+        Some(id) => write!(f, "{id}"),
+        None => f.write_str("(none)"),
+    }
+}
+
+// Private formatting adapter: the public key type and JSON representation stay
+// unchanged, while text uses concise names and EntityId's Display form.
+struct DisplayKey<'a>(&'a EntityKey);
+
+impl core::fmt::Display for DisplayKey<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            EntityKey::Id { id } => write!(f, "Id({id})"),
+            EntityKey::Name { name } => write!(f, "Name({name:?})"),
+            EntityKey::Component { type_path, value } => {
+                write!(f, "Component({type_path:?}, {value})")
+            }
+        }
     }
 }

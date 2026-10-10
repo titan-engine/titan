@@ -346,16 +346,7 @@ impl fmt::Display for WorldDiff {
                 write!(f, " {name:?}")?;
             }
             writeln!(f)?;
-            if entity.kind == ChangeKind::Changed && entity.before_name != entity.after_name {
-                writeln!(
-                    f,
-                    "    name: {:?} -> {:?}",
-                    entity.before_name, entity.after_name
-                )?;
-            }
-            for component in &entity.components {
-                display_value(f, "    ", "", component)?;
-            }
+            display_entity_details(f, entity)?;
         }
         for resource in &self.resources {
             display_value(f, "", "resource ", resource)?;
@@ -364,7 +355,24 @@ impl fmt::Display for WorldDiff {
     }
 }
 
-fn marker(kind: ChangeKind) -> &'static str {
+pub(crate) fn display_entity_details(
+    f: &mut fmt::Formatter<'_>,
+    entity: &EntityDiff,
+) -> fmt::Result {
+    if entity.kind == ChangeKind::Changed && entity.before_name != entity.after_name {
+        writeln!(
+            f,
+            "    name: {:?} -> {:?}",
+            entity.before_name, entity.after_name
+        )?;
+    }
+    for component in &entity.components {
+        display_value(f, "    ", "", component)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn marker(kind: ChangeKind) -> &'static str {
     match kind {
         ChangeKind::Added => "+",
         ChangeKind::Removed => "-",
@@ -372,7 +380,7 @@ fn marker(kind: ChangeKind) -> &'static str {
     }
 }
 
-fn display_value(
+pub(crate) fn display_value(
     f: &mut fmt::Formatter<'_>,
     indent: &str,
     label: &str,

@@ -170,8 +170,25 @@ data is retained. `MatchedWorldDiff::is_empty()` includes diagnostics, so a gold
 assertion cannot silently pass with uncomparable entities.
 
 `matches` lists each unambiguous key with its `before` and `after` IDs, including
-unchanged entities and keys present on only one side. Text and JSON both show these
-keys. Structural `EntityDiff::entity` is the earlier ID for pairs/removals and the
+unchanged entities and keys present on only one side. JSON retains this complete
+list. Text shows keys inline only for entities with structural changes, plus all
+diagnostics, so unchanged matches do not obscure a golden-file failure:
+
+```text
+~ Name("Player") 3v1 -> 5v1
+    ~ game::Health
+        value: 100 -> 90
+- Name("Enemy") 4v1 -> (none)
++ Name("Projectile") (none) -> 6v1
+```
+
+The `~`, `-`, and `+` markers mean changed, removed, and added, respectively, as in
+`WorldDiff`. Component keys appear as `Component("game::StableId", {"number":7})`;
+ID keys use `Id(3v1)`. Missing/opaque keys are labeled `unkeyed`, and duplicate keys
+remain visible alongside their diagnostics. An empty matched diff prints only
+`No observable differences.`
+
+Structural `EntityDiff::entity` is the earlier ID for pairs/removals and the
 later ID for additions. IDs can overlap between runs; use change kind and the
 side-aware match/diagnostic metadata to resolve them. Names need not stay constant
 when using a stable component key: a rename is then an ordinary changed entity.
