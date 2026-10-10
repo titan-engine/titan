@@ -32,6 +32,11 @@ case "$mode" in
     ;;
   test)
     cargo test "${packages[@]}" --lib --bins --tests --features bevy_ecs/track_location,bevy_remote/bevy_render
+    if [[ ${RUNNER_OS:-$(uname -s)} == Linux ]]; then
+      # Match tools/ci's Linux benchmark smoke run: no extra feature flags.
+      # Windows/macOS keep the full driver's --skip-benches behavior.
+      cargo test "${packages[@]}" --benches
+    fi
     ;;
   *)
     echo "Unknown scoped CI mode: $mode" >&2

@@ -119,6 +119,11 @@ cross-crate consumer coverage and automatically includes new Titan packages.
 `check-doc` scopes default-feature doctests and all-feature rustdoc, with warnings
 denied. `titan-tests` adds scoped default-feature tests when the Bevy workspace
 build is skipped, retaining its existing per-crate extra-feature/headless tests.
+The Linux scoped `test` path also runs `cargo test <Titan packages> --benches`
+without extra feature flags, matching the full CI driver's benchmark smoke run.
+Windows/macOS still skip benchmark smoke tests, matching `--skip-benches` in the
+full build recipe. `RUNNER_OS` selects this policy in Actions; local invocations
+fall back to `uname -s`.
 The `bevy_remote/bevy_render` feature matches workspace feature unification and
 avoids upstream HTTP-only dead-code warnings. Dependencies still compile as
 needed; their own tests and Bevy-wide platform builds are not run on this fast
@@ -162,7 +167,9 @@ unknown paths, deletions, renames, unusual filenames, diverged PR bases,
 multiple merge-group entries and fail-safe behavior. They also execute the
 composite action's actual selection shell block for diff/non-diff events,
 script failures, malformed outputs and CRLF results, and verify scoped Cargo
-command flags with both LF and CRLF metadata/jq output.
+command flags with both LF and CRLF metadata/jq output, including Linux-only
+benchmark smoke selection and its absence on Windows/macOS. The three-OS
+helper checks are permanent cheap steps in existing jobs, not temporary jobs.
 Run real full CI when changing this shared infrastructure. To demonstrate the
 fast path before it lands, open a temporary PR against a branch containing the
 implementation in an Actions-enabled fork, with only a Titan-path change in
