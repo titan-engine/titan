@@ -32,9 +32,10 @@ use bevy_platform::collections::HashMap;
 use bevy_remote::{
     builtin_methods::{
         BrpDespawnEntityParams, BrpInsertComponentsParams, BrpListComponentsParams,
-        BrpListComponentsResponse, BrpObserveParams, BrpSpawnEntityParams, BrpSpawnEntityResponse,
-        BRP_DESPAWN_COMPONENTS_METHOD, BRP_INSERT_COMPONENTS_METHOD, BRP_LIST_COMPONENTS_METHOD,
-        BRP_OBSERVE_METHOD, BRP_SPAWN_ENTITY_METHOD, RPC_DISCOVER_METHOD,
+        BrpListComponentsResponse, BrpObserveParams, BrpRemoveComponentsParams,
+        BrpSpawnEntityParams, BrpSpawnEntityResponse, BRP_DESPAWN_COMPONENTS_METHOD,
+        BRP_INSERT_COMPONENTS_METHOD, BRP_LIST_COMPONENTS_METHOD, BRP_OBSERVE_METHOD,
+        BRP_REMOVE_COMPONENTS_METHOD, BRP_SPAWN_ENTITY_METHOD, RPC_DISCOVER_METHOD,
     },
     BrpError, BrpRequest,
 };
@@ -48,6 +49,9 @@ const TITAN_SCREENSHOT_WATCH: &str = "titan.screenshot+watch";
 const TITAN_SCREENSHOT_STATUS: &str = "titan.screenshot_status";
 
 const SCREENSHOT_COMPONENT: &str = "bevy_render::view::window::screenshot::Screenshot";
+/// Unreflected marker the renderer adds once it owns a screenshot's readback.
+/// `world.list_components` reports it by its Rust type name.
+const CAPTURING_COMPONENT: &str = "bevy_render::view::window::screenshot::Capturing";
 const SCREENSHOT_CAPTURED_EVENT: &str = "bevy_render::view::window::screenshot::ScreenshotCaptured";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -523,6 +527,7 @@ fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String
     let guard = DespawnGuard {
         client,
         entity: Some(entity),
+        capture_requested: false,
     };
     let observe = BrpObserveParams {
         event: SCREENSHOT_CAPTURED_EVENT.to_owned(),
@@ -554,6 +559,8 @@ fn capture_observe(client: &Client, deadline: Instant) -> Result<Vec<u8>, String
             .map_err(|e| format!("couldn't start the screenshot observer reader: {e}"))?;
         let result = (|| {
             wait_for_observer(client, entity, &receiver, deadline)?;
+            // Even a failed or timed-out insert may have reached the game.
+            guard.capture_requested = true;
             client.call_with_deadline(
                 BRP_INSERT_COMPONENTS_METHOD,
                 Some(to_params(&BrpInsertComponentsParams {
@@ -641,17 +648,52 @@ fn registration_result(result: Result<ReflectedImage, String>) -> Result<(), Str
 struct DespawnGuard<'a> {
     client: &'a Client,
     entity: Option<Entity>,
+    /// Whether `Screenshot` may have been inserted, so the renderer may own it.
+    capture_requested: bool,
+}
+
+impl DespawnGuard<'_> {
+    /// Whether the entity is safe to despawn. Once the renderer has extracted
+    /// the capture (`Capturing`), Bevy inserts `Captured` on delivery, which
+    /// panics if the entity is gone; Bevy despawns such entities itself.
+    fn renderer_released(&self, entity: Entity, deadline: Instant) -> Result<bool, String> {
+        // Removing `Screenshot` first stops any later extraction, so the
+        // `Capturing` check below can't race the renderer.
+        let remove = BrpRemoveComponentsParams {
+            entity,
+            components: vec![SCREENSHOT_COMPONENT.to_owned()],
+        };
+        self.client.call_with_deadline(
+            BRP_REMOVE_COMPONENTS_METHOD,
+            Some(to_params(&remove)?),
+            deadline,
+        )?;
+        let list = to_params(&BrpListComponentsParams { entity })?;
+        let components: BrpListComponentsResponse = serde_json::from_value(
+            self.client
+                .call_with_deadline(BRP_LIST_COMPONENTS_METHOD, Some(list), deadline)?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(!components.iter().any(|name| name == CAPTURING_COMPONENT))
+    }
 }
 
 impl Drop for DespawnGuard<'_> {
     fn drop(&mut self) {
-        if let Some(entity) = self.entity.take()
-            && let Ok(params) = to_params(&BrpDespawnEntityParams { entity })
-        {
+        let Some(entity) = self.entity.take() else {
+            return;
+        };
+        // All cleanup requests share the documented budget.
+        let deadline = Instant::now() + CLEANUP_BUDGET;
+        // If ownership can't be confirmed, leaking one entity beats crashing the game.
+        if self.capture_requested && !self.renderer_released(entity, deadline).unwrap_or(false) {
+            return;
+        }
+        if let Ok(params) = to_params(&BrpDespawnEntityParams { entity }) {
             let _ = self.client.call_with_deadline(
                 BRP_DESPAWN_COMPONENTS_METHOD,
                 Some(params),
-                Instant::now() + CLEANUP_BUDGET,
+                deadline,
             );
         }
     }
@@ -1017,6 +1059,12 @@ mod tests {
                 }
                 reply
             }
+            // Like BRP, reject requests for the entity once the game despawned it.
+            BRP_LIST_COMPONENTS_METHOD | BRP_REMOVE_COMPONENTS_METHOD
+                if live_entity.lock().unwrap().is_none() =>
+            {
+                Reply::Error("Entity not found")
+            }
             BRP_LIST_COMPONENTS_METHOD => {
                 assert_eq!(
                     live_entity.lock().unwrap().as_ref(),
@@ -1337,17 +1385,19 @@ mod tests {
             RPC_DISCOVER_METHOD => discover(&[]),
             BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 6 })),
             BRP_OBSERVE_METHOD => Reply::Sse(vec![], Duration::from_secs(10)),
-            BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
             _ => panic!("unexpected {method}"),
         });
         let start = Instant::now();
         let err = capture(&client, &json!({ "timeout_secs": 0.3 })).unwrap_err();
         assert!(err.contains("timed out"), "{err}");
         assert!(start.elapsed() < Duration::from_secs(3));
-        assert_eq!(
-            methods(&calls).last().unwrap(),
-            BRP_DESPAWN_COMPONENTS_METHOD
-        );
+        // This stub's game despawned the entity on insertion. Cleanup that can't
+        // confirm the renderer released it must leave it alone.
+        let methods = methods(&calls);
+        assert_eq!(methods.last().unwrap(), BRP_REMOVE_COMPONENTS_METHOD);
+        assert!(!methods
+            .iter()
+            .any(|method| method == BRP_DESPAWN_COMPONENTS_METHOD));
     }
 
     #[test]
@@ -1468,7 +1518,9 @@ mod tests {
                 Reply::Json(json!([core::any::type_name::<ObservedBy>()]))
             }
             BRP_INSERT_COMPONENTS_METHOD => Reply::Error("Screenshot type unavailable"),
-            BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
+            BRP_REMOVE_COMPONENTS_METHOD | BRP_DESPAWN_COMPONENTS_METHOD => {
+                Reply::Json(Value::Null)
+            }
             _ => panic!("unexpected {method}"),
         });
         let start = Instant::now();
@@ -1481,6 +1533,65 @@ mod tests {
         assert_eq!(
             methods(&calls).last().unwrap(),
             BRP_DESPAWN_COMPONENTS_METHOD
+        );
+    }
+
+    #[test]
+    fn capturing_marker_matches_bevy_type_name() {
+        assert_eq!(
+            CAPTURING_COMPONENT,
+            core::any::type_name::<bevy_render::view::window::screenshot::Capturing>()
+        );
+    }
+
+    /// Times out after inserting `Screenshot`, with `extracted` deciding whether
+    /// the renderer has taken ownership. Returns the BRP methods called.
+    fn timeout_after_insert(extracted: bool) -> Vec<String> {
+        let (client, calls) = stub(move |method, _| match method {
+            RPC_DISCOVER_METHOD => discover(&[]),
+            BRP_SPAWN_ENTITY_METHOD => Reply::Json(json!({ "entity": 10 })),
+            BRP_OBSERVE_METHOD => Reply::Sse(vec![], Duration::from_secs(2)),
+            BRP_LIST_COMPONENTS_METHOD => {
+                let mut components = vec![core::any::type_name::<ObservedBy>()];
+                if extracted {
+                    components.push(CAPTURING_COMPONENT);
+                }
+                Reply::Json(json!(components))
+            }
+            BRP_INSERT_COMPONENTS_METHOD
+            | BRP_REMOVE_COMPONENTS_METHOD
+            | BRP_DESPAWN_COMPONENTS_METHOD => Reply::Json(Value::Null),
+            _ => panic!("unexpected {method}"),
+        });
+        let err = capture(&client, &json!({ "timeout_secs": 0.3 })).unwrap_err();
+        assert!(err.contains("timed out"), "{err}");
+        methods(&calls)
+    }
+
+    #[test]
+    fn timeouts_never_despawn_renderer_owned_captures() {
+        let methods = timeout_after_insert(true);
+        let removed = methods
+            .iter()
+            .position(|method| method == BRP_REMOVE_COMPONENTS_METHOD)
+            .expect("Screenshot must be removed before checking ownership");
+        assert_eq!(methods[removed + 1..], [BRP_LIST_COMPONENTS_METHOD]);
+        assert!(!methods
+            .iter()
+            .any(|method| method == BRP_DESPAWN_COMPONENTS_METHOD));
+    }
+
+    #[test]
+    fn timeouts_despawn_unextracted_captures() {
+        let methods = timeout_after_insert(false);
+        let len = methods.len();
+        assert_eq!(
+            methods[len - 3..],
+            [
+                BRP_REMOVE_COMPONENTS_METHOD,
+                BRP_LIST_COMPONENTS_METHOD,
+                BRP_DESPAWN_COMPONENTS_METHOD
+            ]
         );
     }
 

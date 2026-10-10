@@ -905,6 +905,46 @@ fn click_rejects_unrepresentable_delta_before_mutating_or_sending_input() {
 }
 
 #[test]
+fn click_rejects_out_of_window_positions_before_mutating_or_sending_input() {
+    let fixture = Fixture::start(false);
+    let window = fixture.query(json!({"components":[],"with":["Window","PrimaryWindow"]}))[0]
+        ["entity"]
+        .clone();
+    fixture.tool("set_component", json!({"entity":window,"component":"Window","path":"resolution.scale_factor_override","value":2.0}));
+    let component = fixture.tool(
+        "get_components",
+        json!({"entity":window,"components":["Window"],"strict":true}),
+    );
+    let resolution = &component[Window::type_path()]["resolution"];
+    // Logical bounds are the physical size divided by the effective scale.
+    let width = resolution["physical_width"].as_f64().unwrap() / 2.0;
+    let height = resolution["physical_height"].as_f64().unwrap() / 2.0;
+    for (x, y) in [(-0.5, 10.0), (10.0, -0.5), (width, 10.0), (10.0, height)] {
+        let error = tools::call(
+            &fixture.client,
+            "click",
+            json!({"window":window,"x":x,"y":y}),
+        )
+        .unwrap_err();
+        assert!(error.contains("outside the window"), "{error}");
+    }
+    let state = fixture.tool("get_resource", json!({"resource":"MouseState"}))["value"].clone();
+    assert_eq!(state["raw_entered"], json!([]));
+    assert_eq!(state["raw_cursor"], json!([]));
+    assert_eq!(state["aggregate_cursor"], json!([]));
+    assert_eq!(state["raw"], json!([]));
+    assert_eq!(state["presses"], 0);
+    let component = fixture.tool(
+        "get_components",
+        json!({"entity":window,"components":["Window"],"strict":true}),
+    );
+    assert_eq!(
+        component[Window::type_path()]["internal"]["physical_cursor_position"],
+        Value::Null
+    );
+}
+
+#[test]
 fn click_rejects_invalid_scale_before_mutating_cursor_or_sending_input() {
     let fixture = Fixture::start(false);
     let window = fixture.query(json!({"components": [], "with": ["Window", "PrimaryWindow"]}))[0]

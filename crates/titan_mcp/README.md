@@ -114,7 +114,7 @@ Use `tools/list` for the authoritative JSON input schemas.
 | `list_resources`, `get_resource`, `set_resource` | Inspect/mutate world resources |
 | `find_types` | Search registry type paths by substring, without dumping the registry |
 | `send_key` | Keyboard `press`, `release`, or `tap` |
-| `click` | Cursor move followed by mouse press/release at logical window coordinates |
+| `click` | Cursor move followed by mouse press/release at logical coordinates inside the window |
 | `screenshot` | PNG MCP image content, fast Titan path or BRP observation fallback |
 | `pause`, `resume`, `step` | Titan time control; step waits for completion |
 | `brp_call` | Raw BRP method and params escape hatch |
@@ -178,6 +178,15 @@ than leave a background reader running. The fallback needs reflected/registered
 `Screenshot` and `ScreenshotCaptured` types and a renderer. On platforms that
 stop rendering occluded windows, keep the window visible. The file-based Titan
 path assumes the game and sidecar share the local filesystem.
+
+On a fallback failure after inserting `Screenshot`, cleanup removes that
+component and despawns the entity only if the renderer hasn't started its
+readback. Bevy despawns renderer-owned captures itself, and despawning one
+early would crash the game when the late capture arrives. Upstream BRP keeps a
+small bookkeeping entry for every entity-scoped `world.observe` and has no way
+to unobserve, so each fallback screenshot permanently grows the game's memory
+by a few bytes. Long sessions should add `TitanRemotePlugin`, whose fast path
+avoids this.
 
 ## Localhost only: development, not a security boundary
 

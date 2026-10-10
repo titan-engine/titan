@@ -219,7 +219,10 @@ fn serve(
                 "paused": true, "frame": status_call - 1, "pending_steps": 0
             }),
             BRP_GET_COMPONENTS_METHOD => json!({(WINDOW): {
-                "resolution": {"scale_factor_override": null, "scale_factor": 1.0}
+                "resolution": {
+                    "scale_factor_override": null, "scale_factor": 1.0,
+                    "physical_width": 1280, "physical_height": 720
+                }
             }}),
             // Always acknowledge input writes, including best-effort releases, so
             // their transport timeout cannot obscure the status barrier's budget.

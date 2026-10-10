@@ -44,7 +44,7 @@ pub fn list() -> Value {
         tool("set_resource", "Mutate a resource field, or insert/replace the resource when path is omitted", json!({"resource":string,"path":string,"value":{}}), &["resource","value"]),
         tool("find_types", "Search reflected type names by case-insensitive substring; returns bounded matches, never the whole registry", json!({"query":{"type":"string","minLength":1},"limit":limit}), &["query"]),
         tool("send_key", "Send a Bevy key code (KeyA, Space, ArrowUp); taps separate press and release across frames. Optional logical_key is reflected Key JSON", json!({"key":string,"action":{"type":"string","enum":["press","release","tap"],"default":"tap"},"window":entity,"logical_key":{},"text":string}), &["key"]),
-        tool("click", "Move cursor and click in logical window coordinates, separating move, press and release across frames", json!({"x":{"type":"number"},"y":{"type":"number"},"window":entity,"button":{"type":"string","enum":["Left","Right","Middle","Back","Forward"],"default":"Left"}}), &["x","y"]),
+        tool("click", "Move cursor and click at logical coordinates inside the window, separating move, press and release across frames", json!({"x":{"type":"number"},"y":{"type":"number"},"window":entity,"button":{"type":"string","enum":["Left","Right","Middle","Back","Forward"],"default":"Left"}}), &["x","y"]),
         tool("screenshot", "Capture the primary window as an MCP PNG image. Uses titan.screenshot when available, otherwise a slower BRP Screenshot + world.observe fallback", json!({"timeout_secs":{"type":"number","exclusiveMinimum":0,"maximum":60,"default":10}}), &[]),
         tool("pause", "Pause virtual time (requires TitanRemotePlugin)", json!({}), &[]),
         tool("resume", "Resume virtual time (requires TitanRemotePlugin)", json!({}), &[]),
@@ -722,27 +722,35 @@ fn click(client: &Client, args: &Value) -> Result<Value, String> {
     {
         return Err("Scaled cursor position isn't representable by Bevy's Vec2".to_owned());
     }
+    let width = resolution["physical_width"]
+        .as_u64()
+        .ok_or("Window resolution has no physical_width")? as f64;
+    let height = resolution["physical_height"]
+        .as_u64()
+        .ok_or("Window resolution has no physical_height")? as f64;
+    let inside = |p: [f64; 2]| p[0] >= 0.0 && p[1] >= 0.0 && p[0] < width && p[1] < height;
+    // A native window only reports cursor movement and clicks inside its bounds.
+    if !inside(physical) {
+        return Err(format!(
+            "Click position ({x}, {y}) is outside the window's logical bounds ({} x {})",
+            width / scale,
+            height / scale
+        ));
+    }
     // Match Window::physical_cursor_position(): an absent or out-of-bounds
     // previous physical position means the cursor has just entered the window.
     // Reuse the fetched snapshot so this adds no requests to the frame barrier.
     let previous: Option<[f64; 2]> =
         decode(components[WINDOW]["internal"]["physical_cursor_position"].clone())?;
     let delta = if let Some(previous) = previous {
-        let width = resolution["physical_width"]
-            .as_u64()
-            .ok_or("Window resolution has no physical_width")? as f64;
-        let height = resolution["physical_height"]
-            .as_u64()
-            .ok_or("Window resolution has no physical_height")? as f64;
-        (previous[0] >= 0.0 && previous[1] >= 0.0 && previous[0] < width && previous[1] < height)
-            .then(|| {
-                // Winit converts both physical positions to Vec2 before subtracting
-                // and dividing by the effective scale, all in f32.
-                [
-                    (physical[0] as f32 - previous[0] as f32) / scale as f32,
-                    (physical[1] as f32 - previous[1] as f32) / scale as f32,
-                ]
-            })
+        inside(previous).then(|| {
+            // Winit converts both physical positions to Vec2 before subtracting
+            // and dividing by the effective scale, all in f32.
+            [
+                (physical[0] as f32 - previous[0] as f32) / scale as f32,
+                (physical[1] as f32 - previous[1] as f32) / scale as f32,
+            ]
+        })
     } else {
         None
     };
