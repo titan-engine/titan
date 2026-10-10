@@ -444,6 +444,73 @@ fn empty_schedules_do_not_synthesize_observable_build_events() {
 }
 
 #[test]
+fn prebuilt_factory_schedules_are_rejected_even_after_sim_resets_the_executor() {
+    for add_new_system in [false, true] {
+        let factory = || {
+            Sim::new(|app| {
+                app.register_type::<Decision>()
+                    .init_resource::<Decision>()
+                    .add_observer(
+                        |event: On<bevy_ecs::schedule::ScheduleBuilt>,
+                         mut decision: ResMut<Decision>| {
+                            if event.label == Late.intern() {
+                                decision.0 += 1;
+                            }
+                        },
+                    )
+                    .add_systems(Update, |world: &mut World| world.run_schedule(Late));
+                let mut schedule = Schedule::new(Late);
+                schedule.add_systems(|| {});
+                let world = app.world_mut();
+                world.resource_mut::<Schedules>().insert(schedule);
+                world.schedule_scope(Late, |world, schedule| {
+                    schedule.initialize(world).unwrap();
+                });
+                if add_new_system {
+                    world
+                        .resource_mut::<Schedules>()
+                        .get_mut(Late)
+                        .unwrap()
+                        .add_systems(|| {});
+                }
+            })
+        };
+        let mut reference = factory();
+        // Sim's executor policy has invalidated executor initialization, not the
+        // existing executable graph. This distinction must survive validation.
+        assert!(reference
+            .world()
+            .resource::<Schedules>()
+            .get(Late)
+            .unwrap()
+            .systems()
+            .is_err());
+        assert_eq!(reference.world().resource::<Decision>().0, 1);
+        reference.tick();
+        assert_eq!(
+            reference.world().resource::<Decision>().0,
+            1 + u32::from(add_new_system)
+        );
+        DeterminismCheck::new(factory)
+            .ticks(2)
+            .run()
+            .assert_deterministic();
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            DeterminismCheck::new(factory)
+                .ticks(2)
+                .variant(Variant::ShuffleAmbiguous { seed: 42 })
+                .run()
+        }))
+        .expect_err("prebuilt factory schedules must not acquire a second build event");
+        let message = failure.downcast_ref::<String>().unwrap();
+        assert!(
+            message.contains("cannot configure already-initialized schedule Late"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
 fn empty_scenarios_do_not_diverge_from_diagnostic_state() {
     DeterminismCheck::new(|| Sim::new(|_| {}))
         .ticks(3)

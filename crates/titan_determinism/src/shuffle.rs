@@ -35,8 +35,9 @@ pub(crate) fn install(world: &mut World, seed: u64) {
 }
 
 /// Validate without changing the world, including immediately after each tick.
-/// Sim may reset an unseen label's executor before the next maintenance pass,
-/// hiding the evidence that an unowned schedule already ran this tick.
+/// Validate graph state, not executor state: Sim can reset the latter without
+/// undoing a prior build. Post-tick checks also reject unsupported schedules
+/// before any subsequent policy pass can discard live deferred bookkeeping.
 pub(crate) fn validate(world: &World, seed: u64) {
     let Some(schedules) = world.get_resource::<Schedules>() else {
         return;
@@ -47,10 +48,15 @@ pub(crate) fn validate(world: &World, seed: u64) {
     // Validate the entire batch before touching any schedule, and fail explicitly
     // instead of producing an instrumentation-induced divergence or false pass.
     for (label, schedule) in schedules.iter() {
+        let systems = &schedule.graph().systems;
+        // Systems::is_initialized tracks system initialization independently
+        // of the executor. A prior build also leaves node slots in the graph
+        // while moving their inner systems into the executable, so iter() can
+        // yield fewer entries than len(). Check both: adding new systems makes
+        // is_initialized false again but does not undo an earlier build.
+        let pristine = !systems.is_initialized() && systems.iter().count() == systems.len();
         assert!(
-            schedule.graph().systems.is_empty()
-                || is_configured(schedule, seed)
-                || schedule.systems().is_err(),
+            systems.is_empty() || is_configured(schedule, seed) || pristine,
             "ShuffleAmbiguous cannot configure already-initialized schedule {label:?}; \
              make new/replacement schedules available before their first run, and do not \
              override a live schedule's shuffle settings"

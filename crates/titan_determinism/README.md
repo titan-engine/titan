@@ -183,7 +183,9 @@ report is returned or `Sim` can reset a newly seen label's executor on the next
 tick. Bevy's public APIs cannot preserve the live executor's pending deferred-buffer
 bookkeeping when reconfiguring it. Make new/replacement schedules available at an
 update boundary **before their first run**, not just before a later run. The same
-restriction applies to schedules preinitialized by the factory. Sub-app schedules
+restriction applies to schedules preinitialized by the factory. Validation checks
+the graph's system initialization/build state, even if `Sim` has since replaced
+its executor and invalidated executor initialization. Sub-app schedules
 are not accessible through `Sim` and are not shuffled. Systems added to an already
 configured schedule inherit its shuffle setting on their normal rebuild. Do not
 override the executor of a harness-configured schedule; overriding the shuffle
