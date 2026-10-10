@@ -64,7 +64,7 @@ test('save/restore resets identical freshly checked-out sources without touching
   const artifact = await source(root, 'target/debug/fingerprint', 'build bytes');
   assert.deepEqual(await saveSourceMtimes({ cwd: root, log: quiet }), { saved: 3 });
   const saved = await manifest(root);
-  assert.equal(saved.version, 1);
+  assert.equal(saved.version, 2);
   assert.equal(saved.files.length, 3);
   for (const record of saved.files) {
     assert.equal(record.sha256, entry(record.path).sha256);
@@ -145,17 +145,22 @@ test('malformed manifests fail before changing any source timestamps', async t =
     { path: good.path, sha256: good.sha256 },
     null,
   ];
+  const link = { path: 'link', target: 'inside', resolved: 'inside' };
   const badManifests = [
-    null, [], {}, { version: 2, files: [] }, { version: 1, files: {} },
-    { version: 1, files: [], extra: true },
-    { version: 1, files: [good, good] },
-    { version: 1, files: [], links: {} },
-    { version: 1, files: [], links: [{ path: '../outside', target: 'inside' }] },
-    { version: 1, files: [], links: [{ path: 'link', target: '' }] },
-    { version: 1, files: [], links: [{ path: 'link', target: 1 }] },
-    { version: 1, files: [good], links: [{ path: good.path, target: 'other' }] },
-    { version: 1, files: [], links: [{ path: 'link', target: 'one' }, { path: 'link', target: 'two' }] },
-    ...badEntries.map(bad => ({ version: 1, files: [good, bad] })),
+    null, [], {}, { version: 3, files: [], links: [] }, { version: 2, files: {}, links: [] },
+    { version: 2, files: [], links: [], extra: true },
+    { version: 2, files: [good, good], links: [] },
+    { version: 2, files: [], links: {} },
+    { version: 2, files: [], links: [{ ...link, path: '../outside' }] },
+    { version: 2, files: [], links: [{ ...link, target: '' }] },
+    { version: 2, files: [], links: [{ ...link, target: 1 }] },
+    { version: 2, files: [], links: [{ ...link, resolved: '../outside' }] },
+    { version: 2, files: [], links: [{ path: 'link', target: 'inside' }] },
+    { version: 2, files: [good], links: [{ ...link, path: good.path }] },
+    { version: 2, files: [], links: [link, link] },
+    // Pre-release manifests without link identity must not enable reuse.
+    { version: 1, files: [good] },
+    ...badEntries.map(bad => ({ version: 2, files: [good, bad], links: [] })),
   ];
   for (const bad of badManifests) {
     await putManifest(root, bad);
@@ -163,7 +168,7 @@ test('malformed manifests fail before changing any source timestamps', async t =
     await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Invalid source mtime manifest/);
     near((await fs.stat(filename)).mtimeMs, checkoutTime.getTime());
   }
-  await fs.writeFile(path.join(root, MANIFEST_PATH), '{"version":1,"files":[{"path":"src/lib.rs","sha256":"' + good.sha256 + '","mtimeMs":1e400}]}');
+  await fs.writeFile(path.join(root, MANIFEST_PATH), '{"version":2,"links":[],"files":[{"path":"src/lib.rs","sha256":"' + good.sha256 + '","mtimeMs":1e400}]}');
   await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Invalid source mtime manifest/);
   near((await fs.stat(filename)).mtimeMs, checkoutTime.getTime());
   await fs.writeFile(path.join(root, MANIFEST_PATH), '{broken JSON');
@@ -177,7 +182,7 @@ test('manifest-only names are never opened; removed files allow cross-commit cac
   const root = await repository(t);
   const tracked = await source(root, 'src/lib.rs');
   const untracked = await source(root, 'untracked.rs', 'source bytes', false);
-  await putManifest(root, { version: 1, files: [
+  await putManifest(root, { version: 2, links: [], files: [
     entry('src/lib.rs'), entry('untracked.rs'), entry('deleted.rs'), entry('.git/config'),
   ] });
   await fs.utimes(tracked, checkoutTime, checkoutTime);
@@ -203,7 +208,7 @@ test('unchanged internal links are allowed; changed links and regular-to-link tr
   execFileSync('git', ['add', '--', 'link.rs'], { cwd: root });
   await saveSourceMtimes({ cwd: root, log: quiet });
   const saved = await manifest(root);
-  assert.deepEqual(saved.links, [{ path: 'link.rs', target: 'regular.rs' }]);
+  assert.deepEqual(saved.links, [{ path: 'link.rs', target: 'regular.rs', resolved: 'regular.rs' }]);
   const linkTime = (await fs.lstat(path.join(root, 'link.rs'))).mtimeMs;
   assert.deepEqual(await restoreSourceMtimes({ cwd: root, log: quiet }), {
     cacheMiss: false, restored: 2, touched: 0,
@@ -218,6 +223,41 @@ test('unchanged internal links are allowed; changed links and regular-to-link tr
   await fs.unlink(regular);
   await fs.symlink('replacement.rs', regular);
   await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+});
+
+test('link resolution through an untracked intermediate cannot change silently', async t => {
+  const root = await repository(t);
+  await source(root, 'sources/a.rs', 'original library');
+  await source(root, 'sources/b.rs', 'different library');
+  try {
+    await fs.symlink('sources/a.rs', path.join(root, 'alias.rs'));
+    await fs.symlink('alias.rs', path.join(root, 'leaf.rs'));
+  } catch (error) {
+    if (error.code === 'EPERM') return t.skip('Symlink creation requires privileges');
+    throw error;
+  }
+  execFileSync('git', ['add', '--', 'leaf.rs'], { cwd: root });
+  await saveSourceMtimes({ cwd: root, log: quiet });
+  assert.deepEqual((await manifest(root)).links, [{ path: 'leaf.rs', target: 'alias.rs', resolved: 'sources/a.rs' }]);
+  await fs.unlink(path.join(root, 'alias.rs'));
+  await fs.symlink('sources/b.rs', path.join(root, 'alias.rs'));
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Source symlink changed/);
+});
+
+test('pre-release manifests without symlink identity fail closed, including existing internal links', async t => {
+  const root = await repository(t);
+  const regular = await source(root, 'regular.rs');
+  try {
+    await fs.symlink('regular.rs', path.join(root, 'link.rs'));
+  } catch (error) {
+    if (error.code === 'EPERM') return t.skip('Symlink creation requires privileges');
+    throw error;
+  }
+  execFileSync('git', ['add', '--', 'link.rs'], { cwd: root });
+  await putManifest(root, { version: 1, files: [entry('regular.rs')] });
+  await fs.utimes(regular, checkoutTime, checkoutTime);
+  await assert.rejects(restoreSourceMtimes({ cwd: root, log: quiet }), /Invalid source mtime manifest schema/);
+  near((await fs.stat(regular)).mtimeMs, checkoutTime.getTime());
 });
 
 test('source links outside the checkout and symlink-parent transitions fail closed', async t => {
@@ -263,7 +303,7 @@ test('target and manifest symlinks fail closed instead of reading or writing out
   await fs.unlink(path.join(root, 'target'));
   await fs.mkdir(path.join(root, 'target'));
   const externalManifest = path.join(outside, 'manifest.json');
-  const original = JSON.stringify({ version: 1, files: [entry('src/lib.rs')] });
+  const original = JSON.stringify({ version: 2, links: [], files: [entry('src/lib.rs')] });
   await fs.writeFile(externalManifest, original);
   await fs.symlink(externalManifest, path.join(root, MANIFEST_PATH));
   await assert.rejects(saveSourceMtimes({ cwd: root, log: quiet }), /manifest must be a regular file/);

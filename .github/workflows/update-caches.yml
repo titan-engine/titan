@@ -69,17 +69,17 @@ jobs:
           - os: ubuntu-latest
             toolchain: stable
             target: ""
-            cache-suffix: -workspace-tests-v1
+            cache-suffix: -workspace-tests-v2
           # ci.yml / build (macos-latest); example-run.yml / run-examples-macos-metal
           - os: macos-latest
             toolchain: stable
             target: ""
-            cache-suffix: -workspace-tests-v1
+            cache-suffix: -workspace-tests-v2
           # ci.yml / build (windows-latest); example-run.yml / run-examples-on-windows-dx12
           - os: windows-latest
             toolchain: stable
             target: ""
-            cache-suffix: -workspace-tests-v1
+            cache-suffix: -workspace-tests-v2
           # validation-jobs.yml / check-unused-dependencies
           - os: ubuntu-latest
             toolchain: nightly

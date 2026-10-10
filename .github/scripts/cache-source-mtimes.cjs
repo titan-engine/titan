@@ -110,12 +110,14 @@ async function sourceLink(root, name, filename) {
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`Source symlink leaves the checkout: ${name}`);
   }
-  return { path: name, target };
+  const destination = relative.split(path.sep).join('/');
+  if (!safeSourcePath(destination)) throw new Error(`Unsupported source symlink destination: ${name}`);
+  return { path: name, target, resolved: destination };
 }
 
 /** Validate the entire cache manifest before changing any source mtime. */
 function validateManifest(manifest) {
-  if ((!exactKeys(manifest, ['version', 'files']) && !exactKeys(manifest, ['version', 'files', 'links'])) || manifest.version !== 1 || !Array.isArray(manifest.files)) {
+  if (!exactKeys(manifest, ['version', 'files', 'links']) || manifest.version !== 2 || !Array.isArray(manifest.files)) {
     throw new Error('Invalid source mtime manifest schema');
   }
   const records = new Map();
@@ -129,11 +131,12 @@ function validateManifest(manifest) {
     records.set(entry.path, entry);
   }
   const links = new Map();
-  if (manifest.links !== undefined && !Array.isArray(manifest.links)) {
+  if (!Array.isArray(manifest.links)) {
     throw new Error('Invalid source mtime manifest links');
   }
-  for (const entry of manifest.links || []) {
-    if (!exactKeys(entry, ['path', 'target']) || !safeSourcePath(entry.path) ||
+  for (const entry of manifest.links) {
+    if (!exactKeys(entry, ['path', 'target', 'resolved']) || !safeSourcePath(entry.path) ||
+        !safeSourcePath(entry.resolved) ||
         typeof entry.target !== 'string' || !entry.target || entry.target.includes('\0') ||
         links.has(entry.path) || records.has(entry.path)) {
       throw new Error('Invalid source mtime manifest link');
@@ -187,7 +190,7 @@ async function saveSourceMtimes({ cwd = process.cwd(), log = console.log } = {})
       await handle.close();
     }
   }
-  const manifest = { version: 1, files, links };
+  const manifest = { version: 2, files, links };
   validateManifest(manifest);
   const target = await targetDirectory(root, true);
   const destination = path.join(root, MANIFEST_PATH);
@@ -222,7 +225,8 @@ async function restoreSourceMtimes({ cwd = process.cwd(), log = console.log } = 
       // Missing manifests touch every regular source/Cargo.toml, forcing a
       // rebuild. With a manifest, never silently reuse artifacts across a
       // regular-file -> symlink transition or a changed/new symlink target.
-      if (records && (linkName !== name || records.links.get(name)?.target !== link.target)) {
+      const cached = records?.links.get(name);
+      if (records && (linkName !== name || cached?.target !== link.target || cached?.resolved !== link.resolved)) {
         throw new Error(`Source symlink changed; rebuild the cache before restoring mtimes: ${name}`);
       }
     });
