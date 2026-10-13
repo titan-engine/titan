@@ -1,0 +1,84 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/clang.cmake",
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+    },
+    {
+      "name": "dev",
+      "displayName": "Debug + AddressSanitizer + UndefinedBehaviorSanitizer (default)",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TITAN_SANITIZE": "address,undefined" }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Debug + ThreadSanitizer",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TITAN_SANITIZE": "thread" }
+    },
+    {
+      "name": "msan",
+      "displayName": "Debug + MemorySanitizer (Linux only)",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TITAN_SANITIZE": "memory" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "release",
+      "displayName": "Optimized with debug info",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "fuzz",
+      "displayName": "libFuzzer targets + AddressSanitizer + UndefinedBehaviorSanitizer (-O1, asserts on)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS_DEBUG": "-g -O1",
+        "TITAN_SANITIZE": "fuzzer-no-link,address,undefined",
+        "TITAN_BUILD_TESTS": "OFF",
+        "TITAN_BUILD_FUZZERS": "ON"
+      }
+    },
+    {
+      "name": "web",
+      "displayName": "wasm32 (no emscripten), tests run in Node",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/wasm32.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "MinSizeRel" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "msan", "configurePreset": "msan" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "fuzz", "configurePreset": "fuzz" },
+    { "name": "web", "configurePreset": "web" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "timeout": 120 },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:handle_sigtrap=1:strict_string_checks=1:detect_stack_use_after_return=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1",
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1",
+        "MSAN_OPTIONS": "halt_on_error=1"
+      }
+    },
+    { "name": "dev", "inherits": "base", "configurePreset": "dev" },
+    { "name": "tsan", "inherits": "base", "configurePreset": "tsan" },
+    { "name": "msan", "inherits": "base", "configurePreset": "msan" },
+    { "name": "release", "inherits": "base", "configurePreset": "release" },
+    { "name": "web", "inherits": "base", "configurePreset": "web" }
+  ]
+}

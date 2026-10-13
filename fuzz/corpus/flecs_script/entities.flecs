@@ -1,0 +1,16 @@
+using flecs.meta
+
+struct Position {
+  x = f32
+  y = f32
+}
+
+hero {
+  Position: {x: 10, y: 20}
+  (ChildOf, world)
+}
+
+parent {
+  child_a { Position: {1, 2} }
+  child_b { Position: {3, 4} }
+}

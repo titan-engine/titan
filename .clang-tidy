@@ -1,0 +1,23 @@
+# Static analysis for Titan code. Third-party code is excluded via the header filter and run-clang-tidy path.
+# pragma once is allowed: Titan is clang-only (docs/adr/0002-c23-and-clang-only.md).
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-assignment-in-if-condition,
+  cert-*,
+  -cert-err33-c,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  performance-*,
+  portability-*,
+  -portability-avoid-pragma-once,
+  readability-braces-around-statements,
+  readability-inconsistent-declaration-parameter-name,
+  readability-misleading-indentation,
+  readability-non-const-parameter
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(include|src|tests)/.*'
