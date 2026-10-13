@@ -1,0 +1,24 @@
+name: Set up Linux toolchain
+description: Installs pinned LLVM/clang (apt.llvm.org), Ninja and just.
+inputs:
+  llvm-version:
+    description: LLVM major version
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM ${{ inputs.llvm-version }}
+      shell: bash
+      run: |
+        wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+        sudo bash /tmp/llvm.sh ${{ inputs.llvm-version }}
+        sudo apt-get install -y --no-install-recommends ninja-build \
+          clang-tidy-${{ inputs.llvm-version }} clang-format-${{ inputs.llvm-version }} \
+          libclang-rt-${{ inputs.llvm-version }}-dev llvm-${{ inputs.llvm-version }}
+        echo "LLVM_ROOT=/usr/lib/llvm-${{ inputs.llvm-version }}" >> "$GITHUB_ENV"
+    - name: Allow sanitizers on high-entropy ASLR kernels
+      shell: bash
+      run: sudo sysctl vm.mmap_rnd_bits=28
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: just

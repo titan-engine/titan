@@ -1,0 +1,101 @@
+# Mirrors `just check`, split into parallel jobs. Toolchain versions are pinned here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LLVM_VERSION: "23"
+  WASI_SDK_VERSION: "34"
+
+jobs:
+  format-lint:
+    name: Format + lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-linux
+        with:
+          llvm-version: ${{ env.LLVM_VERSION }}
+      - run: just fmt-check
+      - run: just lint
+
+  linux:
+    name: Linux ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [dev, tsan, msan, release]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-linux
+        with:
+          llvm-version: ${{ env.LLVM_VERSION }}
+      - run: just test ${{ matrix.preset }}
+      - name: clang-tidy
+        if: matrix.preset == 'dev'
+        run: just tidy
+
+  macos:
+    name: macOS dev
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install llvm lld cmake ninja just
+      - run: just test dev
+
+  web:
+    name: Web (wasm32)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install wasi-sdk ${{ env.WASI_SDK_VERSION }}, Ninja, just
+        run: |
+          curl -fsSL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz" \
+            | sudo tar -xz -C /opt
+          sdk="/opt/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux"
+          echo "LLVM_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "WASI_SYSROOT=$sdk/share/wasi-sysroot" >> "$GITHUB_ENV"
+          echo "WASI_RUNTIMES=$(ls -d "$sdk"/lib/clang/*)" >> "$GITHUB_ENV"
+          sudo apt-get install -y --no-install-recommends ninja-build
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just test web
+      - name: Size report
+        run: ls -l build/web/tests/*.wasm | awk '{printf "%8d bytes  %s\n", $5, $9}' >> "$GITHUB_STEP_SUMMARY"
+
+  fuzz:
+    name: Fuzz (smoke)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-linux
+        with:
+          llvm-version: ${{ env.LLVM_VERSION }}
+      - run: just fuzz flecs_script 60
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: build/fuzz/artifacts/
