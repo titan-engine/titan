@@ -195,8 +195,8 @@ pub fn glyph_uv(c: char) -> Rect {
 /// How [`DrawList2D::draw_text`] and [`measure_text`] lay out text.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextStyle {
-    /// World units per atlas texel; must be positive and finite. A glyph cell is
-    /// `GLYPH_SIZE * scale` on each side, which is both the advance and the line height.
+    /// World units per atlas texel. A glyph cell is `GLYPH_SIZE * scale` on each side, which
+    /// must be positive and finite, and is both the advance and the line height.
     pub scale: f32,
     /// The tint of every glyph.
     pub color: Color,
@@ -303,18 +303,14 @@ fn layout(
     style: &TextStyle,
     mut place: impl FnMut(char, usize, usize),
 ) -> (usize, usize) {
-    // The most columns whose extent, computed as `measure_text` computes it, fits the width.
-    // `width / cell` can round across a whole cell, so check its neighbours too. `as` floors
-    // non-negative widths and maps negative or NaN ones to 0.
+    // Whether a line of `columns` cells fits, its extent computed as `measure_text` computes
+    // it so a measured width wraps nothing. One cell always fits, even a negative or NaN width.
     let cell = style.cell();
-    let max_columns = style.wrap_width.map(|width| {
-        let estimate = (width / cell) as usize;
-        (estimate.saturating_sub(1)..=estimate.saturating_add(1))
-            .rev()
-            .find(|&columns| columns as f32 * cell <= width)
-            .unwrap_or(0)
-            .max(1)
-    });
+    let fits = |columns: usize| {
+        style
+            .wrap_width
+            .is_none_or(|width| columns <= 1 || columns as f32 * cell <= width)
+    };
     let (mut widest, mut line) = (0, 0);
     for (index, hard_line) in text.split('\n').enumerate() {
         if index > 0 {
@@ -324,24 +320,19 @@ fn layout(
         for (index, word) in hard_line.split(' ').enumerate() {
             let len = word.chars().count();
             if index > 0 {
-                match max_columns {
+                if fits(column + 1 + len) {
+                    place(' ', column, line);
+                    column += 1;
+                } else if len > 0 && column > 0 {
                     // The space and the word do not both fit: drop the space, and move the word
                     // to a new line unless the line is still empty. With no word to carry over
                     // (trailing or repeated spaces), start no line, so no empty line appears.
-                    Some(max) if column + 1 + len > max => {
-                        if len > 0 && column > 0 {
-                            line += 1;
-                            column = 0;
-                        }
-                    }
-                    _ => {
-                        place(' ', column, line);
-                        column += 1;
-                    }
+                    line += 1;
+                    column = 0;
                 }
             }
             for c in word.chars() {
-                if max_columns == Some(column) {
+                if !fits(column + 1) {
                     widest = widest.max(column);
                     line += 1;
                     column = 0;
@@ -486,6 +477,9 @@ mod tests {
             assert_eq!(at(width), Vec2::new(width, cell), "scale {scale}");
             assert_eq!(at(width.next_down()).y, 2.0 * cell, "scale {scale}");
         }
+        // Near this width, adjacent column counts round to one extent; "ab" still fits.
+        let wide = TextStyle::new(0.1).with_wrap_width(107_374_192.0);
+        assert_eq!(measure_text("ab", &wide), Vec2::new(1.6, 0.8));
     }
 
     #[test]
