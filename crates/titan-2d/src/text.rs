@@ -154,8 +154,8 @@ pub fn font_atlas_rgba() -> Vec<u8> {
 ///
 /// # Errors
 ///
-/// Returns the device's error if creating or writing the texture fails. A texture whose
-/// write failed is destroyed first.
+/// Returns the device's error if creating or writing the texture fails, after attempting to
+/// destroy a texture whose write failed.
 pub fn create_font_texture(gpu: &mut dyn GpuDevice) -> Result<Handle<Texture>, GpuError> {
     let texture = gpu.create_texture(&TextureDesc {
         label: Some("titan-2d font"),
@@ -195,8 +195,8 @@ pub fn glyph_uv(c: char) -> Rect {
 /// How [`DrawList2D::draw_text`] and [`measure_text`] lay out text.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextStyle {
-    /// World units per atlas texel. A glyph cell is `GLYPH_SIZE * scale` on each side, which
-    /// is both the advance and the line height.
+    /// World units per atlas texel; must be positive and finite. A glyph cell is
+    /// `GLYPH_SIZE * scale` on each side, which is both the advance and the line height.
     pub scale: f32,
     /// The tint of every glyph.
     pub color: Color,
@@ -303,10 +303,18 @@ fn layout(
     style: &TextStyle,
     mut place: impl FnMut(char, usize, usize),
 ) -> (usize, usize) {
-    // `as` floors non-negative widths and maps negative or NaN ones to 0.
-    let max_columns = style
-        .wrap_width
-        .map(|width| ((width / style.cell()) as usize).max(1));
+    // The most columns whose extent, computed as `measure_text` computes it, fits the width.
+    // `width / cell` can round across a whole cell, so check its neighbours too. `as` floors
+    // non-negative widths and maps negative or NaN ones to 0.
+    let cell = style.cell();
+    let max_columns = style.wrap_width.map(|width| {
+        let estimate = (width / cell) as usize;
+        (estimate.saturating_sub(1)..=estimate.saturating_add(1))
+            .rev()
+            .find(|&columns| columns as f32 * cell <= width)
+            .unwrap_or(0)
+            .max(1)
+    });
     let (mut widest, mut line) = (0, 0);
     for (index, hard_line) in text.split('\n').enumerate() {
         if index > 0 {
@@ -317,11 +325,11 @@ fn layout(
             let len = word.chars().count();
             if index > 0 {
                 match max_columns {
-                    // The space and the word do not both fit: break instead of drawing the
-                    // space. With no word to carry over (trailing or repeated spaces), drop the
-                    // space without starting a line, so no empty line appears.
-                    Some(max) if column > 0 && column + 1 + len > max => {
-                        if len > 0 {
+                    // The space and the word do not both fit: drop the space, and move the word
+                    // to a new line unless the line is still empty. With no word to carry over
+                    // (trailing or repeated spaces), start no line, so no empty line appears.
+                    Some(max) if column + 1 + len > max => {
+                        if len > 0 && column > 0 {
                             line += 1;
                             column = 0;
                         }
@@ -334,6 +342,7 @@ fn layout(
             }
             for c in word.chars() {
                 if max_columns == Some(column) {
+                    widest = widest.max(column);
                     line += 1;
                     column = 0;
                 }
@@ -450,12 +459,16 @@ mod tests {
         assert_eq!(lines("abc   ", 3), ["abc"]);
         assert_eq!(lines("abc   d", 3), ["abc", "d"]);
         assert_eq!(lines("a\nb c", 3), ["a", "b c"]);
+        // A leading space that does not fit with its word is dropped, not the word split.
+        assert_eq!(lines(" abc", 3), ["abc"]);
+        assert_eq!(lines("a\n abc", 3), ["a", "abc"]);
+        assert_eq!(lines(" ab", 3), [" ab"]);
         // Unknown chars take a cell like any glyph.
         assert_eq!(lines("é\té", 2), ["é\t", "é"]);
     }
 
     #[test]
-    fn wrap_width_floors_to_whole_cells_with_at_least_one() {
+    fn wrap_width_fits_whole_cells_with_at_least_one() {
         // Just under 9 cells floors to 8 columns, so "hello big" no longer fits.
         let style = TextStyle::new(2.0).with_wrap_width(9.0 * 16.0 - 0.5);
         assert_eq!(
@@ -464,6 +477,15 @@ mod tests {
         );
         let narrow = TextStyle::new(1.0).with_wrap_width(3.0);
         assert_eq!(measure_text("ab", &narrow), Vec2::new(8.0, 16.0));
+        // A measured width wraps nothing, and one representable width less wraps the last
+        // glyph, even when `width / cell` rounds across a whole cell.
+        for (scale, text) in [(1.1, "abc"), (1.2, "abcdefghijklmno")] {
+            let width = measure_text(text, &TextStyle::new(scale)).x;
+            let at = |width: f32| measure_text(text, &TextStyle::new(scale).with_wrap_width(width));
+            let cell = GLYPH_SIZE as f32 * scale;
+            assert_eq!(at(width), Vec2::new(width, cell), "scale {scale}");
+            assert_eq!(at(width.next_down()).y, 2.0 * cell, "scale {scale}");
+        }
     }
 
     #[test]
@@ -477,6 +499,9 @@ mod tests {
             measure_text("hello big world", &wrapped),
             Vec2::new(72.0, 16.0)
         );
+        // A word broken across lines measures its widest piece, not its last.
+        let narrow = TextStyle::new(1.0).with_wrap_width(40.0);
+        assert_eq!(measure_text("abcdef", &narrow), Vec2::new(40.0, 16.0));
     }
 
     #[test]
