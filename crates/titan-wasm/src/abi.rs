@@ -168,8 +168,8 @@ pub fn encode_texture_desc(desc: &TextureDesc<'_>, out: &mut Vec<u8>) {
 }
 
 /// Appends a shader source: `wgsl: str`, `glsl: str`, `vertex_entry: str`,
-/// `fragment_entry: str`, `label: str`. The browser runs WGSL on WebGPU or GLSL on WebGL2, so
-/// MSL stays behind.
+/// `fragment_entry: str`, `label: str`. The browser reads WGSL for WebGPU and GLSL for WebGL2,
+/// so MSL stays behind.
 pub fn encode_shader_source(source: &ShaderSource<'_>, out: &mut Vec<u8>) {
     put_str(out, source.wgsl);
     put_optional_str(out, source.glsl);

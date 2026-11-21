@@ -158,7 +158,7 @@ fragment float4 fs_main(VertexOut in [[stage_in]], texture2d<float> sprite_tex [
 /// - GL clips `z` to `[-w, w]` and maps it to depth `[0, 1]`, where WebGPU and Metal clip to
 ///   `[0, w]`. [`Camera2D`](crate::Camera2D) puts sprites at clip `z = 0.5`, inside both ranges;
 ///   the sprite pipeline does not depth-test, so the different depth value has no effect.
-/// - Texture coordinate `(0, 0)` samples the first uploaded row, the image's top row, as long as
+/// - Texture `v` grows with the uploaded row index, so `v = 0` is the image's top row, as long as
 ///   textures are uploaded without `UNPACK_FLIP_Y_WEBGL`.
 pub const SPRITE_SHADER_GLSL: &str = r"#ifdef TITAN_VERTEX
 layout(std140) uniform CameraUniform_binding0 {
@@ -182,7 +182,7 @@ void main() {
 #ifdef TITAN_FRAGMENT
 precision highp float;
 
-uniform sampler2D sprite_texture_binding0;
+uniform highp sampler2D sprite_texture_binding0;
 
 in vec2 v_uv;
 in vec4 v_color;
